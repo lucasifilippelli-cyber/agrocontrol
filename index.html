@@ -839,6 +839,38 @@ A.nuevaCampania=function(){
       avisar("Campaña "+d.nombre+" creada. Busco su lluvia real.");
     }});
 };
+A.borrarCampania=function(id){
+  var c=campania(id);
+  if(E.campanias.length<2){ avisar("No podés borrar la única campaña que queda."); return; }
+  var cls=clsDeCampania(id);
+  var ords=E.ordenes.filter(function(o){return o.campaniaId===id;}).length;
+  var obs=E.monitoreo.filter(function(o){return o.campaniaId===id;}).length;
+  var cartas=E.tickets.filter(function(t){ return cls.some(function(cl){return cl.id===t.cultivoLoteId;}); }).length;
+  var arrastra=[];
+  if(cls.length) arrastra.push(cls.length+" cultivo"+(cls.length>1?"s":""));
+  if(cartas)     arrastra.push(cartas+" carta"+(cartas>1?"s":"")+" de porte");
+  if(ords)       arrastra.push(ords+" trabajo"+(ords>1?"s":""));
+  if(obs)        arrastra.push(obs+" observación"+(obs>1?"es":""));
+  confirmar("Eliminar la campaña "+esc(c.nombre),
+    arrastra.length
+      ? "Se borra también todo lo que cuelga de ella: <b>"+arrastra.join(", ")+"</b>. Los lotes y los insumos no se tocan. No se puede deshacer."
+      : "La campaña está vacía. Los lotes y los insumos no se tocan.",
+    function(){
+      var ids=cls.map(function(cl){return cl.id;});
+      E.tickets=E.tickets.filter(function(t){ return ids.indexOf(t.cultivoLoteId)===-1; });
+      E.cultivoLotes=E.cultivoLotes.filter(function(cl){ return cl.campaniaId!==id; });
+      E.ordenes=E.ordenes.filter(function(o){ return o.campaniaId!==id; });
+      E.monitoreo=E.monitoreo.filter(function(o){ return o.campaniaId!==id; });
+      E.campanias=E.campanias.filter(function(x){ return x.id!==id; });
+      if(campActiva===id){
+        var cu=E.campanias.filter(function(x){return x.estado==="curso";})[0];
+        campActiva=(cu||E.campanias[0]).id;
+        if(vistaActual==="lote") vistaActual="campania";
+      }
+      avisar("Campaña "+c.nombre+" eliminada.");
+    });
+};
+
 A.nuevoEstablecimiento=function(){
   abrirForm({titulo:"Nuevo establecimiento",
     nota:"Las coordenadas sirven para traer el clima del lugar exacto. Sacalas de Google Maps: clic derecho sobre el campo y copiás el par de números.",
@@ -1042,6 +1074,26 @@ A.moverStock=function(id){
     campos:[{k:"signo",label:"Movimiento",tipo:"select",req:true,opciones:[{v:"1",t:"Compra (entra)"},{v:"-1",t:"Ajuste (sale)"}]},
             {k:"cantidad",label:"Cantidad ("+i.unidad+")",tipo:"number",paso:"0.1",min:"0.1",req:true}],
     guardar:function(d){ i.stock=Math.max(0,i.stock+parseInt(d.signo,10)*parseFloat(d.cantidad)); avisar("Stock actualizado."); }});
+};
+A.borrarInsumo=function(id){
+  var i=insumo(id);
+  var usos=E.ordenes.filter(function(o){ return o.insumoId===id; });
+  var abiertos=usos.filter(function(o){ return o.estado!=="completada"; });
+  if(abiertos.length){
+    avisar("No se puede: "+abiertos.length+" trabajo"+(abiertos.length>1?"s abiertos lo usan":" abierto lo usa")+". Completalo o cambiale el insumo.");
+    return;
+  }
+  var arrastra=[];
+  if(usos.length) arrastra.push(usos.length+" trabajo"+(usos.length>1?"s ya completados quedan":" ya completado queda")+" sin insumo asociado");
+  if(i.stock>0)   arrastra.push("se pierde el registro de "+nf(i.stock,1)+" "+esc(i.unidad)+" en stock");
+  confirmar("Eliminar "+esc(i.nombre),
+    arrastra.length ? "Al borrarlo, "+arrastra.join(", y ")+". No se puede deshacer."
+                    : "No lo usa ningún trabajo y no tiene stock cargado.",
+    function(){
+      E.ordenes.forEach(function(o){ if(o.insumoId===id) o.insumoId=""; });
+      E.insumos=E.insumos.filter(function(x){ return x.id!==id; });
+      avisar("Insumo eliminado.");
+    });
 };
 A.cargarLluvia=function(mes){
   var c=campania(campActiva); mes=parseInt(mes,10);
@@ -1306,7 +1358,9 @@ function vistaCampania(){
   return '<div class="cabecera"><div><h1>Campaña '+esc(c.nombre)+'</h1>'+
     '<div class="sub">'+E.establecimientos.length+' establecimientos · '+E.lotes.length+' lotes en el padrón</div></div>'+
     '<div class="cabecera-acc"><span class="chip '+c.estado+'">'+(c.estado==="curso"?"En curso":"Cerrada")+'</span>'+
-    '<button class="btn sec" data-a="nuevaCampania">+ Nueva campaña</button></div></div>'+
+    '<button class="btn sec" data-a="nuevaCampania">+ Nueva campaña</button>'+
+    (E.campanias.length>1?'<button class="btn peligro" data-a="borrarCampania" data-arg="'+c.id+'">Eliminar campaña</button>':'')+
+    '</div></div>'+
   '<div class="ficha">'+
     '<div><div class="eyebrow">Superficie planificada</div><div class="v">'+nf(r.haPlan)+'<span class="u">ha</span></div>'+
       '<div class="nota">'+r.lotes+' cultivos cargados</div></div>'+
@@ -1477,7 +1531,8 @@ function vistaInsumos(){
       return '<tr><td class="lote-nom">'+esc(i.nombre)+'</td><td style="font-size:13.5px">'+esc(i.tipo)+'</td>'+
         '<td class="num">'+nf(i.precio,2)+'</td><td class="num">'+nf(i.stock,1)+' <span class="lote-est">'+esc(i.unidad)+'</span></td>'+
         '<td class="num col-opcional">'+nf(i.stock*i.precio)+'</td>'+
-        '<td class="der"><button class="btn sec mini" data-a="moverStock" data-arg="'+i.id+'">Movimiento</button></td></tr>';
+        '<td class="der"><span class="acc"><button class="btn sec mini" data-a="moverStock" data-arg="'+i.id+'">Movimiento</button>'+
+        '<button class="btn peligro mini" data-a="borrarInsumo" data-arg="'+i.id+'">Eliminar</button></span></td></tr>';
     }).join("")+'</tbody></table></div></div>';
 }
 function vistaClima(){
