@@ -329,6 +329,30 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .campo .err{font-size:12px;color:var(--alerta);font-weight:600}
 .modal-nota{font-size:13px;color:var(--tierra-2);background:var(--panel-2);border-left:3px solid var(--c-maiz-t);padding:10px 13px;margin-bottom:16px;border-radius:0 3px 3px 0}
 
+/* ---------- portada: entrar o crear cuenta ---------- */
+.portada{min-height:100vh;display:grid;place-items:center;padding:28px 18px;background:var(--horizonte)}
+.portada-caja{width:min(430px,100%)}
+.portada .marca{font-size:26px;margin-bottom:6px;color:var(--tierra)}
+.portada .marca span{color:var(--c-maiz-t)}
+.portada .bajada{color:var(--tierra-2);font-size:14.5px;margin-bottom:22px;text-wrap:balance}
+.portada-panel{background:var(--panel);border:1px solid var(--linea);border-radius:4px;padding:22px}
+.portada-panel h2{font-size:17px;font-weight:800;margin-bottom:3px}
+.portada-panel .ayuda{font-size:13px;color:var(--tierra-2);margin-bottom:18px}
+.portada-campos{display:flex;flex-direction:column;gap:13px}
+.portada-campos .campo label{font-size:11.5px}
+.portada-panel .btn{width:100%;justify-content:center;margin-top:18px;padding:11px}
+.portada-cambiar{margin-top:16px;padding-top:15px;border-top:1px solid var(--linea);font-size:13.5px;color:var(--tierra-2);text-align:center}
+.portada-cambiar button{background:none;border:0;color:var(--lluvia);font-family:var(--sans);font-size:13.5px;font-weight:700;cursor:pointer;padding:0}
+.portada-cambiar button:hover{text-decoration:underline}
+.portada-error{margin-top:14px;padding:10px 13px;border-left:3px solid var(--alerta);background:var(--alerta-bg);font-size:13px;color:var(--tierra);border-radius:0 3px 3px 0}
+.portada-ok{margin-top:14px;padding:10px 13px;border-left:3px solid var(--ok);background:var(--ok-bg);font-size:13px;color:var(--tierra);border-radius:0 3px 3px 0}
+.portada-pie{margin-top:20px;font-size:12px;color:var(--tierra-3);text-align:center;line-height:1.5}
+.cuenta{display:flex;align-items:center;gap:9px}
+.cuenta-nombre{font-size:12.5px;color:var(--tope-fg);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cuenta button{background:none;border:1px solid var(--tope-borde);color:var(--tope-tenue);font-family:var(--sans);font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:3px;cursor:pointer}
+.cuenta button:hover{color:var(--tope-fg);border-color:var(--tope-fg)}
+@media (max-width:720px){ .cuenta-nombre{display:none} }
+
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--tope-bg);color:var(--tope-fg);font-size:14px;font-weight:500;padding:11px 20px;border-radius:3px;z-index:80;box-shadow:0 4px 20px rgba(20,16,12,.3);opacity:0;pointer-events:none;transition:opacity .18s}
 .toast.ver{opacity:1}
 .pie{margin-top:26px;padding-top:15px;border-top:1px solid var(--linea);font-size:12.5px;color:var(--tierra-3);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
@@ -356,16 +380,21 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 </head>
 <body>
 
+<div id="portada" class="portada oculto"></div>
+
+<div id="app" class="oculto">
 <header class="tope">
   <div class="marca">AGRO<span>CONTROL</span></div>
   <div class="tope-der">
     <label for="sel-camp">Campaña</label>
     <select id="sel-camp"></select>
+    <div class="cuenta"><span class="cuenta-nombre" id="cuenta-nombre"></span>
+      <button type="button" data-a="salir">Salir</button></div>
   </div>
 </header>
 
-<p class="descargo"><b>Prototipo.</b> Los establecimientos, lotes y rendimientos son datos de ejemplo inventados,
-y no pertenecen a ninguna empresa. El clima sí es real: viene de Open-Meteo para las coordenadas de cada campo.</p>
+<p class="descargo"><b>Tus datos están en la nube.</b> Lo que cargues acá lo ves también desde el celular,
+entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas de cada campo.</p>
 
 <div class="marco">
   <nav class="nav" id="nav">
@@ -384,6 +413,7 @@ y no pertenecen a ninguna empresa. El clima sí es real: viene de Open-Meteo par
     <a href="#" data-vista="monitoreo">Monitoreo <span class="n" data-n="monitoreo"></span></a>
   </nav>
   <main class="lienzo" id="lienzo"></main>
+</div>
 </div>
 
 <dialog id="dlg"><div class="modal">
@@ -439,11 +469,120 @@ var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicid
 /* ============================================================
    2 · ESTADO
    ============================================================ */
-var CLAVE = "agrocontrol.v3", CLAVE_CLIMA = "agrocontrol.clima.v1";
-var E = null, campActiva = null, vistaActual = "hoy", loteAbierto = null;
-var estabClima = "e1", diaSel = 0;
+var SB_URL = "https://ibgqriyqoikwfhlzmjet.supabase.co";
+var SB_KEY = "sb_publishable_TDaLmB7FDpLsfSNDrb98-Q_UfEMOY58";
+/* Esta clave es pública a propósito: lo único que separa tus datos de los de
+   otro productor son las políticas de seguridad por fila que hay en la base. */
 
-function uid(p){ return p+"_"+Math.random().toString(36).slice(2,9); }
+var CLAVE_CACHE = "agrocontrol.cache.v1",
+    CLAVE_SESION = "agrocontrol.sesion.v1",
+    CLAVE_CLIMA = "agrocontrol.clima.v1";
+
+var E = null, campActiva = null, vistaActual = "hoy", loteAbierto = null;
+var estabClima = null, diaSel = 0;
+var sesion = null, perfil = null, cargandoDatos = false;
+
+function uid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,function(c){
+    var r=Math.random()*16|0; return (c==="x"?r:(r&0x3|0x8)).toString(16);
+  });
+}
+
+/* ---------- nombres: camello en la app, guion bajo en la base ---------- */
+/* Postgres no acepta "" en una columna de fecha, y la app usa la cadena vacía
+   para "todavía no". La traducción es el lugar donde eso se normaliza. */
+var COLUMNAS_FECHA={fecha:1,fecha_siembra:1,fecha_cosecha:1,fecha_plan:1,fecha_cierre:1,desde:1,traido_hasta:1};
+function aGuion(o){
+  var r={};
+  for(var k in o){
+    if(o[k]===undefined) continue;
+    var col=k.replace(/[A-Z]/g,function(c){return "_"+c.toLowerCase();}), v=o[k];
+    if(COLUMNAS_FECHA[col] && (v===""||v===null)) v=null;
+    r[col]=v;
+  }
+  return r;
+}
+function aCamello(o){
+  var r={}; for(var k in o){ r[k.replace(/_([a-z])/g,function(_,c){return c.toUpperCase();})]=o[k]; }
+  return r;
+}
+
+/* ---------- cliente ---------- */
+function encabezados(conCuerpo){
+  var h={apikey:SB_KEY};
+  if(sesion&&sesion.access_token) h.Authorization="Bearer "+sesion.access_token;
+  if(conCuerpo) h["Content-Type"]="application/json";
+  return h;
+}
+function traducirError(txt, estado){
+  var m=txt;
+  try{ var j=JSON.parse(txt); m=j.error_description||j.msg||j.message||j.error||txt; }catch(e){}
+  if(/Invalid login credentials/i.test(m)) return "Mail o contraseña incorrectos.";
+  if(/User already registered/i.test(m))   return "Ya existe una cuenta con ese mail. Entrá en vez de crearla.";
+  if(/Password should be/i.test(m))        return "La contraseña necesita al menos 6 caracteres.";
+  if(/Unable to validate email/i.test(m))  return "Ese mail no parece válido.";
+  if(/duplicate key/i.test(m))             return "Ese registro ya existe.";
+  if(estado===401||estado===403)           return "Se venció la sesión. Volvé a entrar.";
+  return m||("Error "+estado);
+}
+function pedir(ruta, opciones){
+  return fetch(SB_URL+ruta, opciones).then(function(r){
+    if(!r.ok) return r.text().then(function(t){ throw new Error(traducirError(t,r.status)); });
+    if(r.status===204) return null;
+    return r.text().then(function(t){ return t?JSON.parse(t):null; });
+  });
+}
+var sb={
+  leer:function(tabla){
+    return pedir("/rest/v1/"+tabla+"?select=*",{headers:encabezados()});
+  },
+  grabar:function(tabla, fila){
+    return pedir("/rest/v1/"+tabla,{method:"POST",
+      headers:Object.assign(encabezados(true),{Prefer:"resolution=merge-duplicates,return=minimal"}),
+      body:JSON.stringify(fila)});
+  },
+  borrar:function(tabla, id){
+    return pedir("/rest/v1/"+tabla+"?id=eq."+id,{method:"DELETE",headers:encabezados()});
+  }
+};
+
+/* ---------- sesión ---------- */
+function guardarSesion(s){
+  sesion=s;
+  try{ s?localStorage.setItem(CLAVE_SESION,JSON.stringify(s)):localStorage.removeItem(CLAVE_SESION); }catch(e){}
+}
+function leerSesion(){
+  try{ sesion=JSON.parse(localStorage.getItem(CLAVE_SESION)||"null"); }catch(e){ sesion=null; }
+  return sesion;
+}
+function conVencimiento(s){
+  s.vence_en=Date.now()+((s.expires_in||3600)-60)*1000;
+  return s;
+}
+var auth={
+  registrar:function(email, clave, nombre, empresa){
+    return pedir("/auth/v1/signup",{method:"POST",headers:encabezados(true),
+      body:JSON.stringify({email:email,password:clave,data:{nombre:nombre,empresa:empresa}})});
+  },
+  entrar:function(email, clave){
+    return pedir("/auth/v1/token?grant_type=password",{method:"POST",headers:encabezados(true),
+      body:JSON.stringify({email:email,password:clave})});
+  },
+  renovar:function(){
+    if(!sesion||!sesion.refresh_token) return Promise.reject(new Error("sin sesión"));
+    var rt=sesion.refresh_token; sesion=null;   /* el token viejo no sirve para renovar */
+    return pedir("/auth/v1/token?grant_type=refresh_token",{method:"POST",headers:encabezados(true),
+      body:JSON.stringify({refresh_token:rt})});
+  },
+  salir:function(){
+    var p=sesion?pedir("/auth/v1/logout",{method:"POST",headers:encabezados(true)}).catch(function(){}):Promise.resolve();
+    return p.then(function(){
+      guardarSesion(null); perfil=null; E=null;
+      try{ localStorage.removeItem(CLAVE_CACHE); }catch(e){}
+    });
+  }
+};
 
 function semilla(){
   var est = [
@@ -470,7 +609,7 @@ function semilla(){
     {id:"c2627", nombre:"2026/27", estado:"curso",   desde:"2026-07-01", lluvia:[0,0,0,0,0,0,0,0,0,0,0,0], manual:{}}
   ];
   var CL=function(o){return {id:o.id,loteId:o.l,campaniaId:o.c,cultivo:o.k,orden:o.o||1,variedad:o.v||"",
-    haSembrada:o.hs||0,haCosechada:o.hc||0,fechaSiembra:o.fs||"",fechaCosecha:o.fc||"",densidad:o.d||"",
+    haSembrada:o.hs||0,haCosechada:o.hc||0,fechaSiembra:o.fs||null,fechaCosecha:o.fc||null,densidad:o.d||"",
     humedadCosecha:o.hu||0,rindeDeclarado:o.rd||0,estado:o.e,rindesAmbiente:o.ra||null};};
   var cl=[
     CL({id:"cl1",l:"l1",c:"c2526",k:"maiz_d",v:"DK 7220 VT3P",hs:148.6,hc:145.3,fs:"2025-12-15",fc:"2026-05-04",d:"78.000 pl/ha",hu:16.2,rd:10500,e:"cosechado",
@@ -518,11 +657,11 @@ function semilla(){
   ];
   var h=new Date(); var d=function(n){var x=new Date(h.getTime()+n*864e5);return x.toISOString().slice(0,10);};
   var ordenes=[
-    {id:"o1",campaniaId:"c2627",loteId:"l4",cultivoLoteId:"cl16",tipo:"Pulverización",fechaPlan:d(2),responsable:"Contratista Gómez",superficie:148.3,insumoId:"i8",dosis:"0,4 l/ha",detalle:"Fungicida en hoja bandera. Se alcanzó el umbral de roya en el último monitoreo.",estado:"pendiente",fechaCierre:""},
-    {id:"o2",campaniaId:"c2627",loteId:"l13",cultivoLoteId:"cl17",tipo:"Fertilización",fechaPlan:d(1),responsable:"Equipo propio",superficie:134.0,insumoId:"i2",dosis:"120 kg/ha",detalle:"Refertilización nitrogenada en encañazón.",estado:"en_curso",fechaCierre:""},
-    {id:"o3",campaniaId:"c2627",loteId:"l9",cultivoLoteId:"cl18",tipo:"Pulverización",fechaPlan:d(4),responsable:"Contratista Gómez",superficie:151.7,insumoId:"i4",dosis:"2,5 l/ha",detalle:"Control de raigrás resistente en la cabecera norte.",estado:"pendiente",fechaCierre:""},
-    {id:"o4",campaniaId:"c2627",loteId:"l10",cultivoLoteId:"cl19",tipo:"Monitoreo",fechaPlan:d(3),responsable:"Vos",superficie:140.5,insumoId:"",dosis:"",detalle:"Recorrida de roya y pulgón en trigo.",estado:"pendiente",fechaCierre:""},
-    {id:"o5",campaniaId:"c2627",loteId:"l1",cultivoLoteId:"cl21",tipo:"Siembra",fechaPlan:"2026-12-14",responsable:"Equipo propio",superficie:148.6,insumoId:"i1",dosis:"0,93 bolsa/ha",detalle:"Maíz tardío. Sembradora de 52 cm, 78.000 pl/ha.",estado:"pendiente",fechaCierre:""},
+    {id:"o1",campaniaId:"c2627",loteId:"l4",cultivoLoteId:"cl16",tipo:"Pulverización",fechaPlan:d(2),responsable:"Contratista Gómez",superficie:148.3,insumoId:"i8",dosis:"0,4 l/ha",detalle:"Fungicida en hoja bandera. Se alcanzó el umbral de roya en el último monitoreo.",estado:"pendiente",fechaCierre:null},
+    {id:"o2",campaniaId:"c2627",loteId:"l13",cultivoLoteId:"cl17",tipo:"Fertilización",fechaPlan:d(1),responsable:"Equipo propio",superficie:134.0,insumoId:"i2",dosis:"120 kg/ha",detalle:"Refertilización nitrogenada en encañazón.",estado:"en_curso",fechaCierre:null},
+    {id:"o3",campaniaId:"c2627",loteId:"l9",cultivoLoteId:"cl18",tipo:"Pulverización",fechaPlan:d(4),responsable:"Contratista Gómez",superficie:151.7,insumoId:"i4",dosis:"2,5 l/ha",detalle:"Control de raigrás resistente en la cabecera norte.",estado:"pendiente",fechaCierre:null},
+    {id:"o4",campaniaId:"c2627",loteId:"l10",cultivoLoteId:"cl19",tipo:"Monitoreo",fechaPlan:d(3),responsable:"Vos",superficie:140.5,insumoId:"",dosis:"",detalle:"Recorrida de roya y pulgón en trigo.",estado:"pendiente",fechaCierre:null},
+    {id:"o5",campaniaId:"c2627",loteId:"l1",cultivoLoteId:"cl21",tipo:"Siembra",fechaPlan:"2026-12-14",responsable:"Equipo propio",superficie:148.6,insumoId:"i1",dosis:"0,93 bolsa/ha",detalle:"Maíz tardío. Sembradora de 52 cm, 78.000 pl/ha.",estado:"pendiente",fechaCierre:null},
     {id:"o6",campaniaId:"c2627",loteId:"l5",cultivoLoteId:"cl20",tipo:"Fertilización",fechaPlan:d(-14),responsable:"Equipo propio",superficie:98.2,insumoId:"i2",dosis:"110 kg/ha",detalle:"Nitrógeno en macollaje.",estado:"completada",fechaCierre:d(-13)}
   ];
   var monitoreo=[
@@ -534,17 +673,113 @@ function semilla(){
           insumos:insumos,ordenes:ordenes,monitoreo:monitoreo};
 }
 
-function cargar(){
-  try{ var raw=localStorage.getItem(CLAVE); if(raw) E=JSON.parse(raw); }catch(err){ E=null; }
-  if(!E||!E.lotes) E=semilla();
-  E.campanias.forEach(function(c){ if(!c.manual) c.manual={}; if(!c.desde) c.desde=(2000+parseInt(c.nombre.slice(0,4),10)||2026)+"-07-01"; });
+/* La colección en memoria de cada tabla. Las vistas siguen leyendo de E igual
+   que antes: lo único que cambió es de dónde sale y a dónde va. */
+var TABLAS = {
+  establecimientos:"establecimientos", lotes:"lotes", campanias:"campanias",
+  cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
+  ordenes:"ordenes", monitoreo:"monitoreo"
+};
+var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],ordenes:[],monitoreo:[]};
+
+function normalizar(){
+  Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
+  E.campanias.forEach(function(c){
+    if(!c.manual) c.manual={};
+    if(typeof c.manual==="string"){ try{ c.manual=JSON.parse(c.manual); }catch(e){ c.manual={}; } }
+    if(!c.lluvia||!c.lluvia.length) c.lluvia=[0,0,0,0,0,0,0,0,0,0,0,0];
+  });
+  E.lotes.forEach(function(l){ if(!l.ambientes) l.ambientes=[]; });
   if(!campActiva||!E.campanias.some(function(c){return c.id===campActiva;})){
     var cu=E.campanias.filter(function(c){return c.estado==="curso";})[0];
-    campActiva=(cu||E.campanias[0]).id;
+    campActiva=(cu||E.campanias[0]||{}).id||null;
   }
 }
-function guardar(){ try{ localStorage.setItem(CLAVE,JSON.stringify(E)); }catch(err){ avisar("No se pudo guardar en este navegador."); } }
-function reiniciar(){ E=semilla(); campActiva="c2627"; guardar(); traerLluviaCampania(true); pintar(); avisar("Datos de ejemplo restaurados."); }
+function guardarCache(){
+  try{ localStorage.setItem(CLAVE_CACHE,JSON.stringify({campActiva:campActiva,E:E})); }catch(e){}
+}
+function leerCache(){
+  try{
+    var c=JSON.parse(localStorage.getItem(CLAVE_CACHE)||"null");
+    if(c&&c.E){ E=c.E; campActiva=c.campActiva; normalizar(); return true; }
+  }catch(e){}
+  return false;
+}
+
+/* Baja todo de una. Los volúmenes son chicos —cientos de filas— así que una
+   sola pasada al entrar es más simple y más rápido que pedir por pantalla. */
+function cargar(){
+  cargandoDatos=true;
+  var claves=Object.keys(TABLAS);
+  return Promise.all(claves.map(function(k){ return sb.leer(TABLAS[k]); })
+      .concat([sb.leer("perfiles")]))
+    .then(function(res){
+      E={};
+      claves.forEach(function(k,i){ E[k]=(res[i]||[]).map(aCamello); });
+      perfil=((res[claves.length]||[])[0])||{nombre:"",empresa:""};
+      normalizar(); guardarCache(); cargandoDatos=false;
+    })
+    .catch(function(err){
+      cargandoDatos=false;
+      if(!leerCache()) E=JSON.parse(JSON.stringify(vacio));
+      avisar("No pude traer tus datos: "+err.message);
+    });
+}
+
+/* Cada acción marca lo que tocó; guardar() lo manda todo junto. */
+var cola=[];
+function marcar(coleccion, fila){ cola.push({op:"grabar", t:TABLAS[coleccion], fila:fila}); }
+function marcarBaja(coleccion, id){ cola.push({op:"borrar", t:TABLAS[coleccion], id:id}); }
+
+function guardar(){
+  guardarCache();
+  if(!cola.length) return Promise.resolve();
+  var lote=cola.slice(); cola=[];
+  var cadena=Promise.resolve();
+  lote.forEach(function(o){
+    cadena=cadena.then(function(){
+      if(o.op==="borrar") return sb.borrar(o.t,o.id);
+      var f=aGuion(o.fila); delete f.creado_en;
+      return sb.grabar(o.t,f);
+    });
+  });
+  return cadena.catch(function(err){
+    avisar(navigator.onLine ? "No se pudo guardar: "+err.message
+                            : "Sin señal: el cambio no se guardó. Probá de nuevo con conexión.");
+  });
+}
+
+/* Datos de ejemplo: los ids cortos de la semilla se cambian por UUID y se
+   reescriben las referencias, para que la base los acepte. */
+function semillaConIds(){
+  var s=semilla(), mapa={};
+  function nid(v){ if(!v) return v; if(!mapa[v]) mapa[v]=uid(); return mapa[v]; }
+  s.establecimientos.forEach(function(x){ x.id=nid(x.id); });
+  s.lotes.forEach(function(x){ x.id=nid(x.id); x.establecimientoId=nid(x.establecimientoId); });
+  s.campanias.forEach(function(x){ x.id=nid(x.id); });
+  s.insumos.forEach(function(x){ x.id=nid(x.id); });
+  s.cultivoLotes.forEach(function(x){ x.id=nid(x.id); x.loteId=nid(x.loteId); x.campaniaId=nid(x.campaniaId); });
+  s.tickets.forEach(function(x){ x.id=nid(x.id); x.cultivoLoteId=nid(x.cultivoLoteId); });
+  s.ordenes.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); x.loteId=nid(x.loteId);
+                                 x.cultivoLoteId=nid(x.cultivoLoteId); x.insumoId=x.insumoId?nid(x.insumoId):null; });
+  s.monitoreo.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); x.loteId=nid(x.loteId); });
+  return s;
+}
+function cargarEjemplo(){
+  var s=semillaConIds();
+  /* orden de inserción: primero lo que otros referencian */
+  var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes","monitoreo"];
+  orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
+  campActiva=(s.campanias.filter(function(c){return c.estado==="curso";})[0]||s.campanias[0]).id;
+  estabClima=s.establecimientos[0].id;
+  normalizar();
+  return guardar().then(function(){
+    return traerLluviaCampania(true);
+  }).then(function(){
+    localStorage.removeItem(CLAVE_CLIMA); CLIMA.pron={};
+    return traerPronostico();
+  });
+}
 
 /* ============================================================
    3 · CLIMA · Open-Meteo
@@ -613,7 +848,7 @@ function traerLluviaCampania(forzar){
       });
       for(var m=0;m<12;m++){ if(!c.manual[m]) c.lluvia[m]=Math.round(acum[m]*10)/10; }
       c.traido=true; c.traidoHasta=hasta;
-      guardar();
+      marcar("campanias",c); guardar();
     })
     .catch(function(){ /* si falla, quedan los valores que haya */ });
 }
@@ -833,9 +1068,9 @@ A.nuevaCampania=function(){
             {k:"estado",label:"Estado",tipo:"select",req:true,opciones:[{v:"curso",t:"En curso"},{v:"cerrada",t:"Cerrada"}],valor:"curso"}],
     validar:function(d){ if(E.campanias.some(function(c){return c.nombre.toLowerCase()===d.nombre.toLowerCase();})) return {nombre:"Ya existe una campaña con ese nombre."}; },
     guardar:function(d){
-      var id=uid("c");
-      E.campanias.push({id:id,nombre:d.nombre,estado:d.estado,desde:d.anio+"-07-01",lluvia:[0,0,0,0,0,0,0,0,0,0,0,0],manual:{}});
-      campActiva=id; guardar(); traerLluviaCampania(true).then(pintar);
+      var nueva={id:uid(),nombre:d.nombre,estado:d.estado,desde:d.anio+"-07-01",lluvia:[0,0,0,0,0,0,0,0,0,0,0,0],manual:{},traido:false};
+      E.campanias.push(nueva); marcar("campanias",nueva);
+      campActiva=nueva.id; guardar().then(function(){ return traerLluviaCampania(true); }).then(pintar);
       avisar("Campaña "+d.nombre+" creada. Busco su lluvia real.");
     }});
 };
@@ -862,6 +1097,7 @@ A.borrarCampania=function(id){
       E.ordenes=E.ordenes.filter(function(o){ return o.campaniaId!==id; });
       E.monitoreo=E.monitoreo.filter(function(o){ return o.campaniaId!==id; });
       E.campanias=E.campanias.filter(function(x){ return x.id!==id; });
+      marcarBaja("campanias",id);
       if(campActiva===id){
         var cu=E.campanias.filter(function(x){return x.estado==="curso";})[0];
         campActiva=(cu||E.campanias[0]).id;
@@ -879,7 +1115,8 @@ A.nuevoEstablecimiento=function(){
             {k:"lat",label:"Latitud",tipo:"number",paso:"0.0001",req:true,ph:"-34.2456"},
             {k:"lon",label:"Longitud",tipo:"number",paso:"0.0001",req:true,ph:"-59.4711"}],
     guardar:function(d){
-      E.establecimientos.push({id:uid("e"),nombre:d.nombre,localidad:d.localidad,lat:parseFloat(d.lat),lon:parseFloat(d.lon)});
+      var ne={id:uid(),nombre:d.nombre,localidad:d.localidad,lat:parseFloat(d.lat),lon:parseFloat(d.lon)};
+      E.establecimientos.push(ne); marcar("establecimientos",ne);
       guardar(); localStorage.removeItem(CLAVE_CLIMA); CLIMA.pron={};
       traerPronostico().then(pintar); avisar("Establecimiento agregado. Traigo su pronóstico.");
     }});
@@ -902,15 +1139,17 @@ A.nuevoLote=function(id){
     },
     guardar:function(d){
       var amb=[]; [["Loma",d.a1],["Media loma",d.a2],["Bajo",d.a3]].forEach(function(p){ var v=parseFloat(p[1])||0; if(v>0) amb.push({nombre:p[0],ha:v}); });
-      if(L){ L.establecimientoId=d.establecimientoId; L.nombre=d.nombre; L.ha=parseFloat(d.ha); L.ambientes=amb; avisar("Lote actualizado."); }
-      else { E.lotes.push({id:uid("l"),establecimientoId:d.establecimientoId,nombre:d.nombre,ha:parseFloat(d.ha),ambientes:amb}); avisar("Lote agregado."); }
+      if(L){ L.establecimientoId=d.establecimientoId; L.nombre=d.nombre; L.ha=parseFloat(d.ha); L.ambientes=amb;
+             marcar("lotes",L); avisar("Lote actualizado."); }
+      else { var nl={id:uid(),establecimientoId:d.establecimientoId,nombre:d.nombre,ha:parseFloat(d.ha),ambientes:amb};
+             E.lotes.push(nl); marcar("lotes",nl); avisar("Lote agregado."); }
     }});
 };
 A.borrarLote=function(id){
   var u=E.cultivoLotes.filter(function(c){return c.loteId===id;}).length;
   if(u){ avisar("No se puede: el lote tiene "+u+" cultivo(s) cargado(s)."); return; }
   confirmar("Eliminar lote","Vas a eliminar “"+esc(nombreLote(id))+"”. No se puede deshacer.",function(){
-    E.lotes=E.lotes.filter(function(l){return l.id!==id;}); avisar("Lote eliminado."); });
+    E.lotes=E.lotes.filter(function(l){return l.id!==id;}); marcarBaja("lotes",id); avisar("Lote eliminado."); });
 };
 A.asignarCultivo=function(){
   var c=campania(campActiva);
@@ -926,9 +1165,10 @@ A.asignarCultivo=function(){
         return {loteId:"Ese lote ya tiene un "+d.orden+"º cultivo en "+c.nombre+"."};
     },
     guardar:function(d){
-      E.cultivoLotes.push({id:uid("cl"),loteId:d.loteId,campaniaId:campActiva,cultivo:d.cultivo,orden:parseInt(d.orden,10),
-        variedad:d.variedad,densidad:d.densidad,haSembrada:0,haCosechada:0,fechaSiembra:"",fechaCosecha:"",
-        humedadCosecha:0,rindeDeclarado:0,estado:"planificado",rindesAmbiente:null});
+      var ncl={id:uid(),loteId:d.loteId,campaniaId:campActiva,cultivo:d.cultivo,orden:parseInt(d.orden,10),
+        variedad:d.variedad,densidad:d.densidad,haSembrada:0,haCosechada:0,fechaSiembra:null,fechaCosecha:null,
+        humedadCosecha:0,rindeDeclarado:0,estado:"planificado",rindesAmbiente:null};
+      E.cultivoLotes.push(ncl); marcar("cultivoLotes",ncl);
       avisar("Cultivo planificado en "+nombreLote(d.loteId)+".");
     }});
 };
@@ -946,7 +1186,7 @@ A.registrarSiembra=function(id){
       cl.fechaSiembra=d.fechaSiembra; cl.haSembrada=parseFloat(d.haSembrada);
       cl.variedad=d.variedad; cl.densidad=d.densidad;
       if(cl.estado==="planificado") cl.estado="sembrado";
-      avisar("Siembra registrada en "+l.nombre+".");
+      marcar("cultivoLotes",cl); avisar("Siembra registrada en "+l.nombre+".");
     }});
 };
 A.cargarTicket=function(id){
@@ -959,11 +1199,12 @@ A.cargarTicket=function(id){
             {k:"kgNetos",label:"Kilos netos de balanza",tipo:"number",paso:"1",min:"1",req:true,ph:"236550"},
             {k:"humedad",label:"Humedad (%)",tipo:"number",paso:"0.1",min:"0",req:true}],
     guardar:function(d){
-      E.tickets.push({id:uid("t"),cultivoLoteId:id,fecha:d.fecha,cartaPorte:d.cartaPorte,kgNetos:parseFloat(d.kgNetos),humedad:parseFloat(d.humedad)});
+      var nt={id:uid(),cultivoLoteId:id,fecha:d.fecha,cartaPorte:d.cartaPorte,kgNetos:parseFloat(d.kgNetos),humedad:parseFloat(d.humedad)};
+      E.tickets.push(nt); marcar("tickets",nt);
       if(cl.estado==="sembrado") cl.estado="cosechando";
       if(!cl.haCosechada) cl.haCosechada=cl.haSembrada;
       if(!cl.fechaCosecha||d.fecha>cl.fechaCosecha) cl.fechaCosecha=d.fecha;
-      avisar("Carta cargada. Rendimiento recalculado.");
+      marcar("cultivoLotes",cl); avisar("Carta cargada. Rendimiento recalculado.");
     }});
 };
 A.cerrarCosecha=function(id){
@@ -980,7 +1221,7 @@ A.cerrarCosecha=function(id){
     guardar:function(d){
       cl.fechaCosecha=d.fechaCosecha; cl.haCosechada=parseFloat(d.haCosechada);
       cl.humedadCosecha=parseFloat(d.humedadCosecha)||0; cl.rindeDeclarado=parseFloat(d.rindeDeclarado)||0;
-      cl.estado="cosechado"; avisar("Cosecha cerrada en "+l.nombre+".");
+      cl.estado="cosechado"; marcar("cultivoLotes",cl); avisar("Cosecha cerrada en "+l.nombre+".");
     }});
 };
 A.borrarCultivo=function(id){
@@ -988,7 +1229,8 @@ A.borrarCultivo=function(id){
   confirmar("Quitar cultivo","Vas a quitar "+esc(CULTIVOS[cl.cultivo].nom)+" de "+esc(nombreLote(cl.loteId))+", con sus cartas de porte.",function(){
     E.cultivoLotes=E.cultivoLotes.filter(function(x){return x.id!==id;});
     E.tickets=E.tickets.filter(function(t){return t.cultivoLoteId!==id;});
-    E.ordenes.forEach(function(o){ if(o.cultivoLoteId===id) o.cultivoLoteId=""; });
+    E.ordenes.forEach(function(o){ if(o.cultivoLoteId===id){ o.cultivoLoteId=null; } });
+    marcarBaja("cultivoLotes",id);
     avisar("Cultivo quitado."); });
 };
 A.nuevaOrden=function(id){
@@ -1010,13 +1252,14 @@ A.nuevaOrden=function(id){
       var cl=clDe(d.cultivoLoteId);
       var b={campaniaId:campActiva,loteId:cl.loteId,cultivoLoteId:d.cultivoLoteId,tipo:d.tipo,fechaPlan:d.fechaPlan,
              responsable:d.responsable,superficie:parseFloat(d.superficie)||0,insumoId:d.insumoId,dosis:d.dosis,detalle:d.detalle};
-      if(O){ Object.keys(b).forEach(function(k){O[k]=b[k];}); avisar("Trabajo actualizado."); }
-      else { b.id=uid("o"); b.estado="pendiente"; b.fechaCierre=""; E.ordenes.push(b); avisar("Trabajo creado."); }
+      if(O){ Object.keys(b).forEach(function(k){O[k]=b[k];}); marcar("ordenes",O); avisar("Trabajo actualizado."); }
+      else { b.id=uid(); b.estado="pendiente"; b.fechaCierre=null; b.insumoId=b.insumoId||null;
+             E.ordenes.push(b); marcar("ordenes",b); avisar("Trabajo creado."); }
     }});
 };
 A.avanzarOrden=function(id){
   var o=E.ordenes.filter(function(x){return x.id===id;})[0];
-  if(o.estado==="pendiente"){ o.estado="en_curso"; guardar(); pintar(); avisar("Trabajo en curso."); return; }
+  if(o.estado==="pendiente"){ o.estado="en_curso"; marcar("ordenes",o); guardar(); pintar(); avisar("Trabajo en curso."); return; }
   if(o.estado==="en_curso") A.completarOrden(id);
 };
 A.completarOrden=function(id){
@@ -1040,19 +1283,20 @@ A.completarOrden=function(id){
         if(!cl.haCosechada) cl.haCosechada=cl.haSembrada;
         avisar("Listo. Cargá las cartas de porte del lote.");
       } else avisar("Trabajo completado.");
+      marcar("ordenes",o); if(cl) marcar("cultivoLotes",cl);
       if(o.insumoId){
         var i=insumo(o.insumoId), dn=parseFloat(String(o.dosis||"").replace(",","."));
-        if(i&&dn>0) i.stock=Math.max(0,i.stock-dn*o.superficie);
+        if(i&&dn>0){ i.stock=Math.max(0,i.stock-dn*o.superficie); marcar("insumos",i); }
       }
     }});
 };
 A.borrarOrden=function(id){
   confirmar("Eliminar trabajo","Se elimina de la lista. No se puede deshacer.",function(){
-    E.ordenes=E.ordenes.filter(function(o){return o.id!==id;}); avisar("Trabajo eliminado."); });
+    E.ordenes=E.ordenes.filter(function(o){return o.id!==id;}); marcarBaja("ordenes",id); avisar("Trabajo eliminado."); });
 };
 A.moverOrden=function(arg){
   var p=arg.split("|"), o=E.ordenes.filter(function(x){return x.id===p[0];})[0];
-  o.fechaPlan=p[1]; guardar(); pintar();
+  o.fechaPlan=p[1]; marcar("ordenes",o); guardar(); pintar();
   avisar("Movido al "+fecha(p[1])+".");
 };
 A.nuevoInsumo=function(){
@@ -1064,7 +1308,8 @@ A.nuevoInsumo=function(){
             {k:"precio",label:"Precio unitario (USD)",tipo:"number",paso:"0.01",min:"0",req:true},
             {k:"stock",label:"Stock inicial",tipo:"number",paso:"0.1",min:"0",req:true}],
     guardar:function(d){
-      E.insumos.push({id:uid("i"),nombre:d.nombre,tipo:d.tipo,unidad:d.unidad,precio:parseFloat(d.precio),stock:parseFloat(d.stock)});
+      var ni={id:uid(),nombre:d.nombre,tipo:d.tipo,unidad:d.unidad,precio:parseFloat(d.precio),stock:parseFloat(d.stock)};
+      E.insumos.push(ni); marcar("insumos",ni);
       avisar("Insumo agregado."); }});
 };
 A.moverStock=function(id){
@@ -1073,7 +1318,8 @@ A.moverStock=function(id){
     nota:"Stock actual de <b>"+esc(i.nombre)+"</b>: "+nf(i.stock,1)+" "+esc(i.unidad)+".",
     campos:[{k:"signo",label:"Movimiento",tipo:"select",req:true,opciones:[{v:"1",t:"Compra (entra)"},{v:"-1",t:"Ajuste (sale)"}]},
             {k:"cantidad",label:"Cantidad ("+i.unidad+")",tipo:"number",paso:"0.1",min:"0.1",req:true}],
-    guardar:function(d){ i.stock=Math.max(0,i.stock+parseInt(d.signo,10)*parseFloat(d.cantidad)); avisar("Stock actualizado."); }});
+    guardar:function(d){ i.stock=Math.max(0,i.stock+parseInt(d.signo,10)*parseFloat(d.cantidad));
+                         marcar("insumos",i); avisar("Stock actualizado."); }});
 };
 A.borrarInsumo=function(id){
   var i=insumo(id);
@@ -1090,8 +1336,9 @@ A.borrarInsumo=function(id){
     arrastra.length ? "Al borrarlo, "+arrastra.join(", y ")+". No se puede deshacer."
                     : "No lo usa ningún trabajo y no tiene stock cargado.",
     function(){
-      E.ordenes.forEach(function(o){ if(o.insumoId===id) o.insumoId=""; });
+      E.ordenes.forEach(function(o){ if(o.insumoId===id){ o.insumoId=null; marcar("ordenes",o); } });
       E.insumos=E.insumos.filter(function(x){ return x.id!==id; });
+      marcarBaja("insumos",id);
       avisar("Insumo eliminado.");
     });
 };
@@ -1102,11 +1349,12 @@ A.cargarLluvia=function(mes){
     valores:{mm:c.lluvia[mes]},
     campos:[{k:"mm",label:"Milímetros del pluviómetro",tipo:"number",paso:"1",min:"0",req:true,
              hint:"Media histórica de "+MESES[mes]+": "+NORMAL[mes]+" mm"}],
-    guardar:function(d){ c.lluvia[mes]=parseFloat(d.mm)||0; c.manual[mes]=true; avisar(MESES[mes]+": "+d.mm+" mm, cargado a mano."); }});
+    guardar:function(d){ c.lluvia[mes]=parseFloat(d.mm)||0; c.manual[mes]=true;
+                         marcar("campanias",c); avisar(MESES[mes]+": "+d.mm+" mm, cargado a mano."); }});
 };
 A.soltarMes=function(mes){
   var c=campania(campActiva); delete c.manual[parseInt(mes,10)];
-  c.traido=false; guardar(); traerLluviaCampania(true).then(pintar);
+  c.traido=false; marcar("campanias",c); guardar().then(function(){ return traerLluviaCampania(true); }).then(pintar);
   avisar("Vuelve al dato automático.");
 };
 A.nuevaObservacion=function(){
@@ -1118,8 +1366,9 @@ A.nuevaObservacion=function(){
             {k:"severidad",label:"Severidad",tipo:"select",req:true,opciones:[{v:"Baja",t:"Baja"},{v:"Media",t:"Media"},{v:"Alta",t:"Alta"}]},
             {k:"nota",label:"Observación",tipo:"textarea",req:true,ancho:true,ph:"Qué viste, dónde y con qué incidencia."}],
     guardar:function(d){
-      E.monitoreo.unshift({id:uid("m"),campaniaId:campActiva,loteId:d.loteId,fecha:d.fecha,tipo:d.tipo,
-        estadio:d.estadio,severidad:d.severidad,nota:d.nota});
+      var nm={id:uid(),campaniaId:campActiva,loteId:d.loteId,fecha:d.fecha,tipo:d.tipo,
+        estadio:d.estadio,severidad:d.severidad,nota:d.nota};
+      E.monitoreo.unshift(nm); marcar("monitoreo",nm);
       avisar("Observación registrada."); }});
 };
 A.verEstab=function(id){ estabClima=id; diaSel=0; pintar(); };
@@ -1131,7 +1380,20 @@ A.recargarClima=function(){
 A.abrirLote=function(id){ loteAbierto=id; vistaActual="lote"; pintar(); window.scrollTo(0,0); };
 A.volver=function(){ vistaActual="campania"; pintar(); window.scrollTo(0,0); };
 A.irA=function(v){ vistaActual=v; pintar(); window.scrollTo(0,0); };
-A.reiniciar=reiniciar;
+A.cargarEjemplo=function(){
+  if(E.establecimientos.length){
+    avisar("Ya tenés campos cargados. Los de ejemplo se suman a los tuyos.");
+  }
+  avisar("Cargando los datos de ejemplo…");
+  cargarEjemplo().then(function(){ pintar(); avisar("Listo. Cuatro campos y quince lotes de ejemplo."); });
+};
+A.salir=function(){
+  confirmar("Cerrar sesión","Tus datos quedan guardados en la nube. Volvés a verlos entrando con el mismo mail.",function(){
+    auth.salir().then(function(){ modoPortada="entrar"; mensajePortada=null; pintar(); });
+  });
+  $("dlg-ok").textContent="Cerrar sesión";
+};
+A.modoPortada=function(m){ modoPortada=m; mensajePortada=null; pintar(); };
 
 /* ============================================================
    9 · VISTA · HOY Y ESTA SEMANA
@@ -1330,7 +1592,7 @@ function vistaHoy(){
     '<p class="titular">'+frameResumen(D)+'</p>'+
     grilla+trabajos+
     '<div class="pie"><span>Clima de Open-Meteo. Los umbrales de cada semáforo se pueden ajustar a tu criterio.</span>'+
-    '<button class="btn sec mini" data-a="reiniciar">Restaurar datos de ejemplo</button></div>';
+    '<button class="btn sec mini" data-a="cargarEjemplo">Cargar datos de ejemplo</button></div>';
 }
 
 /* ============================================================
@@ -1439,7 +1701,7 @@ function vistaLotes(){
     return '<div class="bloque"><div class="bloque-cab"><h2>'+esc(e.nombre)+'</h2>'+
       '<div class="aclara">'+esc(e.localidad)+' · '+ls.length+' lotes · '+nf(ha,1)+' ha</div></div>'+
       (ls.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th>Lote</th><th class="num">Superficie</th>'+
-      '<th class="col-opcional">Ambientes</th><th>Cultivo en '+esc(campania(campActiva).nombre)+'</th><th class="der">Acciones</th></tr></thead><tbody>'+
+      '<th class="col-opcional">Ambientes</th><th>Cultivo'+(campActiva?' en '+esc(campania(campActiva).nombre):'')+'</th><th class="der">Acciones</th></tr></thead><tbody>'+
       ls.map(function(l){
         var cs=E.cultivoLotes.filter(function(x){return x.loteId===l.id&&x.campaniaId===campActiva;});
         var cu=cs.length?cs.map(function(x){return '<i class="punto" style="background:'+CULTIVOS[x.cultivo].color+'"></i>'+esc(CULTIVOS[x.cultivo].nom);}).join("<br>")
@@ -1654,8 +1916,116 @@ function vistaLote(){
    ============================================================ */
 var VISTAS={hoy:vistaHoy,campania:vistaCampania,lotes:vistaLotes,cultivos:vistaCultivos,
             ordenes:vistaOrdenes,insumos:vistaInsumos,clima:vistaClima,monitoreo:vistaMonitoreo,lote:vistaLote};
+/* Estas vistas no existen sin una campaña abierta. */
+var NECESITAN_CAMPANIA={campania:1,cultivos:1,clima:1,lote:1};
+
+function vistaPrimerosPasos(){
+  var hayCampos=E.establecimientos.length>0, hayLotes=E.lotes.length>0;
+  function paso(n,titulo,texto,accion,etiqueta,hecho){
+    return '<div class="cadena-paso'+(hecho?"":" final")+'">'+
+      '<span class="cadena-i">'+(hecho?"✓":n)+'</span>'+
+      '<span class="cadena-t"><strong>'+titulo+'</strong><small>'+texto+'</small></span>'+
+      '<span>'+(hecho?'<span class="chip completada">Hecho</span>'
+                    :'<button class="btn" data-a="'+accion+'">'+etiqueta+'</button>')+'</span></div>';
+  }
+  return '<div class="cabecera"><div><h1>Empecemos</h1>'+
+    '<div class="sub">Tres pasos y la app queda andando con tus campos</div></div></div>'+
+    '<div class="bloque"><div class="cadena">'+
+      paso(1,"Cargá un establecimiento",
+             "Con sus coordenadas: de ahí sale el pronóstico de ese campo.",
+             "nuevoEstablecimiento","+ Establecimiento",hayCampos)+
+      paso(2,"Cargá tus lotes",
+             "Nombre y superficie. Los ambientes son opcionales.",
+             "nuevoLote","+ Nuevo lote",hayLotes)+
+      paso(3,"Abrí la campaña",
+             "El ciclo va de julio a junio. Después planificás qué se siembra en cada lote.",
+             "nuevaCampania","+ Nueva campaña",false)+
+    '</div></div>'+
+    '<div class="bloque"><p class="vacio"><b>¿Querés ver cómo funciona primero?</b>'+
+      'Cargo cuatro campos de la zona de Areco con quince lotes, una campaña cerrada con sus rendimientos y otra en curso. '+
+      'Después los borrás y cargás los tuyos.<br><br>'+
+      '<button class="btn sec" data-a="cargarEjemplo">Cargar datos de ejemplo</button></p></div>';
+}
+
+/* ---------- portada ---------- */
+var modoPortada="entrar", mensajePortada=null, enviandoPortada=false;
+
+function pintarPortada(){
+  var crear=modoPortada==="crear";
+  $("portada").innerHTML=
+    '<div class="portada-caja">'+
+      '<div class="marca">AGRO<span>CONTROL</span></div>'+
+      '<p class="bajada">Siembra, cosecha, insumos y clima por lote. Lo que cargues queda en tu cuenta y lo ves desde cualquier dispositivo.</p>'+
+      '<div class="portada-panel">'+
+        '<h2>'+(crear?"Crear tu cuenta":"Entrar")+'</h2>'+
+        '<p class="ayuda">'+(crear?"Con tu mail y una contraseña. Nada más."
+                                  :"Con el mail y la contraseña que usaste al crearla.")+'</p>'+
+        '<form id="form-portada"><div class="portada-campos">'+
+          (crear?'<div class="campo"><label for="p-nombre">Tu nombre</label>'+
+                 '<input id="p-nombre" name="nombre" autocomplete="name" placeholder="Lucas Filippelli" required></div>'+
+                 '<div class="campo"><label for="p-empresa">Empresa o establecimiento</label>'+
+                 '<input id="p-empresa" name="empresa" autocomplete="organization" placeholder="Opcional"></div>':'')+
+          '<div class="campo"><label for="p-mail">Mail</label>'+
+          '<input id="p-mail" name="email" type="email" autocomplete="email" placeholder="vos@ejemplo.com" required></div>'+
+          '<div class="campo"><label for="p-clave">Contraseña</label>'+
+          '<input id="p-clave" name="clave" type="password" autocomplete="'+(crear?"new-password":"current-password")+'" required>'+
+          (crear?'<span class="hint">Al menos 6 caracteres.</span>':'')+'</div>'+
+        '</div>'+
+        '<button type="submit" class="btn" id="p-enviar">'+(crear?"Crear cuenta":"Entrar")+'</button>'+
+        '</form>'+
+        (mensajePortada?'<p class="portada-'+mensajePortada.tipo+'">'+esc(mensajePortada.texto)+'</p>':'')+
+        '<div class="portada-cambiar">'+
+          (crear?'¿Ya tenés cuenta? <button type="button" data-a="modoPortada" data-arg="entrar">Entrá</button>'
+                :'¿Primera vez? <button type="button" data-a="modoPortada" data-arg="crear">Creá tu cuenta</button>')+
+        '</div>'+
+      '</div>'+
+      '<p class="portada-pie">El clima lo trae Open-Meteo según las coordenadas de cada campo.<br>Tus datos son tuyos: nadie más los ve.</p>'+
+    '</div>';
+
+  $("form-portada").addEventListener("submit",function(ev){
+    ev.preventDefault();
+    if(enviandoPortada) return;
+    var d={}; new FormData(ev.target).forEach(function(v,k){ d[k]=String(v).trim(); });
+    enviandoPortada=true;
+    $("p-enviar").disabled=true;
+    $("p-enviar").textContent=crear?"Creando…":"Entrando…";
+    var accion=crear ? auth.registrar(d.email,d.clave,d.nombre,d.empresa||"")
+                     : auth.entrar(d.email,d.clave);
+    accion.then(function(r){
+      if(r&&r.access_token){
+        guardarSesion(conVencimiento(r));
+        mensajePortada=null;
+        return cargar().then(arrancarApp);
+      }
+      /* la cuenta quedó creada pero hace falta confirmar el mail */
+      modoPortada="entrar";
+      mensajePortada={tipo:"ok",texto:"Cuenta creada. Te mandamos un mail para confirmarla; después entrá desde acá."};
+      pintar();
+    }).catch(function(err){
+      mensajePortada={tipo:"error",texto:err.message};
+      pintar();
+    }).then(function(){ enviandoPortada=false; });
+  });
+}
+
+function arrancarApp(){
+  vistaActual="hoy";
+  pintar();
+  traerPronostico().then(pintar);
+  traerLluviaCampania().then(pintar);
+}
 
 function pintar(){
+  if(!sesion){
+    $("portada").classList.remove("oculto");
+    $("app").classList.add("oculto");
+    pintarPortada();
+    return;
+  }
+  $("portada").classList.add("oculto");
+  $("app").classList.remove("oculto");
+  if(!E) E=JSON.parse(JSON.stringify(vacio));
+  $("cuenta-nombre").textContent=(perfil&&perfil.nombre)?perfil.nombre:((sesion.user&&sesion.user.email)||"");
   var sel=$("sel-camp");
   sel.innerHTML=E.campanias.map(function(c){
     return '<option value="'+c.id+'"'+(c.id===campActiva?" selected":"")+'>'+esc(c.nombre)+' — '+(c.estado==="curso"?"en curso":"cerrada")+'</option>';}).join("");
@@ -1666,7 +2036,10 @@ function pintar(){
     var v=n[el.getAttribute("data-n")]; el.textContent=v||""; el.style.display=v?"":"none"; });
   var na=vistaActual==="lote"?"campania":vistaActual;
   document.querySelectorAll("#nav a").forEach(function(a){ a.classList.toggle("activo",a.getAttribute("data-vista")===na); });
-  $("lienzo").innerHTML=(VISTAS[vistaActual]||vistaHoy)();
+  var v=vistaActual;
+  if(!campActiva && NECESITAN_CAMPANIA[v]) $("lienzo").innerHTML=vistaPrimerosPasos();
+  else if(v==="hoy" && !E.establecimientos.length) $("lienzo").innerHTML=vistaPrimerosPasos();
+  else $("lienzo").innerHTML=(VISTAS[v]||vistaHoy)();
   var se=$("sel-estab");
   if(se) se.addEventListener("change",function(){ A.verEstab(this.value); });
 }
@@ -1693,10 +2066,22 @@ document.addEventListener("keydown",function(ev){
 });
 
 /* ---------- arranque ---------- */
-cargar();
-pintar();
-traerPronostico().then(pintar);
-traerLluviaCampania().then(pintar);
+leerSesion();
+if(!sesion){
+  pintar();
+} else {
+  /* La sesión guardada casi siempre está vencida: se renueva antes de pedir nada. */
+  leerCache();
+  pintar();
+  auth.renovar()
+    .then(function(r){ guardarSesion(conVencimiento(r)); return cargar(); })
+    .then(arrancarApp)
+    .catch(function(){
+      guardarSesion(null); perfil=null;
+      mensajePortada={tipo:"error",texto:"Se venció la sesión. Entrá de nuevo."};
+      pintar();
+    });
+}
 })();
 </script>
 
