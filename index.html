@@ -1,0 +1,1657 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#221B14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AGROCONTROL">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>AGROCONTROL</title>
+<style>
+/* ============================================================
+   AGROCONTROL
+   El color codifica cultivo y estado. Nunca decora.
+   ============================================================ */
+:root{
+  --horizonte:#E9EBE4; --panel:#FCFCF9; --panel-2:#F3F4EE;
+  --hover:#F0F1EA; --nav-hover:#EAEBE3; --pastilla:#E2E4DA;
+  --tierra:#221B14; --tierra-2:#5F5648; --tierra-3:#8B8375;
+  --linea:#D2D6C9; --linea-suave:#EDEFE7; --linea-fuerte:#B6BCA9;
+  --campo-bg:#FFFFFF;
+  --tope-bg:#221B14; --tope-fg:#EFEEE7; --tope-tenue:#9C9382;
+  --tope-campo:#332A20; --tope-borde:#4A3F31;
+  --btn-bg:#221B14; --btn-fg:#EFEEE7; --btn-hover:#382C21;
+  --lluvia:#35618E; --lluvia-suave:#DCE7F1;
+  --alerta:#A83A2C; --alerta-bg:#FBF3F1;
+  --ok:#3F6B34; --ok-bg:#EEF4EA;
+  --ojo:#B57A16; --ojo-bg:#FBF4E6;
+  --c-maiz-t:#C4890F; --c-maiz-d:#E3B865; --c-soja-1:#43701F; --c-soja-2:#86A85C;
+  --c-trigo:#A65A22;  --c-cebada:#D08A4A; --c-girasol:#EFC93D; --c-sorgo:#8E3A34;
+  --c-alfalfa:#5B7F6B; --c-vicia:#7C6BA8;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --nav-w:200px; --tope-h:54px;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){:root{
+  --horizonte:#14110D; --panel:#1D1913; --panel-2:#252019;
+  --hover:#2B251D; --nav-hover:#2B251D; --pastilla:#332C22;
+  --tierra:#EDE9E0; --tierra-2:#ADA492; --tierra-3:#8A8172;
+  --linea:#332C23; --linea-suave:#241F19; --linea-fuerte:#4A4133;
+  --campo-bg:#14110D;
+  --tope-bg:#0F0C09; --tope-fg:#EDE9E0; --tope-tenue:#8A8172;
+  --tope-campo:#241F18; --tope-borde:#3A3228;
+  --btn-bg:#4A3F30; --btn-fg:#F2EEE5; --btn-hover:#5C4F3C;
+  --lluvia:#6FA0D0; --lluvia-suave:#1B2733;
+  --alerta:#E0705E; --alerta-bg:#2B1B17;
+  --ok:#86B471; --ok-bg:#1A2416;
+  --ojo:#DDA943; --ojo-bg:#2B2313;
+  --c-maiz-t:#E0A526; --c-maiz-d:#EFCB84; --c-soja-1:#6FA342; --c-soja-2:#9DC078;
+  --c-trigo:#D07C42;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
+  --c-alfalfa:#7FA890; --c-vicia:#A192CC;
+}}
+:root[data-theme="dark"]{
+  --horizonte:#14110D; --panel:#1D1913; --panel-2:#252019;
+  --hover:#2B251D; --nav-hover:#2B251D; --pastilla:#332C22;
+  --tierra:#EDE9E0; --tierra-2:#ADA492; --tierra-3:#8A8172;
+  --linea:#332C23; --linea-suave:#241F19; --linea-fuerte:#4A4133;
+  --campo-bg:#14110D;
+  --tope-bg:#0F0C09; --tope-fg:#EDE9E0; --tope-tenue:#8A8172;
+  --tope-campo:#241F18; --tope-borde:#3A3228;
+  --btn-bg:#4A3F30; --btn-fg:#F2EEE5; --btn-hover:#5C4F3C;
+  --lluvia:#6FA0D0; --lluvia-suave:#1B2733;
+  --alerta:#E0705E; --alerta-bg:#2B1B17;
+  --ok:#86B471; --ok-bg:#1A2416;
+  --ojo:#DDA943; --ojo-bg:#2B2313;
+  --c-maiz-t:#E0A526; --c-maiz-d:#EFCB84; --c-soja-1:#6FA342; --c-soja-2:#9DC078;
+  --c-trigo:#D07C42;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
+  --c-alfalfa:#7FA890; --c-vicia:#A192CC;
+}
+:root[data-theme="light"]{
+  --horizonte:#E9EBE4; --panel:#FCFCF9; --panel-2:#F3F4EE;
+  --hover:#F0F1EA; --nav-hover:#EAEBE3; --pastilla:#E2E4DA;
+  --tierra:#221B14; --tierra-2:#5F5648; --tierra-3:#8B8375;
+  --linea:#D2D6C9; --linea-suave:#EDEFE7; --linea-fuerte:#B6BCA9;
+  --campo-bg:#FFFFFF;
+  --tope-bg:#221B14; --tope-fg:#EFEEE7; --tope-tenue:#9C9382;
+  --tope-campo:#332A20; --tope-borde:#4A3F31;
+  --btn-bg:#221B14; --btn-fg:#EFEEE7; --btn-hover:#382C21;
+  --lluvia:#35618E; --lluvia-suave:#DCE7F1;
+  --alerta:#A83A2C; --alerta-bg:#FBF3F1;
+  --ok:#3F6B34; --ok-bg:#EEF4EA;
+  --ojo:#B57A16; --ojo-bg:#FBF4E6;
+  --c-maiz-t:#C4890F; --c-maiz-d:#E3B865; --c-soja-1:#43701F; --c-soja-2:#86A85C;
+  --c-trigo:#A65A22;  --c-cebada:#D08A4A; --c-girasol:#EFC93D; --c-sorgo:#8E3A34;
+  --c-alfalfa:#5B7F6B; --c-vicia:#7C6BA8;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--horizonte);color:var(--tierra);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+:focus-visible{outline:2px solid var(--lluvia);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--tierra-3)}
+
+/* ---------- tope ---------- */
+.tope{position:sticky;top:0;z-index:40;height:var(--tope-h);background:var(--tope-bg);color:var(--tope-fg);display:flex;align-items:center;gap:16px;padding:0 16px}
+.marca{font-size:16px;font-weight:800;letter-spacing:-.02em}
+.marca span{color:var(--c-maiz-d)}
+.tope-der{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tope-der label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--tope-tenue);font-weight:700}
+.tope-der select{font-family:var(--mono);font-size:13px;background:var(--tope-campo);color:var(--tope-fg);border:1px solid var(--tope-borde);padding:6px 10px;border-radius:3px;max-width:200px}
+.descargo{background:var(--panel-2);border-bottom:1px solid var(--linea);color:var(--tierra-2);font-size:12.5px;padding:9px 18px;line-height:1.45}
+.descargo b{color:var(--tierra);font-weight:700}
+
+/* ---------- estructura ---------- */
+.marco{display:flex;min-height:calc(100vh - var(--tope-h))}
+.nav{width:var(--nav-w);flex:0 0 var(--nav-w);border-right:1px solid var(--linea);background:var(--panel-2);padding:18px 0}
+.nav-titulo{padding:0 18px 8px}
+.nav a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 18px;color:var(--tierra-2);text-decoration:none;font-size:14.5px;font-weight:500;border-left:3px solid transparent}
+.nav a:hover{background:var(--nav-hover);color:var(--tierra)}
+.nav a.activo{background:var(--panel);color:var(--tierra);font-weight:700;border-left-color:var(--c-maiz-t)}
+.nav a .n{font-family:var(--mono);font-size:11.5px;color:var(--tierra-3);background:var(--pastilla);padding:1px 6px;border-radius:8px}
+.nav a.activo .n{background:var(--c-maiz-d);color:#221B14}
+.nav hr{border:0;border-top:1px solid var(--linea);margin:14px 18px}
+.lienzo{flex:1;min-width:0;padding:24px 28px 64px}
+
+/* ---------- cabecera ---------- */
+.cabecera{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;padding-bottom:14px;border-bottom:2px solid var(--tierra);margin-bottom:22px}
+.cabecera h1{font-size:28px;font-weight:800;letter-spacing:-.025em;line-height:1.12;text-wrap:balance}
+.cabecera .sub{color:var(--tierra-2);font-size:14px;margin-top:4px}
+.cabecera-acc{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ---------- botones ---------- */
+.btn{font-family:var(--sans);font-size:13.5px;font-weight:600;padding:9px 15px;border-radius:3px;border:1px solid var(--btn-bg);background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--btn-hover)}
+.btn.sec{background:transparent;color:var(--tierra);border-color:var(--linea-fuerte)}
+.btn.sec:hover{background:var(--panel-2);border-color:var(--tierra-3)}
+.btn.mini{font-size:12.5px;padding:5px 10px}
+.btn.peligro{border-color:var(--alerta);color:var(--alerta);background:transparent}
+.btn.peligro:hover{background:var(--alerta-bg)}
+
+/* ---------- chips ---------- */
+.chip{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border:1px solid var(--linea-fuerte);border-radius:3px;color:var(--tierra-2);background:var(--panel);white-space:nowrap;display:inline-block}
+.chip.cerrada,.chip.cosechado{border-color:var(--tope-bg);background:var(--tope-bg);color:var(--tope-fg)}
+.chip.curso{border-color:var(--ok);color:var(--ok)}
+.chip.planificado{border-color:var(--tierra-3);color:var(--tierra-3)}
+.chip.sembrado{border-color:var(--c-soja-1);color:#fff;background:var(--c-soja-1)}
+.chip.cosechando{border-color:var(--c-maiz-t);color:#fff;background:var(--c-maiz-t)}
+.chip.pendiente{border-color:var(--tierra-3);color:var(--tierra-3)}
+.chip.en_curso{border-color:var(--lluvia);color:#fff;background:var(--lluvia)}
+.chip.completada{border-color:var(--ok);color:#fff;background:var(--ok)}
+
+/* ---------- bloques ---------- */
+.bloque{background:var(--panel);border:1px solid var(--linea);border-radius:3px;margin-bottom:22px}
+.bloque-cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--linea)}
+.bloque-cab h2{font-size:14px;font-weight:700}
+.bloque-cab .aclara{font-size:12.5px;color:var(--tierra-2);margin-left:auto}
+.bloque-cuerpo{padding:16px}
+
+/* ============ HOY ============ */
+.titular{font-size:19px;line-height:1.45;font-weight:500;text-wrap:balance;padding:18px 20px;background:var(--panel);border:1px solid var(--linea);border-left:4px solid var(--c-maiz-t);border-radius:3px;margin-bottom:18px}
+.titular b{font-weight:800}
+.avisos{display:flex;flex-direction:column;gap:9px;margin-bottom:18px}
+.aviso-fila{display:flex;gap:11px;align-items:flex-start;padding:12px 15px;border-radius:3px;font-size:14px;border:1px solid}
+.aviso-fila.mal{background:var(--alerta-bg);border-color:var(--alerta);color:var(--tierra)}
+.aviso-fila.ojo{background:var(--ojo-bg);border-color:var(--ojo);color:var(--tierra)}
+.aviso-fila.bien{background:var(--ok-bg);border-color:var(--ok);color:var(--tierra)}
+.aviso-fila b{display:block;margin-bottom:1px}
+.aviso-ico{flex:0 0 22px;font-size:17px;line-height:1.25;text-align:center}
+
+/* grilla del pronóstico */
+.pron{overflow-x:auto}
+.pron-grilla{display:grid;grid-template-columns:120px repeat(7,minmax(78px,1fr));min-width:660px}
+.pron-grilla > div{padding:9px 6px;border-bottom:1px solid var(--linea-suave);text-align:center}
+.pron-grilla > div.rot{text-align:left;padding-left:16px;font-size:13.5px;font-weight:600;color:var(--tierra-2);display:flex;align-items:center;gap:7px}
+.pron-dia{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tierra-2);border-bottom:1px solid var(--linea)!important;cursor:pointer}
+.pron-dia.hoy{color:var(--tierra);background:var(--pastilla)}
+.pron-dia.sel{background:var(--tierra);color:var(--panel)}
+.pron-dia small{display:block;font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;margin-top:2px}
+.pron-ico svg{width:30px;height:30px;display:block;margin:0 auto}
+.pron-tmp{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14.5px;font-weight:600}
+.pron-tmp i{font-style:normal;color:var(--tierra-3);font-weight:400}
+.pron-dato{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--tierra-2)}
+.pron-dato.hay{color:var(--lluvia);font-weight:700}
+.sem{font-size:13px;font-weight:700;cursor:pointer;border-radius:3px;margin:3px}
+.sem.si{background:var(--ok-bg);color:var(--ok)}
+.sem.ojo{background:var(--ojo-bg);color:var(--ojo)}
+.sem.no{background:var(--alerta-bg);color:var(--alerta)}
+.sem:hover{outline:2px solid var(--tierra-3);outline-offset:-2px}
+.detalle-dia{padding:16px;border-top:1px solid var(--linea);background:var(--panel-2)}
+.detalle-dia h3{font-size:16px;font-weight:800;margin-bottom:4px}
+.detalle-dia .resumen{font-size:14px;color:var(--tierra-2);margin-bottom:13px}
+.detalle-lista{display:flex;flex-direction:column;gap:9px}
+.detalle-item{display:grid;grid-template-columns:106px 1fr;gap:12px;align-items:baseline;font-size:14px}
+.detalle-item .et{font-weight:700}
+.detalle-item .et.si{color:var(--ok)} .detalle-item .et.ojo{color:var(--ojo)} .detalle-item .et.no{color:var(--alerta)}
+
+/* trabajos cruzados con el clima */
+.trab{display:flex;flex-direction:column;gap:0}
+.trab-fila{display:flex;gap:13px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--linea)}
+.trab-fila:last-child{border-bottom:0}
+.trab-sem{flex:0 0 6px;align-self:stretch;border-radius:3px;min-height:42px}
+.trab-sem.si{background:var(--ok)} .trab-sem.ojo{background:var(--ojo)} .trab-sem.no{background:var(--alerta)}
+.trab-cuerpo{flex:1;min-width:0}
+.trab-tit{font-size:15px;font-weight:700}
+.trab-meta{font-size:13px;color:var(--tierra-3);margin-top:1px}
+.trab-cons{font-size:13.5px;margin-top:5px}
+.trab-cons.si{color:var(--ok)} .trab-cons.ojo{color:var(--ojo)} .trab-cons.no{color:var(--alerta)}
+.trab-acc{flex:0 0 auto;display:flex;gap:6px;align-items:center}
+
+.cargando{padding:26px 16px;text-align:center;color:var(--tierra-2);font-size:14px}
+.punto-carga{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--lluvia);margin-right:8px;animation:lat 1.1s ease-in-out infinite}
+@keyframes lat{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* ---------- ficha de cifras ---------- */
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(172px,1fr));background:var(--panel);border:1px solid var(--linea);border-radius:3px;margin-bottom:22px;overflow:hidden}
+.ficha > div{padding:13px 16px;border-right:1px solid var(--linea)}
+.ficha > div:last-child{border-right:0}
+.ficha .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-top:5px}
+.ficha .u{font-size:11.5px;font-weight:500;color:var(--tierra-3);margin-left:3px;font-family:var(--sans)}
+.ficha .nota{font-size:12px;color:var(--tierra-2);margin-top:4px}
+.avance{height:5px;background:var(--panel-2);margin-top:8px;border-radius:3px;overflow:hidden}
+.avance i{display:block;height:100%;background:var(--c-soja-1)}
+
+/* ---------- franja hídrica ---------- */
+.hidro-grafico{position:relative;height:132px;display:flex;align-items:flex-end}
+.hidro-mes{position:relative;flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center;border-right:1px solid var(--linea-suave)}
+.hidro-mes:last-child{border-right:0}
+.hidro-barra{width:56%;background:var(--lluvia)}
+.hidro-mes.seco .hidro-barra{background:var(--alerta)}
+.hidro-normal{position:absolute;left:10%;right:10%;height:0;z-index:2;border-top:1px dashed var(--tierra-2)}
+.hidro-mm{position:absolute;top:-16px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--tierra-2)}
+.hidro-eje{display:flex;border-top:1px solid var(--tierra)}
+.hidro-eje div{flex:1;text-align:center;padding:6px 0 9px;font-size:10.5px;font-weight:600;color:var(--tierra-2);text-transform:uppercase;letter-spacing:.06em;cursor:pointer}
+.hidro-eje div:hover{background:var(--panel-2);color:var(--tierra)}
+.ventana-fila{display:grid;grid-template-columns:200px 1fr 104px;align-items:center;gap:10px;margin-bottom:5px}
+.ventana-nom{text-align:right;font-size:12.5px;color:var(--tierra-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ventana-nom b{color:var(--tierra);font-weight:600}
+.ventana-pista{position:relative;height:16px;background:var(--panel-2);border-radius:2px}
+.ventana-barra{position:absolute;top:0;bottom:0;border-radius:2px}
+.ventana-fecha{font-family:var(--mono);font-size:11px;color:var(--tierra-3);white-space:nowrap}
+.leyenda-hidro{display:flex;gap:18px;flex-wrap:wrap;margin-top:13px;padding-top:11px;border-top:1px solid var(--linea);font-size:12px;color:var(--tierra-2)}
+.leyenda-hidro span{display:flex;align-items:center;gap:6px}
+.sw{width:11px;height:11px;flex:0 0 11px;border-radius:2px}
+.sw.rayada{border-top:1px dashed var(--tierra-2);height:1px;width:16px;flex-basis:16px;border-radius:0}
+
+/* ---------- rinde por cultivo ---------- */
+.rinde-fila{display:grid;grid-template-columns:140px 1fr 92px 62px;align-items:center;gap:12px;padding:7px 0}
+.rinde-nom{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+.rinde-pista{height:16px;background:var(--panel-2);border-radius:2px}
+.rinde-barra{height:100%;border-radius:2px}
+.rinde-val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;text-align:right}
+.rinde-lotes{font-family:var(--mono);font-size:11.5px;color:var(--tierra-3);text-align:right}
+
+/* ---------- tablas ---------- */
+.barra-filtros{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--linea);background:var(--panel-2)}
+.barra-filtros input{font-family:var(--sans);font-size:14px;padding:8px 11px;border:1px solid var(--linea-fuerte);border-radius:3px;background:var(--panel);color:var(--tierra);min-width:220px}
+.barra-filtros input::placeholder{color:var(--tierra-3)}
+.conteo{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--tierra-2)}
+.scroll-x{overflow-x:auto}
+.tabla{width:100%;border-collapse:collapse}
+.tabla th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--tierra-3);padding:10px 13px;border-bottom:1px solid var(--tierra);white-space:nowrap}
+.tabla th.num,.tabla th.der{text-align:right}
+.tabla td{padding:9px 13px;border-bottom:1px solid var(--linea);font-size:14px;vertical-align:middle}
+.tabla td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tabla td.der{text-align:right;white-space:nowrap}
+.tabla tr.clic{cursor:pointer}
+.tabla tr.clic:hover td{background:var(--hover)}
+.punto{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:7px;vertical-align:-1px}
+.lote-nom{font-weight:600}
+.lote-est{font-size:12.5px;color:var(--tierra-3)}
+.acc{display:inline-flex;gap:5px;justify-content:flex-end}
+.vacio{padding:30px 16px;color:var(--tierra-2);font-size:14px;text-align:center}
+.vacio b{display:block;color:var(--tierra);font-size:15.5px;margin-bottom:5px}
+.celda-rinde{position:relative;text-align:right}
+.chispas{position:absolute;inset:6px 8px 6px auto;width:78px;display:flex;align-items:flex-end;gap:1.5px;pointer-events:none}
+.chispas i{flex:1;background:var(--lluvia);opacity:.20;border-radius:.5px}
+.chispas i.critica{opacity:.42}
+.chispas i.deficit{background:var(--alerta);opacity:.42}
+.rinde-num{position:relative;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14.5px;font-weight:700}
+.rinde-num small{display:block;font-weight:500;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--tierra-3)}
+
+/* ---------- detalle de lote ---------- */
+.volver{background:none;border:0;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--lluvia);cursor:pointer;padding:0;margin-bottom:12px}
+.volver:hover{text-decoration:underline}
+.dos-col{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.datos{width:100%;border-collapse:collapse}
+.datos th,.datos td{padding:8px 16px;font-size:13.5px;text-align:left;border-bottom:1px solid var(--linea)}
+.datos th{font-weight:500;color:var(--tierra-2);width:46%}
+.datos td{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.datos tr:last-child th,.datos tr:last-child td{border-bottom:0}
+.cadena{padding:16px}
+.cadena-paso{display:grid;grid-template-columns:22px 1fr auto;gap:13px;align-items:center;padding:10px 0;border-bottom:1px solid var(--linea)}
+.cadena-paso:last-of-type{border-bottom:0}
+.cadena-i{font-family:var(--mono);font-size:10.5px;font-weight:700;color:#fff;background:var(--tierra-3);width:20px;height:20px;display:grid;place-items:center;border-radius:3px}
+.cadena-paso.final .cadena-i{background:var(--c-maiz-d);color:#221B14}
+.cadena-t{font-size:13.5px}
+.cadena-t small{display:block;color:var(--tierra-3);font-size:12px;margin-top:1px}
+.cadena-v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;white-space:nowrap}
+.cadena-paso.final .cadena-v{font-size:21px}
+.contraste{display:flex;border:1px solid var(--linea-fuerte);border-radius:3px;margin:14px 16px 0;overflow:hidden}
+.contraste div{flex:1;padding:11px 14px;border-right:1px solid var(--linea)}
+.contraste div:last-child{border-right:0}
+.contraste .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;font-weight:700;margin-top:3px}
+.aviso{margin:13px 16px 16px;padding:10px 13px;border-left:3px solid var(--alerta);background:var(--alerta-bg);font-size:13px;color:var(--tierra-2);border-radius:0 3px 3px 0}
+.aviso.bueno{border-left-color:var(--ok);background:var(--ok-bg)}
+.amb-fila{display:grid;grid-template-columns:118px 1fr 100px;gap:12px;align-items:center;padding:9px 0}
+.amb-nom{font-size:13.5px;font-weight:600}
+.amb-nom small{display:block;font-weight:400;color:var(--tierra-3);font-family:var(--mono);font-size:11.5px}
+.amb-pista{height:22px;background:var(--panel-2);border-radius:2px}
+.amb-barra{height:100%;border-radius:2px}
+.amb-val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px;font-weight:700;text-align:right}
+.amb-val small{display:block;font-weight:400;font-size:11px;color:var(--tierra-3)}
+
+/* ---------- diálogo ---------- */
+dialog{border:0;padding:0;background:transparent;max-width:none;max-height:none}
+dialog::backdrop{background:rgba(20,16,12,.6)}
+.modal{background:var(--panel);border:1px solid var(--tierra);border-radius:4px;width:min(640px,calc(100vw - 28px));max-height:calc(100vh - 56px);display:flex;flex-direction:column}
+.modal-cab{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid var(--tierra);background:var(--panel-2)}
+.modal-cab h3{font-size:15.5px;font-weight:800}
+.modal-cab button{margin-left:auto;background:none;border:0;font-size:22px;line-height:1;cursor:pointer;color:var(--tierra-2);padding:0 4px}
+.modal-cab button:hover{color:var(--tierra)}
+.modal-cuerpo{padding:17px;overflow:auto}
+.modal-pie{display:flex;gap:8px;justify-content:flex-end;padding:13px 17px;border-top:1px solid var(--linea);background:var(--panel-2)}
+.campos{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.campo{display:flex;flex-direction:column;gap:5px}
+.campo.ancho{grid-column:1/-1}
+.campo label{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--tierra-2)}
+.campo input,.campo select,.campo textarea{font-family:var(--sans);font-size:14.5px;padding:9px 11px;border:1px solid var(--linea-fuerte);border-radius:3px;background:var(--campo-bg);color:var(--tierra);width:100%}
+.campo input[type=number],.campo input[type=date]{font-family:var(--mono)}
+.campo textarea{min-height:66px;resize:vertical}
+.campo .hint{font-size:12px;color:var(--tierra-3)}
+.campo .err{font-size:12px;color:var(--alerta);font-weight:600}
+.modal-nota{font-size:13px;color:var(--tierra-2);background:var(--panel-2);border-left:3px solid var(--c-maiz-t);padding:10px 13px;margin-bottom:16px;border-radius:0 3px 3px 0}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--tope-bg);color:var(--tope-fg);font-size:14px;font-weight:500;padding:11px 20px;border-radius:3px;z-index:80;box-shadow:0 4px 20px rgba(20,16,12,.3);opacity:0;pointer-events:none;transition:opacity .18s}
+.toast.ver{opacity:1}
+.pie{margin-top:26px;padding-top:15px;border-top:1px solid var(--linea);font-size:12.5px;color:var(--tierra-3);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.oculto{display:none!important}
+
+@media (max-width:900px){
+  .dos-col{grid-template-columns:1fr}
+  .ventana-fila{grid-template-columns:168px 1fr}
+  .ventana-fecha{display:none}
+  .campos{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  .marco{display:block}
+  .nav{width:auto;display:flex;overflow-x:auto;padding:0;border-right:0;border-bottom:1px solid var(--linea)}
+  .nav-titulo,.nav hr{display:none}
+  .nav a{border-left:0;border-bottom:3px solid transparent;padding:12px 15px;white-space:nowrap}
+  .nav a.activo{border-left:0;border-bottom-color:var(--c-maiz-t)}
+  .lienzo{padding:16px 14px 48px}
+  .cabecera h1{font-size:23px}
+  .titular{font-size:17px}
+  .hidro-mm{display:none}
+  .col-opcional{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="tope">
+  <div class="marca">AGRO<span>CONTROL</span></div>
+  <div class="tope-der">
+    <label for="sel-camp">Campaña</label>
+    <select id="sel-camp"></select>
+  </div>
+</header>
+
+<p class="descargo"><b>Prototipo.</b> Los establecimientos, lotes y rendimientos son datos de ejemplo inventados,
+y no pertenecen a ninguna empresa. El clima sí es real: viene de Open-Meteo para las coordenadas de cada campo.</p>
+
+<div class="marco">
+  <nav class="nav" id="nav">
+    <div class="nav-titulo eyebrow">Día a día</div>
+    <a href="#" data-vista="hoy" class="activo">Hoy y esta semana</a>
+    <a href="#" data-vista="ordenes">Trabajos <span class="n" data-n="ordenes"></span></a>
+    <hr>
+    <div class="nav-titulo eyebrow">La campaña</div>
+    <a href="#" data-vista="campania">Resumen</a>
+    <a href="#" data-vista="cultivos">Siembra y cosecha <span class="n" data-n="cultivos"></span></a>
+    <a href="#" data-vista="lotes">Lotes <span class="n" data-n="lotes"></span></a>
+    <hr>
+    <div class="nav-titulo eyebrow">Apoyo</div>
+    <a href="#" data-vista="insumos">Insumos <span class="n" data-n="insumos"></span></a>
+    <a href="#" data-vista="clima">Lluvias</a>
+    <a href="#" data-vista="monitoreo">Monitoreo <span class="n" data-n="monitoreo"></span></a>
+  </nav>
+  <main class="lienzo" id="lienzo"></main>
+</div>
+
+<dialog id="dlg"><div class="modal">
+  <div class="modal-cab"><h3 id="dlg-titulo"></h3><button type="button" id="dlg-x" aria-label="Cerrar">×</button></div>
+  <form id="dlg-form" novalidate>
+    <div class="modal-cuerpo"><div id="dlg-nota"></div><div class="campos" id="dlg-campos"></div></div>
+    <div class="modal-pie">
+      <button type="button" class="btn sec" id="dlg-cancelar">Cancelar</button>
+      <button type="submit" class="btn" id="dlg-ok">Guardar</button>
+    </div>
+  </form>
+</div></dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   1 · CATÁLOGOS
+   ============================================================ */
+var CULTIVOS = {
+  maiz_t:  {nom:"Maíz temprano", color:"var(--c-maiz-t)",  recibo:14.5},
+  maiz_d:  {nom:"Maíz tardío",   color:"var(--c-maiz-d)",  recibo:14.5},
+  soja_1:  {nom:"Soja 1ª",       color:"var(--c-soja-1)",  recibo:13.5},
+  soja_2:  {nom:"Soja 2ª",       color:"var(--c-soja-2)",  recibo:13.5},
+  trigo:   {nom:"Trigo",         color:"var(--c-trigo)",   recibo:14.0},
+  cebada:  {nom:"Cebada",        color:"var(--c-cebada)",  recibo:12.5},
+  girasol: {nom:"Girasol",       color:"var(--c-girasol)", recibo:11.0},
+  sorgo:   {nom:"Sorgo",         color:"var(--c-sorgo)",   recibo:14.0},
+  alfalfa: {nom:"Alfalfa",       color:"var(--c-alfalfa)", recibo:0},
+  vicia:   {nom:"Vicia (servicio)", color:"var(--c-vicia)",recibo:0}
+};
+var MESES  = ["JUL","AGO","SEP","OCT","NOV","DIC","ENE","FEB","MAR","ABR","MAY","JUN"];
+var NORMAL = [28,35,62,98,105,118,125,122,130,92,55,32];
+var DIAS   = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+var DIAS_C = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+var MES_L  = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+var VENTANAS = {
+  maiz_t:{et:"Floración · R1",  ini:5.65,fin:6.40,f:"20 dic – 12 ene"},
+  maiz_d:{et:"Floración · R1",  ini:7.25,fin:8.20,f:"08 feb – 05 mar"},
+  soja_1:{et:"Llenado · R3–R5", ini:6.30,fin:7.90,f:"10 ene – 25 feb"},
+  soja_2:{et:"Llenado · R3–R5", ini:8.10,fin:9.30,f:"03 mar – 09 abr"},
+  trigo: {et:"Espigazón · Z55", ini:2.40,fin:3.30,f:"12 sep – 09 oct"},
+  cebada:{et:"Espigazón · Z55", ini:2.10,fin:2.95,f:"04 sep – 30 sep"},
+  girasol:{et:"Floración · R5", ini:6.10,fin:6.95,f:"05 ene – 30 ene"},
+  sorgo: {et:"Floración",       ini:6.80,fin:7.60,f:"25 ene – 20 feb"}
+};
+var TIPOS_LABOR  = ["Siembra","Pulverización","Fertilización","Cosecha","Laboreo","Monitoreo"];
+var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
+
+/* ============================================================
+   2 · ESTADO
+   ============================================================ */
+var CLAVE = "agrocontrol.v3", CLAVE_CLIMA = "agrocontrol.clima.v1";
+var E = null, campActiva = null, vistaActual = "hoy", loteAbierto = null;
+var estabClima = "e1", diaSel = 0;
+
+function uid(p){ return p+"_"+Math.random().toString(36).slice(2,9); }
+
+function semilla(){
+  var est = [
+    {id:"e1", nombre:"La Constancia", localidad:"San Antonio de Areco", lat:-34.2456, lon:-59.4711},
+    {id:"e2", nombre:"El Ombú",       localidad:"Duggan",               lat:-34.1636, lon:-59.5350},
+    {id:"e3", nombre:"Santa Rita",    localidad:"Luján",                lat:-34.5703, lon:-59.1050},
+    {id:"e4", nombre:"Los Talas",     localidad:"Carmen de Areco",      lat:-34.3792, lon:-59.8253}
+  ];
+  var L=function(id,e,n,ha,amb){return {id:id,establecimientoId:e,nombre:n,ha:ha,ambientes:amb||[]};};
+  var lotes=[
+    L("l1","e1","Lote 7 — Aguada",148.6,[{nombre:"Loma",ha:52.1},{nombre:"Media loma",ha:68.4},{nombre:"Bajo",ha:28.1}]),
+    L("l2","e1","Lote 3 — Molino",112.4,[{nombre:"Loma",ha:60.0},{nombre:"Media loma",ha:52.4}]),
+    L("l3","e1","Lote 1 — Casco",134.2), L("l4","e1","Lote 4 — Callejón",148.3),
+    L("l5","e2","Lote 12 — Alto",98.2),
+    L("l6","e2","Lote 9 — Laguna",104.7,[{nombre:"Media loma",ha:74.2},{nombre:"Bajo",ha:30.5}]),
+    L("l7","e2","Lote 6 — Bajo Norte",129.4), L("l8","e2","Lote 15 — Loma",76.2),
+    L("l9","e3","Lote 2 — Frente",156.3), L("l10","e3","Lote 8 — Cañada",142.9),
+    L("l11","e3","Lote 11 — Puesto",98.4), L("l12","e4","Lote 5 — Tapera",88.5),
+    L("l13","e4","Lote 10 — Escuela",134.0), L("l14","e4","Lote 14 — Monte",119.6),
+    L("l15","e4","Lote 13 — Chacra",82.5)
+  ];
+  var camps=[
+    {id:"c2526", nombre:"2025/26", estado:"cerrada", desde:"2025-07-01", lluvia:[0,0,0,0,0,0,0,0,0,0,0,0], manual:{}},
+    {id:"c2627", nombre:"2026/27", estado:"curso",   desde:"2026-07-01", lluvia:[0,0,0,0,0,0,0,0,0,0,0,0], manual:{}}
+  ];
+  var CL=function(o){return {id:o.id,loteId:o.l,campaniaId:o.c,cultivo:o.k,orden:o.o||1,variedad:o.v||"",
+    haSembrada:o.hs||0,haCosechada:o.hc||0,fechaSiembra:o.fs||"",fechaCosecha:o.fc||"",densidad:o.d||"",
+    humedadCosecha:o.hu||0,rindeDeclarado:o.rd||0,estado:o.e,rindesAmbiente:o.ra||null};};
+  var cl=[
+    CL({id:"cl1",l:"l1",c:"c2526",k:"maiz_d",v:"DK 7220 VT3P",hs:148.6,hc:145.3,fs:"2025-12-15",fc:"2026-05-04",d:"78.000 pl/ha",hu:16.2,rd:10500,e:"cosechado",
+        ra:[{nombre:"Loma",ha:52.1,rinde:11170},{nombre:"Media loma",ha:68.4,rinde:10420},{nombre:"Bajo",ha:24.8,rinde:7800}]}),
+    CL({id:"cl2",l:"l2",c:"c2526",k:"maiz_d",v:"DK 7220 VT3P",hs:112.4,hc:112.4,fs:"2025-12-18",fc:"2026-05-06",d:"76.000 pl/ha",hu:15.8,rd:10680,e:"cosechado"}),
+    CL({id:"cl3",l:"l5",c:"c2526",k:"maiz_d",v:"ACA 473",hs:96.8,hc:96.8,fs:"2025-12-20",fc:"2026-05-09",d:"74.000 pl/ha",hu:16.5,rd:9840,e:"cosechado"}),
+    CL({id:"cl4",l:"l3",c:"c2526",k:"maiz_t",v:"DK 7210 VT3P",hs:134.2,hc:131.0,fs:"2025-09-22",fc:"2026-03-12",d:"82.000 pl/ha",hu:15.1,rd:9020,e:"cosechado"}),
+    CL({id:"cl5",l:"l12",c:"c2526",k:"maiz_t",v:"DK 7210 VT3P",hs:88.5,hc:88.5,fs:"2025-09-25",fc:"2026-03-15",d:"80.000 pl/ha",hu:14.9,rd:9410,e:"cosechado"}),
+    CL({id:"cl6",l:"l6",c:"c2526",k:"maiz_t",v:"ACA 470",hs:104.7,hc:97.3,fs:"2025-09-20",fc:"2026-03-10",d:"78.000 pl/ha",hu:15.4,rd:8760,e:"cosechado"}),
+    CL({id:"cl7",l:"l9",c:"c2526",k:"soja_1",v:"DM 4670",hs:156.3,hc:156.3,fs:"2025-11-08",fc:"2026-04-22",d:"320.000 pl/ha",hu:13.8,rd:3180,e:"cosechado"}),
+    CL({id:"cl8",l:"l10",c:"c2526",k:"soja_1",v:"DM 4670",hs:142.9,hc:138.1,fs:"2025-11-10",fc:"2026-04-24",d:"330.000 pl/ha",hu:13.6,rd:2840,e:"cosechado"}),
+    CL({id:"cl9",l:"l14",c:"c2526",k:"soja_1",v:"NS 4955",hs:119.6,hc:119.6,fs:"2025-11-05",fc:"2026-04-20",d:"310.000 pl/ha",hu:13.9,rd:3260,e:"cosechado"}),
+    CL({id:"cl10",l:"l7",c:"c2526",k:"soja_2",v:"DM 4212",o:2,hs:129.4,hc:129.4,fs:"2025-12-28",fc:"2026-05-12",d:"360.000 pl/ha",hu:13.4,rd:2710,e:"cosechado"}),
+    CL({id:"cl11",l:"l11",c:"c2526",k:"soja_2",v:"DM 4212",o:2,hs:98.4,hc:98.4,fs:"2025-12-30",fc:"2026-05-15",d:"355.000 pl/ha",hu:13.7,rd:2540,e:"cosechado"}),
+    CL({id:"cl12",l:"l4",c:"c2526",k:"trigo",v:"Baguette 620",hs:145.1,hc:145.1,fs:"2025-06-18",fc:"2025-12-14",d:"130 kg/ha",hu:13.2,rd:5340,e:"cosechado"}),
+    CL({id:"cl13",l:"l13",c:"c2526",k:"cebada",v:"Andreia",hs:132.7,hc:132.7,fs:"2025-06-12",fc:"2025-12-02",d:"120 kg/ha",hu:12.1,rd:5810,e:"cosechado"}),
+    CL({id:"cl14",l:"l8",c:"c2526",k:"girasol",v:"Paraíso 33",hs:76.2,hc:74.9,fs:"2025-10-02",fc:"2026-02-28",d:"55.000 pl/ha",hu:10.4,rd:2890,e:"cosechado"}),
+    CL({id:"cl15",l:"l15",c:"c2526",k:"sorgo",v:"ACA 558",hs:82.5,hc:82.5,fs:"2025-11-12",fc:"2026-04-18",d:"220.000 pl/ha",hu:14.2,rd:6940,e:"cosechado"}),
+    CL({id:"cl16",l:"l4",c:"c2627",k:"trigo",v:"Baguette 620",hs:148.3,fs:"2026-06-20",d:"132 kg/ha",e:"sembrado"}),
+    CL({id:"cl17",l:"l13",c:"c2627",k:"cebada",v:"Andreia",hs:134.0,fs:"2026-06-14",d:"120 kg/ha",e:"sembrado"}),
+    CL({id:"cl18",l:"l9",c:"c2627",k:"trigo",v:"Algarrobo",hs:151.7,fs:"2026-06-22",d:"135 kg/ha",e:"sembrado"}),
+    CL({id:"cl19",l:"l10",c:"c2627",k:"trigo",v:"Algarrobo",hs:140.5,fs:"2026-06-25",d:"135 kg/ha",e:"sembrado"}),
+    CL({id:"cl20",l:"l5",c:"c2627",k:"cebada",v:"Andreia",hs:98.2,fs:"2026-06-16",d:"118 kg/ha",e:"sembrado"}),
+    CL({id:"cl21",l:"l1",c:"c2627",k:"maiz_d",v:"DK 7220 VT3P",e:"planificado"}),
+    CL({id:"cl22",l:"l2",c:"c2627",k:"maiz_t",v:"DK 7210 VT3P",e:"planificado"}),
+    CL({id:"cl23",l:"l14",c:"c2627",k:"soja_1",v:"DM 4670",e:"planificado"})
+  ];
+  var tickets=[
+    {id:"t1",cultivoLoteId:"cl1",fecha:"2026-04-28",cartaPorte:"0032-44871",kgNetos:261340,humedad:16.4},
+    {id:"t2",cultivoLoteId:"cl1",fecha:"2026-04-29",cartaPorte:"0032-44903",kgNetos:248920,humedad:16.1},
+    {id:"t3",cultivoLoteId:"cl1",fecha:"2026-04-30",cartaPorte:"0032-44950",kgNetos:273610,humedad:16.3},
+    {id:"t4",cultivoLoteId:"cl1",fecha:"2026-05-02",cartaPorte:"0032-45018",kgNetos:255480,humedad:16.0},
+    {id:"t5",cultivoLoteId:"cl1",fecha:"2026-05-03",cartaPorte:"0032-45077",kgNetos:242150,humedad:16.2},
+    {id:"t6",cultivoLoteId:"cl1",fecha:"2026-05-04",cartaPorte:"0032-45134",kgNetos:236550,humedad:16.2}
+  ];
+  var insumos=[
+    {id:"i1",nombre:"Semilla DK 7220 VT3P",tipo:"Semilla",unidad:"bolsa",precio:195,stock:420},
+    {id:"i2",nombre:"Urea granulada",tipo:"Fertilizante",unidad:"kg",precio:0.52,stock:184000},
+    {id:"i3",nombre:"MAP arrancador",tipo:"Fertilizante",unidad:"kg",precio:0.68,stock:96000},
+    {id:"i4",nombre:"Glifosato 62 %",tipo:"Herbicida",unidad:"l",precio:4.10,stock:12400},
+    {id:"i5",nombre:"Acetoclor",tipo:"Herbicida",unidad:"l",precio:6.40,stock:3800},
+    {id:"i6",nombre:"Atrazina 90",tipo:"Herbicida",unidad:"kg",precio:3.80,stock:2600},
+    {id:"i7",nombre:"Cipermetrina",tipo:"Insecticida",unidad:"l",precio:9.00,stock:640},
+    {id:"i8",nombre:"Azoxistrobina + Ciproconazol",tipo:"Fungicida",unidad:"l",precio:22.50,stock:410}
+  ];
+  var h=new Date(); var d=function(n){var x=new Date(h.getTime()+n*864e5);return x.toISOString().slice(0,10);};
+  var ordenes=[
+    {id:"o1",campaniaId:"c2627",loteId:"l4",cultivoLoteId:"cl16",tipo:"Pulverización",fechaPlan:d(2),responsable:"Contratista Gómez",superficie:148.3,insumoId:"i8",dosis:"0,4 l/ha",detalle:"Fungicida en hoja bandera. Se alcanzó el umbral de roya en el último monitoreo.",estado:"pendiente",fechaCierre:""},
+    {id:"o2",campaniaId:"c2627",loteId:"l13",cultivoLoteId:"cl17",tipo:"Fertilización",fechaPlan:d(1),responsable:"Equipo propio",superficie:134.0,insumoId:"i2",dosis:"120 kg/ha",detalle:"Refertilización nitrogenada en encañazón.",estado:"en_curso",fechaCierre:""},
+    {id:"o3",campaniaId:"c2627",loteId:"l9",cultivoLoteId:"cl18",tipo:"Pulverización",fechaPlan:d(4),responsable:"Contratista Gómez",superficie:151.7,insumoId:"i4",dosis:"2,5 l/ha",detalle:"Control de raigrás resistente en la cabecera norte.",estado:"pendiente",fechaCierre:""},
+    {id:"o4",campaniaId:"c2627",loteId:"l10",cultivoLoteId:"cl19",tipo:"Monitoreo",fechaPlan:d(3),responsable:"Vos",superficie:140.5,insumoId:"",dosis:"",detalle:"Recorrida de roya y pulgón en trigo.",estado:"pendiente",fechaCierre:""},
+    {id:"o5",campaniaId:"c2627",loteId:"l1",cultivoLoteId:"cl21",tipo:"Siembra",fechaPlan:"2026-12-14",responsable:"Equipo propio",superficie:148.6,insumoId:"i1",dosis:"0,93 bolsa/ha",detalle:"Maíz tardío. Sembradora de 52 cm, 78.000 pl/ha.",estado:"pendiente",fechaCierre:""},
+    {id:"o6",campaniaId:"c2627",loteId:"l5",cultivoLoteId:"cl20",tipo:"Fertilización",fechaPlan:d(-14),responsable:"Equipo propio",superficie:98.2,insumoId:"i2",dosis:"110 kg/ha",detalle:"Nitrógeno en macollaje.",estado:"completada",fechaCierre:d(-13)}
+  ];
+  var monitoreo=[
+    {id:"m1",campaniaId:"c2627",loteId:"l4",fecha:d(-3),tipo:"Enfermedad",estadio:"Z39 hoja bandera",severidad:"Media",nota:"Roya anaranjada en el estrato inferior, 12 % de incidencia. Umbral alcanzado."},
+    {id:"m2",campaniaId:"c2627",loteId:"l9",fecha:d(-5),tipo:"Maleza",estadio:"Z31 encañazón",severidad:"Alta",nota:"Raigrás resistente a glifosato en la cabecera norte."},
+    {id:"m3",campaniaId:"c2627",loteId:"l13",fecha:d(-6),tipo:"Cultivo",estadio:"Z32 encañazón",severidad:"Baja",nota:"Buen macollaje, cobertura completa del entresurco."}
+  ];
+  return {establecimientos:est,lotes:lotes,campanias:camps,cultivoLotes:cl,tickets:tickets,
+          insumos:insumos,ordenes:ordenes,monitoreo:monitoreo};
+}
+
+function cargar(){
+  try{ var raw=localStorage.getItem(CLAVE); if(raw) E=JSON.parse(raw); }catch(err){ E=null; }
+  if(!E||!E.lotes) E=semilla();
+  E.campanias.forEach(function(c){ if(!c.manual) c.manual={}; if(!c.desde) c.desde=(2000+parseInt(c.nombre.slice(0,4),10)||2026)+"-07-01"; });
+  if(!campActiva||!E.campanias.some(function(c){return c.id===campActiva;})){
+    var cu=E.campanias.filter(function(c){return c.estado==="curso";})[0];
+    campActiva=(cu||E.campanias[0]).id;
+  }
+}
+function guardar(){ try{ localStorage.setItem(CLAVE,JSON.stringify(E)); }catch(err){ avisar("No se pudo guardar en este navegador."); } }
+function reiniciar(){ E=semilla(); campActiva="c2627"; guardar(); traerLluviaCampania(true); pintar(); avisar("Datos de ejemplo restaurados."); }
+
+/* ============================================================
+   3 · CLIMA · Open-Meteo
+   ============================================================ */
+var CLIMA = {pron:{}, estado:"inicial", error:""};
+
+function guardarClima(){
+  try{ localStorage.setItem(CLAVE_CLIMA, JSON.stringify({ts:Date.now(), pron:CLIMA.pron})); }catch(e){}
+}
+function climaEnCache(){
+  try{
+    var c=JSON.parse(localStorage.getItem(CLAVE_CLIMA)||"null");
+    /* el pronóstico envejece rápido: tres horas */
+    if(c && Date.now()-c.ts < 3*3600*1000){ CLIMA.pron=c.pron; return true; }
+  }catch(e){}
+  return false;
+}
+
+function traerPronostico(){
+  if(climaEnCache()){ CLIMA.estado="listo"; return Promise.resolve(); }
+  CLIMA.estado="cargando";
+  var pedidos = E.establecimientos.map(function(es){
+    var u="https://api.open-meteo.com/v1/forecast?latitude="+es.lat+"&longitude="+es.lon+
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,"+
+      "precipitation_probability_max,wind_speed_10m_max,relative_humidity_2m_mean"+
+      "&timezone=America%2FArgentina%2FBuenos_Aires&past_days=3&forecast_days=7";
+    return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+      .then(function(j){
+        var d=j.daily, dias=[];
+        for(var i=0;i<d.time.length;i++){
+          dias.push({fecha:d.time[i], code:d.weather_code[i],
+            tmax:d.temperature_2m_max[i], tmin:d.temperature_2m_min[i],
+            mm:d.precipitation_sum[i]||0, prob:d.precipitation_probability_max[i]||0,
+            viento:d.wind_speed_10m_max[i]||0, hum:d.relative_humidity_2m_mean[i]});
+        }
+        CLIMA.pron[es.id]=dias;
+      });
+  });
+  return Promise.all(pedidos).then(function(){
+    CLIMA.estado="listo"; guardarClima();
+  }).catch(function(err){
+    CLIMA.estado="error"; CLIMA.error=err.message||"sin conexión";
+  });
+}
+
+/* lluvia mensual real de la campaña, salvo los meses cargados a mano */
+function traerLluviaCampania(forzar){
+  var c=campania(campActiva); if(!c) return Promise.resolve();
+  if(c.traido && !forzar) return Promise.resolve();
+  var es=E.establecimientos[0];
+  var desde=c.desde;
+  var finCamp=new Date(desde); finCamp.setFullYear(finCamp.getFullYear()+1); finCamp.setDate(finCamp.getDate()-1);
+  /* el archivo de Open-Meteo va unos días atrás del presente */
+  var tope=new Date(Date.now()-6*864e5);
+  var hasta=(finCamp<tope?finCamp:tope).toISOString().slice(0,10);
+  if(hasta<=desde) return Promise.resolve();
+  var u="https://archive-api.open-meteo.com/v1/archive?latitude="+es.lat+"&longitude="+es.lon+
+        "&start_date="+desde+"&end_date="+hasta+"&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires";
+  return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(function(j){
+      var base=new Date(desde+"T12:00:00"), acum=[0,0,0,0,0,0,0,0,0,0,0,0];
+      j.daily.time.forEach(function(f,i){
+        var d=new Date(f+"T12:00:00");
+        var idx=(d.getFullYear()-base.getFullYear())*12 + (d.getMonth()-base.getMonth());
+        if(idx>=0 && idx<12) acum[idx]+=(j.daily.precipitation_sum[i]||0);
+      });
+      for(var m=0;m<12;m++){ if(!c.manual[m]) c.lluvia[m]=Math.round(acum[m]*10)/10; }
+      c.traido=true; c.traidoHasta=hasta;
+      guardar();
+    })
+    .catch(function(){ /* si falla, quedan los valores que haya */ });
+}
+
+/* --- iconos según código WMO --- */
+function icono(code){
+  var s='stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"';
+  var sol='<circle cx="12" cy="12" r="4.2" '+s+' style="color:var(--c-maiz-t)"/>'+
+    [0,45,90,135,180,225,270,315].map(function(a){
+      var r=a*Math.PI/180, x1=12+Math.cos(r)*6.6, y1=12+Math.sin(r)*6.6, x2=12+Math.cos(r)*8.6, y2=12+Math.sin(r)*8.6;
+      return '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" '+s+' style="color:var(--c-maiz-t)"/>';
+    }).join("");
+  var nube='<path d="M7 18h9.5a3.6 3.6 0 0 0 .3-7.2A5.2 5.2 0 0 0 7.2 11 3.5 3.5 0 0 0 7 18z" '+s+' style="color:var(--tierra-2)"/>';
+  var solNube='<circle cx="9" cy="8.6" r="3.1" '+s+' style="color:var(--c-maiz-t)"/>'+nube;
+  var gotas=function(n){ var o=""; for(var i=0;i<n;i++){ var x=8.5+i*3.3;
+      o+='<line x1="'+x+'" y1="19" x2="'+(x-1.1)+'" y2="22.2" '+s+' style="color:var(--lluvia)"/>'; } return o; };
+  var g='<svg viewBox="0 0 24 24" aria-hidden="true">';
+  if(code===0) return g+sol+'</svg>';
+  if(code<=2)  return g+solNube+'</svg>';
+  if(code===3) return g+nube+'</svg>';
+  if(code<=48) return g+nube+'<line x1="6" y1="20.5" x2="18" y2="20.5" '+s+' style="color:var(--tierra-3)"/></svg>';
+  if(code<=57) return g+nube+gotas(2)+'</svg>';
+  if(code<=67) return g+nube+gotas(3)+'</svg>';
+  if(code<=77) return g+nube+'<text x="12" y="22.5" font-size="7" text-anchor="middle" fill="currentColor" style="color:var(--lluvia)">❄</text></svg>';
+  if(code<=82) return g+nube+gotas(3)+'</svg>';
+  return g+nube+'<path d="M12.6 18.4l-2.4 3.2h3l-2 3" '+s+' style="color:var(--c-maiz-t)"/></svg>';
+}
+function describir(code){
+  if(code===0) return "Despejado";
+  if(code<=2) return "Algo nublado";
+  if(code===3) return "Nublado";
+  if(code<=48) return "Niebla";
+  if(code<=57) return "Llovizna";
+  if(code<=67) return "Lluvia";
+  if(code<=77) return "Nieve";
+  if(code<=82) return "Chaparrones";
+  return "Tormenta";
+}
+
+/* ============================================================
+   4 · REGLAS DE DECISIÓN
+   Umbrales agronómicos habituales. Se ajustan si tu criterio difiere.
+   ============================================================ */
+function puedePulverizar(d){
+  if(d.mm>=5 || d.prob>=70) return {n:"no", r:"Se esperan "+nf(d.mm,1)+" mm con "+d.prob+" % de probabilidad. La lluvia lava el producto."};
+  if(d.viento>20)           return {n:"no", r:"Viento de "+nf(d.viento)+" km/h. Hay deriva."};
+  if(d.viento<4)            return {n:"ojo",r:"Viento casi nulo ("+nf(d.viento)+" km/h). Riesgo de inversión térmica a la mañana temprano."};
+  if(d.prob>=40 || d.mm>0.5)return {n:"ojo",r:d.prob+" % de probabilidad de lluvia. Dejá margen de seis horas antes del agua."};
+  if(d.viento>15)           return {n:"ojo",r:"Viento de "+nf(d.viento)+" km/h, al límite. Usá pastilla de gota gruesa."};
+  if(d.tmax>30 && d.hum!=null && d.hum<45) return {n:"ojo",r:"Calor de "+nf(d.tmax)+" ° con aire seco. La gota se evapora antes de llegar."};
+  return {n:"si", r:"Viento de "+nf(d.viento)+" km/h y sin lluvia a la vista."};
+}
+function puedeCosechar(d, siguientes){
+  var secos=0; for(var i=0;i<siguientes.length;i++){ if(siguientes[i].mm<1) secos++; else break; }
+  if(d.mm>=1)    return {n:"no", r:"Llueven "+nf(d.mm,1)+" mm."};
+  if(d.prob>=60) return {n:"no", r:d.prob+" % de probabilidad de lluvia."};
+  if(d.hum!=null && d.hum>=88) return {n:"ojo",r:"Humedad del "+nf(d.hum)+" %. El grano no baja."};
+  if(d.prob>=35) return {n:"ojo",r:d.prob+" % de probabilidad de lluvia. Mirá el radar antes de arrancar."};
+  return {n:"si", r:"Día seco"+(secos>1?", y siguen "+secos+" días secos por delante":"")+"."};
+}
+function puedeSembrar(d, previos){
+  var acum=previos.reduce(function(a,x){return a+x.mm;},0);
+  if(d.mm>=10)   return {n:"no", r:"Llueven "+nf(d.mm,1)+" mm. No hay piso."};
+  if(acum>30)    return {n:"no", r:"Cayeron "+nf(acum,1)+" mm en tres días. El lote está pesado."};
+  if(acum>15)    return {n:"ojo",r:"Cayeron "+nf(acum,1)+" mm en tres días. Fijate el piso antes de entrar."};
+  if(d.mm>=3)    return {n:"ojo",r:"Se esperan "+nf(d.mm,1)+" mm en el día."};
+  return {n:"si", r:"Piso firme y sin lluvia importante."};
+}
+function alertasDia(d){
+  var a=[];
+  if(d.tmin<=0)      a.push({n:"mal",t:"Helada",     m:"Mínima de "+nf(d.tmin,1)+" °. Helada segura."});
+  else if(d.tmin<=3) a.push({n:"ojo",t:"Riesgo de helada", m:"Mínima de "+nf(d.tmin,1)+" ° al abrigo. En los bajos puede helar."});
+  if(d.tmax>=35)     a.push({n:"mal",t:"Golpe de calor", m:"Máxima de "+nf(d.tmax,1)+" °. Estrés si hay cultivo en floración."});
+  if(d.mm>=25)       a.push({n:"ojo",t:"Lluvia fuerte", m:nf(d.mm,1)+" mm previstos. Puede haber anegamiento en los bajos."});
+  if(d.viento>=35)   a.push({n:"ojo",t:"Viento fuerte", m:nf(d.viento)+" km/h. Riesgo de vuelco en cultivo maduro."});
+  return a;
+}
+function ventanaDe(tipo, i, dias){
+  var d=dias[i];
+  if(tipo==="Pulverización") return puedePulverizar(d);
+  if(tipo==="Cosecha")       return puedeCosechar(d, dias.slice(i+1));
+  if(tipo==="Siembra")       return puedeSembrar(d, dias.slice(Math.max(0,i-3), i));
+  if(tipo==="Fertilización"){
+    if(d.viento>25) return {n:"ojo",r:"Viento de "+nf(d.viento)+" km/h. Si es urea al voleo, la distribución se va a resentir."};
+    if(d.mm>=15)    return {n:"ojo",r:nf(d.mm,1)+" mm. Cuidado con el piso."};
+    return {n:"si", r:"Sin impedimentos por clima."};
+  }
+  if(tipo==="Laboreo"){
+    var pr=dias.slice(Math.max(0,i-3),i).reduce(function(a,x){return a+x.mm;},0);
+    if(pr>25) return {n:"no", r:"Cayeron "+nf(pr,1)+" mm en tres días. Sin piso."};
+    return {n:"si", r:"Piso adecuado."};
+  }
+  return {n:"si", r:d.mm>=5?"Va a llover, llevá campera.":"Sin impedimentos."};
+}
+
+/* ============================================================
+   5 · CÁLCULO PRODUCTIVO
+   ============================================================ */
+function kgSecos(kg,hum,rec){ if(!hum||hum<=rec) return kg; return kg*(100-hum)/(100-rec); }
+function ticketsDe(id){ return E.tickets.filter(function(t){return t.cultivoLoteId===id;}); }
+function rendimiento(cl){
+  var cul=CULTIVOS[cl.cultivo], ts=ticketsDe(cl.id);
+  if(ts.length && cl.haCosechada>0){
+    var kg=ts.reduce(function(a,t){return a+kgSecos(t.kgNetos,t.humedad,cul.recibo);},0);
+    return {kg:kg, rinde:kg/cl.haCosechada, fuente:"balanza"};
+  }
+  if(cl.rindeDeclarado>0 && cl.haCosechada>0)
+    return {kg:cl.rindeDeclarado*cl.haCosechada, rinde:cl.rindeDeclarado, fuente:"declarado"};
+  return {kg:0, rinde:0, fuente:"sin dato"};
+}
+function lote(id){ return E.lotes.filter(function(l){return l.id===id;})[0]; }
+function estab(id){ return E.establecimientos.filter(function(e){return e.id===id;})[0]; }
+function campania(id){ return E.campanias.filter(function(c){return c.id===id;})[0]; }
+function insumo(id){ return E.insumos.filter(function(i){return i.id===id;})[0]; }
+function clDe(id){ return E.cultivoLotes.filter(function(c){return c.id===id;})[0]; }
+function clsDeCampania(c){ return E.cultivoLotes.filter(function(x){return x.campaniaId===c;}); }
+function nombreLote(id){ var l=lote(id); return l?l.nombre:"—"; }
+function estabDeLote(id){ var l=lote(id); return l?estab(l.establecimientoId):null; }
+function nombreEstab(id){ var e=estabDeLote(id); return e?e.nombre:""; }
+
+function resumenCampania(cid){
+  var cls=clsDeCampania(cid), haPlan=0,haSem=0,haCos=0,kg=0;
+  cls.forEach(function(cl){ var l=lote(cl.loteId);
+    haPlan+=cl.haSembrada>0?cl.haSembrada:(l?l.ha:0);
+    haSem+=cl.haSembrada; haCos+=cl.haCosechada; kg+=rendimiento(cl).kg; });
+  return {lotes:cls.length,haPlan:haPlan,haSem:haSem,haCos:haCos,tn:kg/1000,
+          avSiembra:haPlan?haSem/haPlan:0, avCosecha:haSem?haCos/haSem:0};
+}
+function rindePorCultivo(cid){
+  var m={};
+  clsDeCampania(cid).forEach(function(cl){
+    if(cl.haCosechada<=0) return; var r=rendimiento(cl); if(r.kg<=0) return;
+    if(!m[cl.cultivo]) m[cl.cultivo]={kg:0,ha:0,n:0};
+    m[cl.cultivo].kg+=r.kg; m[cl.cultivo].ha+=cl.haCosechada; m[cl.cultivo].n++;
+  });
+  return Object.keys(m).map(function(k){return {cultivo:k,rinde:m[k].kg/m[k].ha,lotes:m[k].n};})
+    .sort(function(a,b){return b.rinde-a.rinde;});
+}
+
+/* ============================================================
+   6 · FORMATO
+   ============================================================ */
+function nf(n,d){ d=d||0; return (n==null?0:n).toLocaleString("es-AR",{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function fecha(iso){ if(!iso) return "—"; var p=iso.split("-"); return p.length===3?p[2]+"/"+p[1]+"/"+p[0].slice(2):iso; }
+function hoyISO(){ var d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+var $=function(id){ return document.getElementById(id); };
+var tToast;
+function avisar(m){ var t=$("toast"); t.textContent=m; t.classList.add("ver"); clearTimeout(tToast); tToast=setTimeout(function(){t.classList.remove("ver");},2600); }
+
+/* ============================================================
+   7 · FORMULARIOS
+   ============================================================ */
+var alEnviar=null;
+function abrirForm(cfg){
+  $("dlg-titulo").textContent=cfg.titulo;
+  $("dlg-ok").textContent=cfg.ok||"Guardar";
+  $("dlg-nota").innerHTML=cfg.nota?'<p class="modal-nota">'+cfg.nota+'</p>':"";
+  $("dlg-campos").innerHTML=cfg.campos.map(function(c){
+    var v=(cfg.valores&&cfg.valores[c.k]!=null)?cfg.valores[c.k]:(c.valor!=null?c.valor:"");
+    var ctrl;
+    if(c.tipo==="select"){
+      ctrl='<select name="'+c.k+'"'+(c.req?" required":"")+'>'+(c.vacio?'<option value="">'+esc(c.vacio)+'</option>':'')+
+        c.opciones.map(function(o){return '<option value="'+esc(o.v)+'"'+(String(o.v)===String(v)?" selected":"")+'>'+esc(o.t)+'</option>';}).join("")+'</select>';
+    } else if(c.tipo==="textarea"){
+      ctrl='<textarea name="'+c.k+'"'+(c.req?" required":"")+' placeholder="'+esc(c.ph||"")+'">'+esc(v)+'</textarea>';
+    } else {
+      ctrl='<input type="'+(c.tipo||"text")+'" name="'+c.k+'" value="'+esc(v)+'"'+(c.req?" required":"")+
+        (c.paso?' step="'+c.paso+'"':"")+(c.min!=null?' min="'+c.min+'"':"")+' placeholder="'+esc(c.ph||"")+'">';
+    }
+    return '<div class="campo'+(c.ancho?" ancho":"")+'"><label>'+esc(c.label)+'</label>'+ctrl+
+      (c.hint?'<span class="hint">'+esc(c.hint)+'</span>':'')+'<span class="err" data-err="'+c.k+'"></span></div>';
+  }).join("");
+  alEnviar=function(d){
+    var e=cfg.validar?(cfg.validar(d)||{}):{}, k=Object.keys(e);
+    $("dlg-campos").querySelectorAll("[data-err]").forEach(function(s){s.textContent="";});
+    if(k.length){ k.forEach(function(x){ var s=$("dlg-campos").querySelector('[data-err="'+x+'"]'); if(s) s.textContent=e[x]; }); return false; }
+    cfg.guardar(d); return true;
+  };
+  $("dlg").showModal();
+  var p=$("dlg-campos").querySelector("input,select,textarea"); if(p) p.focus();
+}
+$("dlg-form").addEventListener("submit",function(ev){
+  ev.preventDefault();
+  var d={}; new FormData(ev.target).forEach(function(v,k){ d[k]=typeof v==="string"?v.trim():v; });
+  var falta={};
+  $("dlg-campos").querySelectorAll("[required]").forEach(function(el){ if(!String(el.value).trim()) falta[el.name]="Este dato es obligatorio."; });
+  if(Object.keys(falta).length){
+    $("dlg-campos").querySelectorAll("[data-err]").forEach(function(s){s.textContent="";});
+    Object.keys(falta).forEach(function(k){ var s=$("dlg-campos").querySelector('[data-err="'+k+'"]'); if(s) s.textContent=falta[k]; });
+    return;
+  }
+  if(alEnviar(d)!==false){ $("dlg").close(); guardar(); pintar(); }
+});
+$("dlg-x").addEventListener("click",function(){$("dlg").close();});
+$("dlg-cancelar").addEventListener("click",function(){$("dlg").close();});
+function confirmar(t,x,f){
+  abrirForm({titulo:t,ok:"Eliminar",nota:x,campos:[],guardar:f});
+  $("dlg-ok").classList.add("peligro");
+  $("dlg").addEventListener("close",function l(){ $("dlg-ok").classList.remove("peligro"); $("dlg").removeEventListener("close",l); });
+}
+function opcLotes(){ return E.lotes.map(function(l){return {v:l.id,t:nombreEstab(l.id)+" · "+l.nombre+" ("+nf(l.ha,1)+" ha)"};}); }
+function opcCultivos(){ return Object.keys(CULTIVOS).map(function(k){return {v:k,t:CULTIVOS[k].nom};}); }
+function opcInsumos(){ return E.insumos.map(function(i){return {v:i.id,t:i.nombre+" ("+i.unidad+")"};}); }
+function opcEstab(){ return E.establecimientos.map(function(e){return {v:e.id,t:e.nombre+" · "+e.localidad};}); }
+function opcCLCampania(){ return clsDeCampania(campActiva).map(function(cl){return {v:cl.id,t:nombreLote(cl.loteId)+" · "+CULTIVOS[cl.cultivo].nom};}); }
+
+/* ============================================================
+   8 · ACCIONES
+   ============================================================ */
+var A={};
+A.nuevaCampania=function(){
+  abrirForm({titulo:"Nueva campaña",
+    nota:"La campaña agrupa todo lo que se siembra y se cosecha en un ciclo. El balance hídrico va de julio a junio.",
+    campos:[{k:"nombre",label:"Nombre",req:true,ph:"2027/28",ancho:true,hint:"Como la nombrás en el campo."},
+            {k:"anio",label:"Empieza en julio de",tipo:"number",req:true,valor:new Date().getFullYear(),min:"2000"},
+            {k:"estado",label:"Estado",tipo:"select",req:true,opciones:[{v:"curso",t:"En curso"},{v:"cerrada",t:"Cerrada"}],valor:"curso"}],
+    validar:function(d){ if(E.campanias.some(function(c){return c.nombre.toLowerCase()===d.nombre.toLowerCase();})) return {nombre:"Ya existe una campaña con ese nombre."}; },
+    guardar:function(d){
+      var id=uid("c");
+      E.campanias.push({id:id,nombre:d.nombre,estado:d.estado,desde:d.anio+"-07-01",lluvia:[0,0,0,0,0,0,0,0,0,0,0,0],manual:{}});
+      campActiva=id; guardar(); traerLluviaCampania(true).then(pintar);
+      avisar("Campaña "+d.nombre+" creada. Busco su lluvia real.");
+    }});
+};
+A.nuevoEstablecimiento=function(){
+  abrirForm({titulo:"Nuevo establecimiento",
+    nota:"Las coordenadas sirven para traer el clima del lugar exacto. Sacalas de Google Maps: clic derecho sobre el campo y copiás el par de números.",
+    campos:[{k:"nombre",label:"Nombre",req:true,ph:"La Constancia"},
+            {k:"localidad",label:"Localidad",req:true,ph:"San Antonio de Areco"},
+            {k:"lat",label:"Latitud",tipo:"number",paso:"0.0001",req:true,ph:"-34.2456"},
+            {k:"lon",label:"Longitud",tipo:"number",paso:"0.0001",req:true,ph:"-59.4711"}],
+    guardar:function(d){
+      E.establecimientos.push({id:uid("e"),nombre:d.nombre,localidad:d.localidad,lat:parseFloat(d.lat),lon:parseFloat(d.lon)});
+      guardar(); localStorage.removeItem(CLAVE_CLIMA); CLIMA.pron={};
+      traerPronostico().then(pintar); avisar("Establecimiento agregado. Traigo su pronóstico.");
+    }});
+};
+A.nuevoLote=function(id){
+  var L=id?lote(id):null;
+  abrirForm({titulo:L?"Editar lote":"Nuevo lote",
+    nota:"Los ambientes son opcionales. Si los cargás, las tres superficies tienen que sumar la del lote.",
+    valores:L?{establecimientoId:L.establecimientoId,nombre:L.nombre,ha:L.ha,
+      a1:(L.ambientes[0]||{}).ha||"",a2:(L.ambientes[1]||{}).ha||"",a3:(L.ambientes[2]||{}).ha||""}:null,
+    campos:[{k:"establecimientoId",label:"Establecimiento",tipo:"select",req:true,opciones:opcEstab(),ancho:true},
+            {k:"nombre",label:"Nombre del lote",req:true,ph:"Lote 7 — Aguada"},
+            {k:"ha",label:"Superficie (ha)",tipo:"number",paso:"0.1",min:"0.1",req:true,ph:"148.6"},
+            {k:"a1",label:"Loma (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
+            {k:"a2",label:"Media loma (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
+            {k:"a3",label:"Bajo (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"}],
+    validar:function(d){
+      var ha=parseFloat(d.ha)||0, s=(parseFloat(d.a1)||0)+(parseFloat(d.a2)||0)+(parseFloat(d.a3)||0);
+      if(s>0 && Math.abs(s-ha)>0.15) return {a1:"Los ambientes suman "+nf(s,1)+" ha y el lote tiene "+nf(ha,1)+" ha."};
+    },
+    guardar:function(d){
+      var amb=[]; [["Loma",d.a1],["Media loma",d.a2],["Bajo",d.a3]].forEach(function(p){ var v=parseFloat(p[1])||0; if(v>0) amb.push({nombre:p[0],ha:v}); });
+      if(L){ L.establecimientoId=d.establecimientoId; L.nombre=d.nombre; L.ha=parseFloat(d.ha); L.ambientes=amb; avisar("Lote actualizado."); }
+      else { E.lotes.push({id:uid("l"),establecimientoId:d.establecimientoId,nombre:d.nombre,ha:parseFloat(d.ha),ambientes:amb}); avisar("Lote agregado."); }
+    }});
+};
+A.borrarLote=function(id){
+  var u=E.cultivoLotes.filter(function(c){return c.loteId===id;}).length;
+  if(u){ avisar("No se puede: el lote tiene "+u+" cultivo(s) cargado(s)."); return; }
+  confirmar("Eliminar lote","Vas a eliminar “"+esc(nombreLote(id))+"”. No se puede deshacer.",function(){
+    E.lotes=E.lotes.filter(function(l){return l.id!==id;}); avisar("Lote eliminado."); });
+};
+A.asignarCultivo=function(){
+  var c=campania(campActiva);
+  abrirForm({titulo:"Planificar cultivo en un lote",
+    nota:"Queda como <b>planificado</b> hasta que cierres la orden de siembra. Un lote puede llevar dos cultivos en el año: usá el orden para el doble cultivo trigo / soja de segunda.",
+    campos:[{k:"loteId",label:"Lote",tipo:"select",req:true,opciones:opcLotes(),ancho:true},
+            {k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivos()},
+            {k:"orden",label:"Orden en el año",tipo:"select",req:true,opciones:[{v:1,t:"1º cultivo"},{v:2,t:"2º cultivo"}],valor:1},
+            {k:"variedad",label:"Híbrido o variedad",ph:"DK 7220 VT3P",ancho:true},
+            {k:"densidad",label:"Densidad prevista",ph:"78.000 pl/ha",ancho:true}],
+    validar:function(d){
+      if(E.cultivoLotes.some(function(x){return x.campaniaId===campActiva&&x.loteId===d.loteId&&String(x.orden)===String(d.orden);}))
+        return {loteId:"Ese lote ya tiene un "+d.orden+"º cultivo en "+c.nombre+"."};
+    },
+    guardar:function(d){
+      E.cultivoLotes.push({id:uid("cl"),loteId:d.loteId,campaniaId:campActiva,cultivo:d.cultivo,orden:parseInt(d.orden,10),
+        variedad:d.variedad,densidad:d.densidad,haSembrada:0,haCosechada:0,fechaSiembra:"",fechaCosecha:"",
+        humedadCosecha:0,rindeDeclarado:0,estado:"planificado",rindesAmbiente:null});
+      avisar("Cultivo planificado en "+nombreLote(d.loteId)+".");
+    }});
+};
+A.registrarSiembra=function(id){
+  var cl=clDe(id), l=lote(cl.loteId);
+  abrirForm({titulo:"Registrar siembra",
+    nota:"Sembrado en <b>"+esc(l.nombre)+"</b> · "+esc(CULTIVOS[cl.cultivo].nom)+". La superficie sembrada es la base del costo por hectárea.",
+    valores:{fechaSiembra:cl.fechaSiembra||hoyISO(),haSembrada:cl.haSembrada||l.ha,variedad:cl.variedad,densidad:cl.densidad},
+    campos:[{k:"fechaSiembra",label:"Fecha de siembra",tipo:"date",req:true},
+            {k:"haSembrada",label:"Superficie sembrada (ha)",tipo:"number",paso:"0.1",min:"0.1",req:true},
+            {k:"variedad",label:"Híbrido o variedad",ancho:true},
+            {k:"densidad",label:"Densidad lograda",ph:"78.000 pl/ha",ancho:true}],
+    validar:function(d){ if(parseFloat(d.haSembrada)>l.ha+0.15) return {haSembrada:"El lote tiene "+nf(l.ha,1)+" ha."}; },
+    guardar:function(d){
+      cl.fechaSiembra=d.fechaSiembra; cl.haSembrada=parseFloat(d.haSembrada);
+      cl.variedad=d.variedad; cl.densidad=d.densidad;
+      if(cl.estado==="planificado") cl.estado="sembrado";
+      avisar("Siembra registrada en "+l.nombre+".");
+    }});
+};
+A.cargarTicket=function(id){
+  var cl=clDe(id), cul=CULTIVOS[cl.cultivo];
+  abrirForm({titulo:"Cargar carta de porte",
+    nota:"Cada carta suma al total. El rendimiento se recalcula solo, descontando humedad hasta el "+nf(cul.recibo,1)+" % de recibo del "+esc(cul.nom.toLowerCase())+".",
+    valores:{fecha:hoyISO(),humedad:cul.recibo},
+    campos:[{k:"cartaPorte",label:"Nº de carta de porte",req:true,ph:"0032-45134"},
+            {k:"fecha",label:"Fecha",tipo:"date",req:true},
+            {k:"kgNetos",label:"Kilos netos de balanza",tipo:"number",paso:"1",min:"1",req:true,ph:"236550"},
+            {k:"humedad",label:"Humedad (%)",tipo:"number",paso:"0.1",min:"0",req:true}],
+    guardar:function(d){
+      E.tickets.push({id:uid("t"),cultivoLoteId:id,fecha:d.fecha,cartaPorte:d.cartaPorte,kgNetos:parseFloat(d.kgNetos),humedad:parseFloat(d.humedad)});
+      if(cl.estado==="sembrado") cl.estado="cosechando";
+      if(!cl.haCosechada) cl.haCosechada=cl.haSembrada;
+      if(!cl.fechaCosecha||d.fecha>cl.fechaCosecha) cl.fechaCosecha=d.fecha;
+      avisar("Carta cargada. Rendimiento recalculado.");
+    }});
+};
+A.cerrarCosecha=function(id){
+  var cl=clDe(id), l=lote(cl.loteId);
+  abrirForm({titulo:"Cerrar cosecha",
+    nota:"La superficie cosechada puede ser menor que la sembrada por anegamiento, granizo o vuelco. El rendimiento se calcula sobre la cosechada.",
+    valores:{fechaCosecha:cl.fechaCosecha||hoyISO(),haCosechada:cl.haCosechada||cl.haSembrada,
+             humedadCosecha:cl.humedadCosecha||CULTIVOS[cl.cultivo].recibo,rindeDeclarado:cl.rindeDeclarado||""},
+    campos:[{k:"fechaCosecha",label:"Fecha de fin de cosecha",tipo:"date",req:true},
+            {k:"haCosechada",label:"Superficie cosechada (ha)",tipo:"number",paso:"0.1",min:"0",req:true},
+            {k:"humedadCosecha",label:"Humedad promedio (%)",tipo:"number",paso:"0.1",min:"0"},
+            {k:"rindeDeclarado",label:"Rinde estimado a campo (kg/ha)",tipo:"number",paso:"1",min:"0",hint:"Opcional. Se contrasta contra la balanza."}],
+    validar:function(d){ if(parseFloat(d.haCosechada)>cl.haSembrada+0.15) return {haCosechada:"Se sembraron "+nf(cl.haSembrada,1)+" ha."}; },
+    guardar:function(d){
+      cl.fechaCosecha=d.fechaCosecha; cl.haCosechada=parseFloat(d.haCosechada);
+      cl.humedadCosecha=parseFloat(d.humedadCosecha)||0; cl.rindeDeclarado=parseFloat(d.rindeDeclarado)||0;
+      cl.estado="cosechado"; avisar("Cosecha cerrada en "+l.nombre+".");
+    }});
+};
+A.borrarCultivo=function(id){
+  var cl=clDe(id);
+  confirmar("Quitar cultivo","Vas a quitar "+esc(CULTIVOS[cl.cultivo].nom)+" de "+esc(nombreLote(cl.loteId))+", con sus cartas de porte.",function(){
+    E.cultivoLotes=E.cultivoLotes.filter(function(x){return x.id!==id;});
+    E.tickets=E.tickets.filter(function(t){return t.cultivoLoteId!==id;});
+    E.ordenes.forEach(function(o){ if(o.cultivoLoteId===id) o.cultivoLoteId=""; });
+    avisar("Cultivo quitado."); });
+};
+A.nuevaOrden=function(id){
+  var O=id?E.ordenes.filter(function(o){return o.id===id;})[0]:null;
+  abrirForm({titulo:O?"Editar trabajo":"Nuevo trabajo",
+    nota:"Al completarlo avanza el lote: si es siembra queda sembrado, si es cosecha se habilitan las cartas de porte, y se descuenta el insumo del stock.",
+    valores:O?{tipo:O.tipo,cultivoLoteId:O.cultivoLoteId,fechaPlan:O.fechaPlan,responsable:O.responsable,
+      superficie:O.superficie,insumoId:O.insumoId,dosis:O.dosis,detalle:O.detalle}:{fechaPlan:hoyISO()},
+    campos:[{k:"tipo",label:"Qué hay que hacer",tipo:"select",req:true,opciones:TIPOS_LABOR.map(function(t){return {v:t,t:t};})},
+            {k:"fechaPlan",label:"Para cuándo",tipo:"date",req:true},
+            {k:"cultivoLoteId",label:"Lote y cultivo",tipo:"select",req:true,opciones:opcCLCampania(),vacio:"Elegí un lote",ancho:true,
+             hint:"Sólo aparecen los cultivos cargados en la campaña activa."},
+            {k:"responsable",label:"Quién lo hace",req:true,ph:"Equipo propio"},
+            {k:"superficie",label:"Superficie (ha)",tipo:"number",paso:"0.1",min:"0",req:true},
+            {k:"insumoId",label:"Insumo",tipo:"select",opciones:opcInsumos(),vacio:"Sin insumo"},
+            {k:"dosis",label:"Dosis por hectárea",ph:"0,4 l/ha"},
+            {k:"detalle",label:"Indicaciones",tipo:"textarea",ancho:true,ph:"Qué hay que hacer y por qué."}],
+    guardar:function(d){
+      var cl=clDe(d.cultivoLoteId);
+      var b={campaniaId:campActiva,loteId:cl.loteId,cultivoLoteId:d.cultivoLoteId,tipo:d.tipo,fechaPlan:d.fechaPlan,
+             responsable:d.responsable,superficie:parseFloat(d.superficie)||0,insumoId:d.insumoId,dosis:d.dosis,detalle:d.detalle};
+      if(O){ Object.keys(b).forEach(function(k){O[k]=b[k];}); avisar("Trabajo actualizado."); }
+      else { b.id=uid("o"); b.estado="pendiente"; b.fechaCierre=""; E.ordenes.push(b); avisar("Trabajo creado."); }
+    }});
+};
+A.avanzarOrden=function(id){
+  var o=E.ordenes.filter(function(x){return x.id===id;})[0];
+  if(o.estado==="pendiente"){ o.estado="en_curso"; guardar(); pintar(); avisar("Trabajo en curso."); return; }
+  if(o.estado==="en_curso") A.completarOrden(id);
+};
+A.completarOrden=function(id){
+  var o=E.ordenes.filter(function(x){return x.id===id;})[0];
+  var cl=o.cultivoLoteId?clDe(o.cultivoLoteId):null;
+  var nota="Queda registrado como hecho.";
+  if(o.tipo==="Siembra"&&cl) nota="Es una siembra: al cerrarla, <b>"+esc(nombreLote(o.loteId))+"</b> pasa a sembrado con esta fecha y superficie.";
+  if(o.tipo==="Cosecha"&&cl) nota="Es una cosecha: al cerrarla vas a poder cargar las cartas de porte del lote.";
+  abrirForm({titulo:"Completar trabajo",ok:"Completar",nota:nota,
+    valores:{fechaCierre:hoyISO(),superficie:o.superficie},
+    campos:[{k:"fechaCierre",label:"Cuándo se hizo",tipo:"date",req:true},
+            {k:"superficie",label:"Superficie trabajada (ha)",tipo:"number",paso:"0.1",min:"0",req:true}],
+    guardar:function(d){
+      o.estado="completada"; o.fechaCierre=d.fechaCierre; o.superficie=parseFloat(d.superficie)||0;
+      if(o.tipo==="Siembra"&&cl){
+        cl.fechaSiembra=d.fechaCierre; cl.haSembrada=o.superficie;
+        if(cl.estado==="planificado") cl.estado="sembrado";
+        avisar("Listo. "+nombreLote(o.loteId)+" quedó sembrado.");
+      } else if(o.tipo==="Cosecha"&&cl){
+        if(cl.estado==="sembrado") cl.estado="cosechando";
+        if(!cl.haCosechada) cl.haCosechada=cl.haSembrada;
+        avisar("Listo. Cargá las cartas de porte del lote.");
+      } else avisar("Trabajo completado.");
+      if(o.insumoId){
+        var i=insumo(o.insumoId), dn=parseFloat(String(o.dosis||"").replace(",","."));
+        if(i&&dn>0) i.stock=Math.max(0,i.stock-dn*o.superficie);
+      }
+    }});
+};
+A.borrarOrden=function(id){
+  confirmar("Eliminar trabajo","Se elimina de la lista. No se puede deshacer.",function(){
+    E.ordenes=E.ordenes.filter(function(o){return o.id!==id;}); avisar("Trabajo eliminado."); });
+};
+A.moverOrden=function(arg){
+  var p=arg.split("|"), o=E.ordenes.filter(function(x){return x.id===p[0];})[0];
+  o.fechaPlan=p[1]; guardar(); pintar();
+  avisar("Movido al "+fecha(p[1])+".");
+};
+A.nuevoInsumo=function(){
+  abrirForm({titulo:"Nuevo insumo",
+    nota:"Los precios van en dólares. Es la única forma de comparar el costo de una campaña contra otra.",
+    campos:[{k:"nombre",label:"Nombre",req:true,ancho:true,ph:"Azoxistrobina + Ciproconazol"},
+            {k:"tipo",label:"Tipo",tipo:"select",req:true,opciones:TIPOS_INSUMO.map(function(t){return {v:t,t:t};})},
+            {k:"unidad",label:"Unidad",tipo:"select",req:true,opciones:[{v:"kg",t:"kg"},{v:"l",t:"litros"},{v:"bolsa",t:"bolsa"}]},
+            {k:"precio",label:"Precio unitario (USD)",tipo:"number",paso:"0.01",min:"0",req:true},
+            {k:"stock",label:"Stock inicial",tipo:"number",paso:"0.1",min:"0",req:true}],
+    guardar:function(d){
+      E.insumos.push({id:uid("i"),nombre:d.nombre,tipo:d.tipo,unidad:d.unidad,precio:parseFloat(d.precio),stock:parseFloat(d.stock)});
+      avisar("Insumo agregado."); }});
+};
+A.moverStock=function(id){
+  var i=insumo(id);
+  abrirForm({titulo:"Movimiento de stock",
+    nota:"Stock actual de <b>"+esc(i.nombre)+"</b>: "+nf(i.stock,1)+" "+esc(i.unidad)+".",
+    campos:[{k:"signo",label:"Movimiento",tipo:"select",req:true,opciones:[{v:"1",t:"Compra (entra)"},{v:"-1",t:"Ajuste (sale)"}]},
+            {k:"cantidad",label:"Cantidad ("+i.unidad+")",tipo:"number",paso:"0.1",min:"0.1",req:true}],
+    guardar:function(d){ i.stock=Math.max(0,i.stock+parseInt(d.signo,10)*parseFloat(d.cantidad)); avisar("Stock actualizado."); }});
+};
+A.cargarLluvia=function(mes){
+  var c=campania(campActiva); mes=parseInt(mes,10);
+  abrirForm({titulo:"Lluvia de "+MESES[mes],
+    nota:"Este número lo trae Open-Meteo solo. Si cargás el pluviómetro del campo, tu dato manda y no se pisa más.",
+    valores:{mm:c.lluvia[mes]},
+    campos:[{k:"mm",label:"Milímetros del pluviómetro",tipo:"number",paso:"1",min:"0",req:true,
+             hint:"Media histórica de "+MESES[mes]+": "+NORMAL[mes]+" mm"}],
+    guardar:function(d){ c.lluvia[mes]=parseFloat(d.mm)||0; c.manual[mes]=true; avisar(MESES[mes]+": "+d.mm+" mm, cargado a mano."); }});
+};
+A.soltarMes=function(mes){
+  var c=campania(campActiva); delete c.manual[parseInt(mes,10)];
+  c.traido=false; guardar(); traerLluviaCampania(true).then(pintar);
+  avisar("Vuelve al dato automático.");
+};
+A.nuevaObservacion=function(){
+  abrirForm({titulo:"Nueva observación",
+    campos:[{k:"loteId",label:"Lote",tipo:"select",req:true,opciones:opcLotes(),ancho:true},
+            {k:"fecha",label:"Fecha",tipo:"date",req:true,valor:hoyISO()},
+            {k:"tipo",label:"Qué viste",tipo:"select",req:true,opciones:["Plaga","Enfermedad","Maleza","Granizo","Anegamiento","Helada","Cultivo"].map(function(t){return {v:t,t:t};})},
+            {k:"estadio",label:"Estadio fenológico",ph:"R3 · llenado de granos"},
+            {k:"severidad",label:"Severidad",tipo:"select",req:true,opciones:[{v:"Baja",t:"Baja"},{v:"Media",t:"Media"},{v:"Alta",t:"Alta"}]},
+            {k:"nota",label:"Observación",tipo:"textarea",req:true,ancho:true,ph:"Qué viste, dónde y con qué incidencia."}],
+    guardar:function(d){
+      E.monitoreo.unshift({id:uid("m"),campaniaId:campActiva,loteId:d.loteId,fecha:d.fecha,tipo:d.tipo,
+        estadio:d.estadio,severidad:d.severidad,nota:d.nota});
+      avisar("Observación registrada."); }});
+};
+A.verEstab=function(id){ estabClima=id; diaSel=0; pintar(); };
+A.verDia=function(i){ diaSel=parseInt(i,10); pintar(); };
+A.recargarClima=function(){
+  localStorage.removeItem(CLAVE_CLIMA); CLIMA.pron={}; CLIMA.estado="cargando"; pintar();
+  traerPronostico().then(pintar); avisar("Buscando el pronóstico...");
+};
+A.abrirLote=function(id){ loteAbierto=id; vistaActual="lote"; pintar(); window.scrollTo(0,0); };
+A.volver=function(){ vistaActual="campania"; pintar(); window.scrollTo(0,0); };
+A.irA=function(v){ vistaActual=v; pintar(); window.scrollTo(0,0); };
+A.reiniciar=reiniciar;
+
+/* ============================================================
+   9 · VISTA · HOY Y ESTA SEMANA
+   ============================================================ */
+function diasDe(estId){
+  var t=CLIMA.pron[estId]; if(!t) return null;
+  var hoy=hoyISO(), i=t.findIndex(function(d){return d.fecha===hoy;});
+  if(i<0) i=3;
+  return {todos:t, desdeHoy:i, semana:t.slice(i,i+7)};
+}
+
+/* puntaje para ordenar días: primero el semáforo, después viento y lluvia */
+function puntajeDia(tipo, idx, dias){
+  var v=ventanaDe(tipo, idx, dias), d=dias[idx];
+  var base=v.n==="si"?200:(v.n==="ojo"?100:0);
+  return base - Math.min(60,d.viento) - Math.min(40,d.mm*4) - d.prob*0.2;
+}
+/* mejor día de la semana para una labor: {i, v, puntaje} */
+function mejorDia(tipo, desde, dias, largo){
+  var mej=null;
+  for(var k=0;k<largo;k++){
+    var p=puntajeDia(tipo, desde+k, dias);
+    if(!mej || p>mej.puntaje) mej={i:k, puntaje:p, v:ventanaDe(tipo, desde+k, dias)};
+  }
+  return mej;
+}
+function nombreDia(f){ return DIAS[new Date(f+"T12:00:00").getDay()].toLowerCase(); }
+/* etiqueta sin ambigüedad: "hoy", "mañana" o "el viernes 14" */
+function etiquetaDia(f){
+  var hoy=hoyISO();
+  if(f===hoy) return "hoy";
+  var m=new Date(hoy+"T12:00:00"); m.setDate(m.getDate()+1);
+  if(f===m.toISOString().slice(0,10)) return "mañana";
+  return "el "+nombreDia(f)+" "+new Date(f+"T12:00:00").getDate();
+}
+
+function frameResumen(D){
+  var sem=D.semana;
+  var lluvia=sem.reduce(function(a,d){return a+d.mm;},0);
+  var buenos=[], i;
+  for(i=0;i<sem.length;i++){ if(puedePulverizar(sem[i]).n==="si") buenos.push(i); }
+  var f=[];
+  f.push(lluvia<5 ? "<b>Semana seca</b>, "+nf(lluvia,1)+" mm en total."
+       : lluvia<25 ? "<b>Semana con algo de agua</b>, "+nf(lluvia,1)+" mm repartidos."
+                   : "<b>Semana lluviosa</b>, "+nf(lluvia,1)+" mm previstos.");
+  if(buenos.length>1)
+    f.push("Para pulverizar te sirven "+buenos.length+" días, arrancando "+etiquetaDia(sem[buenos[0]].fecha)+".");
+  else if(buenos.length===1)
+    f.push("El único día bueno para pulverizar es "+etiquetaDia(sem[buenos[0]].fecha)+".");
+  else {
+    /* ningún día ideal: igual hay que decir cuál es el menos malo */
+    var m=mejorDia("Pulverización", D.desdeHoy, D.todos, sem.length);
+    if(m && m.v.n==="ojo")
+      f.push("Ningún día es ideal para pulverizar. El más manejable es "+etiquetaDia(sem[m.i].fecha)+
+             ", con "+nf(sem[m.i].viento)+" km/h de viento.");
+    else
+      f.push("Esta semana no se puede pulverizar en ningún día: "+m.v.r.charAt(0).toLowerCase()+m.v.r.slice(1));
+  }
+  var fria=sem.filter(function(d){return d.tmin<=3;}).length;
+  if(fria) f.push(fria===1?"Hay una noche con riesgo de helada.":"Hay "+fria+" noches con riesgo de helada.");
+  return f.join(" ");
+}
+
+function vistaHoy(){
+  var d=new Date(), fh=DIAS[d.getDay()]+" "+d.getDate()+" de "+MES_L[d.getMonth()];
+  var es=estab(estabClima)||E.establecimientos[0];
+  if(!es) return '<div class="bloque"><p class="vacio"><b>No hay establecimientos cargados.</b>Agregá uno con sus coordenadas para traer el clima.</p></div>';
+  estabClima=es.id;
+
+  var cab='<div class="cabecera"><div><h1>'+fh.charAt(0).toUpperCase()+fh.slice(1)+'</h1>'+
+    '<div class="sub">Pronóstico de <b>'+esc(es.nombre)+'</b> · '+esc(es.localidad)+'</div></div>'+
+    '<div class="cabecera-acc">'+
+      '<select id="sel-estab" aria-label="Establecimiento">'+E.establecimientos.map(function(x){
+        return '<option value="'+x.id+'"'+(x.id===es.id?" selected":"")+'>'+esc(x.nombre)+'</option>';}).join("")+'</select>'+
+      '<button class="btn sec mini" data-a="recargarClima">Actualizar</button></div></div>';
+
+  if(CLIMA.estado==="cargando"||CLIMA.estado==="inicial")
+    return cab+'<div class="bloque"><p class="cargando"><span class="punto-carga"></span>Buscando el pronóstico de '+esc(es.localidad)+'…</p></div>';
+
+  if(CLIMA.estado==="error"||!CLIMA.pron[es.id])
+    return cab+'<div class="bloque"><p class="vacio"><b>No pude traer el pronóstico.</b>'+
+      'Revisá que tengas internet y probá de nuevo. Todo lo demás de AGROCONTROL sigue funcionando sin conexión.'+
+      '<br><br><button class="btn" data-a="recargarClima">Reintentar</button></p></div>';
+
+  var D=diasDe(es.id), sem=D.semana;
+
+  /* avisos de los próximos tres días */
+  var av=[];
+  sem.slice(0,3).forEach(function(x,i){
+    alertasDia(x).forEach(function(a){
+      av.push('<div class="aviso-fila '+(a.n==="mal"?"mal":"ojo")+'"><span class="aviso-ico">'+(a.n==="mal"?"▲":"●")+'</span>'+
+        '<span><b>'+esc(a.t)+' · '+(i===0?"hoy":i===1?"mañana":DIAS[new Date(x.fecha+"T12:00:00").getDay()].toLowerCase())+'</b>'+esc(a.m)+'</span></div>');
+    });
+  });
+
+  /* grilla */
+  var hoy=hoyISO();
+  var enc='<div class="pron-grilla"><div class="rot"></div>'+sem.map(function(x,i){
+    var dd=new Date(x.fecha+"T12:00:00");
+    return '<div class="pron-dia'+(x.fecha===hoy?" hoy":"")+(i===diaSel?" sel":"")+'" data-a="verDia" data-arg="'+i+'" tabindex="0" role="button">'+
+      (x.fecha===hoy?"HOY":DIAS_C[dd.getDay()].toUpperCase())+'<small>'+dd.getDate()+'</small></div>';
+  }).join("")+'</div>';
+
+  function fila(rot, celdas){ return '<div class="pron-grilla"><div class="rot">'+rot+'</div>'+celdas+'</div>'; }
+
+  var fClima=fila('', sem.map(function(x){ return '<div class="pron-ico" title="'+describir(x.code)+'">'+icono(x.code)+'</div>'; }).join(""));
+  var fTemp =fila('Máxima y mínima', sem.map(function(x){
+      return '<div class="pron-tmp">'+nf(x.tmax)+'°<i> / '+nf(x.tmin)+'°</i></div>'; }).join(""));
+  var fLlu  =fila('Lluvia', sem.map(function(x){
+      return '<div class="pron-dato'+(x.mm>0?" hay":"")+'">'+(x.mm>0?nf(x.mm,1)+" mm":"—")+'<br><span style="font-size:11.5px;color:var(--tierra-3)">'+x.prob+' %</span></div>'; }).join(""));
+  var fVie  =fila('Viento', sem.map(function(x){
+      return '<div class="pron-dato">'+nf(x.viento)+'<br><span style="font-size:11.5px;color:var(--tierra-3)">km/h</span></div>'; }).join(""));
+
+  function filaSem(rot, tipo){
+    return fila(rot, sem.map(function(x,i){
+      var v=ventanaDe(tipo, D.desdeHoy+i, D.todos);
+      var t=v.n==="si"?"Sí":v.n==="ojo"?"Ojo":"No";
+      return '<div class="sem '+v.n+'" data-a="verDia" data-arg="'+i+'" title="'+esc(v.r)+'">'+t+'</div>';
+    }).join(""));
+  }
+
+  var sel=sem[diaSel]||sem[0];
+  var dsel=new Date(sel.fecha+"T12:00:00");
+  var labores=["Siembra","Pulverización","Cosecha"];
+  var det='<div class="detalle-dia"><h3>'+DIAS[dsel.getDay()]+' '+dsel.getDate()+' · '+describir(sel.code)+'</h3>'+
+    '<p class="resumen">'+nf(sel.tmax)+' ° de máxima y '+nf(sel.tmin)+' ° de mínima · '+
+    (sel.mm>0?nf(sel.mm,1)+' mm con '+sel.prob+' % de probabilidad':'sin lluvia prevista')+
+    ' · viento de '+nf(sel.viento)+' km/h'+(sel.hum!=null?' · humedad del '+nf(sel.hum)+' %':'')+'</p>'+
+    '<div class="detalle-lista">'+labores.map(function(t){
+      var v=ventanaDe(t, D.desdeHoy+diaSel, D.todos);
+      var et=v.n==="si"?"Se puede":v.n==="ojo"?"Con cuidado":"Mejor no";
+      return '<div class="detalle-item"><span class="et '+v.n+'">'+et+'</span><span>'+
+        (t==="Siembra"?"Sembrar":t==="Cosecha"?"Cosechar":"Pulverizar")+' — '+esc(v.r)+'</span></div>';
+    }).join("")+'</div></div>';
+
+  var grilla='<div class="bloque"><div class="bloque-cab"><h2>Los próximos siete días</h2>'+
+    '<div class="aclara">Tocá un día para ver el detalle</div></div>'+
+    '<div class="pron">'+enc+fClima+fTemp+fLlu+fVie+
+      filaSem('<span class="punto" style="background:var(--c-soja-1)"></span>Sembrar','Siembra')+
+      filaSem('<span class="punto" style="background:var(--lluvia)"></span>Pulverizar','Pulverización')+
+      filaSem('<span class="punto" style="background:var(--c-maiz-t)"></span>Cosechar','Cosecha')+
+    '</div>'+det+'</div>';
+
+  /* trabajos de la semana, cruzados con el pronóstico */
+  var finSem=sem[sem.length-1].fecha;
+  var pend=E.ordenes.filter(function(o){
+    return o.campaniaId===campActiva && o.estado!=="completada" && o.fechaPlan<=finSem;
+  }).sort(function(a,b){return a.fechaPlan.localeCompare(b.fechaPlan);});
+
+  var trabajos;
+  if(!pend.length){
+    trabajos='<div class="bloque"><div class="bloque-cab"><h2>Trabajos de esta semana</h2></div>'+
+      '<p class="vacio"><b>No hay nada pendiente para estos días.</b>'+
+      'Cuando cargues un trabajo, acá te digo si el clima lo acompaña.</p></div>';
+  } else {
+    trabajos='<div class="bloque"><div class="bloque-cab"><h2>Trabajos de esta semana</h2>'+
+      '<div class="aclara">Cruzados con el pronóstico del campo de cada lote</div></div><div class="trab">'+
+      pend.map(function(o){
+        var esL=estabDeLote(o.loteId)||es;
+        var DL=diasDe(esL.id)||D;
+        var idx=DL.semana.findIndex(function(x){return x.fecha===o.fechaPlan;});
+        var atrasado=o.fechaPlan<hoy;
+        var v, cons, mejor="";
+        if(idx<0){
+          v={n:"ojo"};
+          cons=atrasado?"Estaba para el "+fecha(o.fechaPlan)+" y sigue abierto.":"Programado para el "+fecha(o.fechaPlan)+", fuera de la semana.";
+        } else {
+          v=ventanaDe(o.tipo, DL.desdeHoy+idx, DL.todos);
+          cons=v.r;
+          if(v.n!=="si"){
+            /* buscar el mejor día de la semana; sólo ofrecerlo si supera al planificado */
+            var m=mejorDia(o.tipo, DL.desdeHoy, DL.todos, DL.semana.length);
+            var actual=puntajeDia(o.tipo, DL.desdeHoy+idx, DL.todos);
+            if(m && m.i!==idx && m.puntaje>actual+5){
+              var et=etiquetaDia(DL.semana[m.i].fecha);
+              mejor='<button class="btn sec mini" data-a="moverOrden" data-arg="'+o.id+'|'+DL.semana[m.i].fecha+'">'+
+                    'Pasar a '+et+'</button>';
+              cons+=" "+(et==="hoy"?"Hoy":et==="mañana"?"Mañana":et.charAt(0).toUpperCase()+et.slice(1))+" viene mejor.";
+            } else if(v.n==="no"){
+              cons+=" No hay un día mejor esta semana.";
+            }
+          }
+        }
+        var i=o.insumoId?insumo(o.insumoId):null;
+        return '<div class="trab-fila"><div class="trab-sem '+v.n+'"></div><div class="trab-cuerpo">'+
+          '<div class="trab-tit">'+esc(o.tipo)+' en '+esc(nombreLote(o.loteId))+'</div>'+
+          '<div class="trab-meta">'+fecha(o.fechaPlan)+' · '+esc(o.responsable)+' · '+nf(o.superficie,1)+' ha'+
+            (i?' · '+esc(i.nombre)+' '+esc(o.dosis||""):"")+'</div>'+
+          '<div class="trab-cons '+v.n+'">'+esc(cons)+'</div></div>'+
+          '<div class="trab-acc">'+mejor+'</div></div>';
+      }).join("")+'</div></div>';
+  }
+
+  return cab+
+    (av.length?'<div class="avisos">'+av.join("")+'</div>':'')+
+    '<p class="titular">'+frameResumen(D)+'</p>'+
+    grilla+trabajos+
+    '<div class="pie"><span>Clima de Open-Meteo. Los umbrales de cada semáforo se pueden ajustar a tu criterio.</span>'+
+    '<button class="btn sec mini" data-a="reiniciar">Restaurar datos de ejemplo</button></div>';
+}
+
+/* ============================================================
+   10 · RESTO DE VISTAS
+   ============================================================ */
+function chispas(c,s){
+  var t=Math.max.apply(null,c.lluvia)||1;
+  return '<span class="chispas" aria-hidden="true">'+c.lluvia.map(function(mm,i){
+    var v=mm*(1+((s*(i+3))%17-8)/100);
+    var k=mm>0&&mm<NORMAL[i]*0.6?"deficit":(mm>NORMAL[i]*1.15?"critica":"");
+    return '<i class="'+k+'" style="height:'+Math.max(2,v/t*100)+'%"></i>';
+  }).join("")+'</span>';
+}
+function vistaCampania(){
+  var c=campania(campActiva), r=resumenCampania(campActiva), cls=clsDeCampania(campActiva);
+  var tope=Math.max.apply(null,c.lluvia.concat(NORMAL))*1.12;
+  var caida=c.lluvia.reduce(function(a,b){return a+b;},0);
+  var ult=-1; c.lluvia.forEach(function(mm,i){ if(mm>0) ult=i; });
+  var media=ult<0?0:NORMAL.slice(0,ult+1).reduce(function(a,b){return a+b;},0);
+  var per=ult===11?"la media anual":"la media a "+(MESES[ult<0?0:ult]||"").toLowerCase();
+  var pres={}; cls.forEach(function(x){ if(VENTANAS[x.cultivo]) pres[x.cultivo]=1; });
+  var vents=Object.keys(pres).sort(function(a,b){return VENTANAS[a].ini-VENTANAS[b].ini;});
+  var rindes=rindePorCultivo(campActiva), topeR=rindes.length?rindes[0].rinde:1;
+
+  return '<div class="cabecera"><div><h1>Campaña '+esc(c.nombre)+'</h1>'+
+    '<div class="sub">'+E.establecimientos.length+' establecimientos · '+E.lotes.length+' lotes en el padrón</div></div>'+
+    '<div class="cabecera-acc"><span class="chip '+c.estado+'">'+(c.estado==="curso"?"En curso":"Cerrada")+'</span>'+
+    '<button class="btn sec" data-a="nuevaCampania">+ Nueva campaña</button></div></div>'+
+  '<div class="ficha">'+
+    '<div><div class="eyebrow">Superficie planificada</div><div class="v">'+nf(r.haPlan)+'<span class="u">ha</span></div>'+
+      '<div class="nota">'+r.lotes+' cultivos cargados</div></div>'+
+    '<div><div class="eyebrow">Sembrado</div><div class="v">'+nf(r.haSem)+'<span class="u">ha</span></div>'+
+      '<div class="avance"><i style="width:'+(r.avSiembra*100).toFixed(1)+'%"></i></div>'+
+      '<div class="nota">'+nf(r.avSiembra*100)+' % de la superficie</div></div>'+
+    '<div><div class="eyebrow">Cosechado</div><div class="v">'+nf(r.haCos)+'<span class="u">ha</span></div>'+
+      '<div class="avance"><i style="width:'+(r.avCosecha*100).toFixed(1)+'%;background:var(--c-maiz-t)"></i></div>'+
+      '<div class="nota">'+nf(r.avCosecha*100)+' % de lo sembrado</div></div>'+
+    '<div><div class="eyebrow">Producción</div><div class="v">'+nf(r.tn)+'<span class="u">t</span></div>'+
+      '<div class="nota">Kilos secos a humedad de recibo</div></div>'+
+    '<div><div class="eyebrow">Lluvia de campaña</div><div class="v">'+nf(caida)+'<span class="u">mm</span></div>'+
+      '<div class="nota">'+(media?(caida>=media?"+":"−")+nf(Math.abs(caida-media))+" mm contra "+per:"Sin datos todavía")+'</div></div>'+
+  '</div>'+
+  '<div class="bloque"><div class="bloque-cab"><h2>Balance hídrico y ventanas críticas</h2>'+
+    '<div class="aclara">Lluvia real de Open-Meteo · tocá un mes para cargar el pluviómetro</div></div>'+
+    '<div class="bloque-cuerpo">'+
+      '<div class="hidro-grafico">'+c.lluvia.map(function(mm,i){
+        var seco=mm>0&&mm<NORMAL[i]*0.6;
+        return '<div class="hidro-mes'+(seco?" seco":"")+'"><div class="hidro-normal" style="bottom:'+(NORMAL[i]/tope*100)+'%"></div>'+
+          (mm>0?'<div class="hidro-barra" style="height:'+(mm/tope*100)+'%"><span class="hidro-mm">'+nf(mm)+'</span></div>':'')+'</div>';
+      }).join("")+'</div>'+
+      '<div class="hidro-eje">'+MESES.map(function(m,i){
+        return '<div data-a="cargarLluvia" data-arg="'+i+'" title="Cargar lluvia de '+m+'">'+m+(c.manual[i]?" ✎":"")+'</div>';}).join("")+'</div>'+
+      (vents.length?'<div class="ventanas">'+vents.map(function(k){
+        var v=VENTANAS[k], cu=CULTIVOS[k];
+        return '<div class="ventana-fila"><div class="ventana-nom"><b>'+esc(cu.nom)+'</b> · '+esc(v.et)+'</div>'+
+          '<div class="ventana-pista"><div class="ventana-barra" style="left:'+(v.ini/12*100)+'%;width:'+((v.fin-v.ini)/12*100)+'%;background:'+cu.color+'"></div></div>'+
+          '<div class="ventana-fecha">'+esc(v.f)+'</div></div>';}).join("")+'</div>':'')+
+      '<div class="leyenda-hidro"><span><i class="sw" style="background:var(--lluvia)"></i> Lluvia registrada</span>'+
+        '<span><i class="sw" style="background:var(--alerta)"></i> Mes bajo el 60 % de la media</span>'+
+        '<span><i class="sw rayada"></i> Media histórica</span>'+
+        '<span>✎ significa que ese mes lo cargaste vos</span></div>'+
+    '</div></div>'+
+  '<div class="bloque"><div class="bloque-cab"><h2>Rendimiento por cultivo</h2>'+
+    '<div class="aclara">Kilos secos ponderados por superficie cosechada</div></div><div class="bloque-cuerpo">'+
+    (rindes.length?rindes.map(function(x){
+      var cu=CULTIVOS[x.cultivo];
+      return '<div class="rinde-fila"><div class="rinde-nom"><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</div>'+
+        '<div class="rinde-pista"><div class="rinde-barra" style="width:'+(x.rinde/topeR*100)+'%;background:'+cu.color+'"></div></div>'+
+        '<div class="rinde-val">'+nf(x.rinde)+'</div><div class="rinde-lotes">'+x.lotes+' lote'+(x.lotes>1?"s":"")+'</div></div>';
+    }).join(""):'<p class="vacio">Todavía no hay cosecha cerrada en esta campaña.</p>')+'</div></div>'+
+  tablaLotes(c,cls);
+}
+function tablaLotes(c,cls){
+  if(!cls.length) return '<div class="bloque"><div class="bloque-cab"><h2>Lotes de la campaña</h2></div>'+
+    '<p class="vacio"><b>Todavía no planificaste nada en '+esc(c.nombre)+'.</b>Empezá asignando un cultivo a un lote.'+
+    '<br><br><button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></p></div>';
+  var f=cls.slice().sort(function(a,b){return rendimiento(b).rinde-rendimiento(a).rinde;});
+  return '<div class="bloque"><div class="bloque-cab"><h2>Lotes de la campaña</h2>'+
+    '<div class="aclara">La lluvia del lote va detrás de su rendimiento</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Lote</th><th>Cultivo</th><th class="num col-opcional">Sembrada</th>'+
+    '<th class="num">Cosechada</th><th class="num col-opcional">Siembra</th><th class="num col-opcional">Cosecha</th>'+
+    '<th class="num">Rinde kg/ha</th><th>Estado</th></tr></thead><tbody>'+
+    f.map(function(cl,i){
+      var cu=CULTIVOS[cl.cultivo], r=rendimiento(cl);
+      return '<tr class="clic" data-a="abrirLote" data-arg="'+cl.id+'" tabindex="0">'+
+        '<td><span class="lote-nom">'+esc(nombreLote(cl.loteId))+'</span><br><span class="lote-est">'+esc(nombreEstab(cl.loteId))+'</span></td>'+
+        '<td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+(cl.orden===2?' <span class="lote-est">2º</span>':'')+'</td>'+
+        '<td class="num col-opcional">'+(cl.haSembrada?nf(cl.haSembrada,1):"—")+'</td>'+
+        '<td class="num">'+(cl.haCosechada?nf(cl.haCosechada,1):"—")+'</td>'+
+        '<td class="num col-opcional">'+fecha(cl.fechaSiembra)+'</td>'+
+        '<td class="num col-opcional">'+fecha(cl.fechaCosecha)+'</td>'+
+        '<td class="celda-rinde">'+chispas(campania(cl.campaniaId),i+1)+
+          '<span class="rinde-num">'+(r.rinde?nf(r.rinde):'—')+(r.rinde?'<small>'+r.fuente+'</small>':'')+'</span></td>'+
+        '<td><span class="chip '+cl.estado+'">'+esc(cl.estado)+'</span></td></tr>';
+    }).join("")+'</tbody></table></div></div>';
+}
+function vistaLotes(){
+  return '<div class="cabecera"><div><h1>Lotes</h1><div class="sub">Padrón con superficie y ambientes</div></div>'+
+    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoEstablecimiento">+ Establecimiento</button>'+
+    '<button class="btn" data-a="nuevoLote">+ Nuevo lote</button></div></div>'+
+  E.establecimientos.map(function(e){
+    var ls=E.lotes.filter(function(l){return l.establecimientoId===e.id;});
+    var ha=ls.reduce(function(a,l){return a+l.ha;},0);
+    return '<div class="bloque"><div class="bloque-cab"><h2>'+esc(e.nombre)+'</h2>'+
+      '<div class="aclara">'+esc(e.localidad)+' · '+ls.length+' lotes · '+nf(ha,1)+' ha</div></div>'+
+      (ls.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th>Lote</th><th class="num">Superficie</th>'+
+      '<th class="col-opcional">Ambientes</th><th>Cultivo en '+esc(campania(campActiva).nombre)+'</th><th class="der">Acciones</th></tr></thead><tbody>'+
+      ls.map(function(l){
+        var cs=E.cultivoLotes.filter(function(x){return x.loteId===l.id&&x.campaniaId===campActiva;});
+        var cu=cs.length?cs.map(function(x){return '<i class="punto" style="background:'+CULTIVOS[x.cultivo].color+'"></i>'+esc(CULTIVOS[x.cultivo].nom);}).join("<br>")
+                        :'<span class="lote-est">Sin asignar</span>';
+        var am=l.ambientes.length?l.ambientes.map(function(a){return esc(a.nombre)+" "+nf(a.ha,1);}).join(" · ")
+                                 :'<span class="lote-est">Sin subdividir</span>';
+        return '<tr><td class="lote-nom">'+esc(l.nombre)+'</td><td class="num">'+nf(l.ha,1)+' ha</td>'+
+          '<td class="col-opcional" style="font-size:13px;color:var(--tierra-2)">'+am+'</td><td>'+cu+'</td>'+
+          '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoLote" data-arg="'+l.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarLote" data-arg="'+l.id+'">Eliminar</button></span></td></tr>';
+      }).join("")+'</tbody></table></div>':'<p class="vacio">Este establecimiento no tiene lotes cargados.</p>')+'</div>';
+  }).join("");
+}
+function vistaCultivos(){
+  var c=campania(campActiva), cls=clsDeCampania(campActiva);
+  var or={planificado:0,sembrado:1,cosechando:2,cosechado:3};
+  cls=cls.slice().sort(function(a,b){return or[a.estado]-or[b.estado]||nombreLote(a.loteId).localeCompare(nombreLote(b.loteId));});
+  return '<div class="cabecera"><div><h1>Siembra y cosecha</h1>'+
+    '<div class="sub">Qué se planta en cada lote y cómo viene · Campaña '+esc(c.nombre)+'</div></div>'+
+    '<div class="cabecera-acc"><button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></div></div>'+
+  (cls.length?'<div class="bloque"><div class="bloque-cab"><h2>Cultivos de la campaña</h2>'+
+    '<div class="aclara">'+cls.length+' cultivos · el estado avanza al cerrar los trabajos</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Lote</th><th>Cultivo</th><th class="col-opcional">Variedad</th>'+
+    '<th class="num">Sembrada</th><th class="num">Cosechada</th><th class="num">Rinde</th><th>Estado</th>'+
+    '<th class="der">Acciones</th></tr></thead><tbody>'+
+    cls.map(function(cl){
+      var cu=CULTIVOS[cl.cultivo], r=rendimiento(cl), nt=ticketsDe(cl.id).length;
+      var acc='<button class="btn sec mini" data-a="registrarSiembra" data-arg="'+cl.id+'">Siembra</button>';
+      if(cl.estado!=="planificado") acc+='<button class="btn sec mini" data-a="cargarTicket" data-arg="'+cl.id+'">+ Carta'+(nt?" ("+nt+")":"")+'</button>'+
+        '<button class="btn sec mini" data-a="cerrarCosecha" data-arg="'+cl.id+'">Cosecha</button>';
+      acc+='<button class="btn peligro mini" data-a="borrarCultivo" data-arg="'+cl.id+'">×</button>';
+      return '<tr><td><span class="lote-nom">'+esc(nombreLote(cl.loteId))+'</span><br><span class="lote-est">'+esc(nombreEstab(cl.loteId))+'</span></td>'+
+        '<td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+(cl.orden===2?' <span class="lote-est">2º</span>':'')+'</td>'+
+        '<td class="col-opcional" style="font-size:13.5px">'+(esc(cl.variedad)||'—')+'</td>'+
+        '<td class="num">'+(cl.haSembrada?nf(cl.haSembrada,1):"—")+'</td>'+
+        '<td class="num">'+(cl.haCosechada?nf(cl.haCosechada,1):"—")+'</td>'+
+        '<td class="num">'+(r.rinde?nf(r.rinde):"—")+'</td>'+
+        '<td><span class="chip '+cl.estado+'">'+esc(cl.estado)+'</span></td>'+
+        '<td class="der"><span class="acc">'+acc+'</span></td></tr>';
+    }).join("")+'</tbody></table></div></div>'
+   :'<div class="bloque"><p class="vacio"><b>No hay cultivos cargados en '+esc(c.nombre)+'.</b>'+
+    'Planificá qué se siembra en cada lote y después registrá el avance.<br><br>'+
+    '<button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></p></div>');
+}
+function vistaOrdenes(){
+  var os=E.ordenes.filter(function(o){return o.campaniaId===campActiva;});
+  var oe={en_curso:0,pendiente:1,completada:2};
+  os=os.slice().sort(function(a,b){return oe[a.estado]-oe[b.estado]||a.fechaPlan.localeCompare(b.fechaPlan);});
+  var ab=os.filter(function(o){return o.estado!=="completada";}).length;
+  return '<div class="cabecera"><div><h1>Trabajos</h1>'+
+    '<div class="sub">Lo que hay que hacer en el campo. Al completar uno avanza el lote y baja el stock.</div></div>'+
+    '<div class="cabecera-acc"><button class="btn" data-a="nuevaOrden">+ Nuevo trabajo</button></div></div>'+
+  '<div class="ficha"><div><div class="eyebrow">Abiertos</div><div class="v">'+ab+'</div><div class="nota">Pendientes y en curso</div></div>'+
+    '<div><div class="eyebrow">Completados</div><div class="v">'+(os.length-ab)+'</div><div class="nota">En esta campaña</div></div>'+
+    '<div><div class="eyebrow">Superficie abierta</div><div class="v">'+
+      nf(os.filter(function(o){return o.estado!=="completada";}).reduce(function(a,o){return a+o.superficie;},0))+
+      '<span class="u">ha</span></div><div class="nota">A trabajar</div></div></div>'+
+  (os.length?'<div class="bloque"><div class="bloque-cab"><h2>Todos los trabajos</h2></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th class="num">Fecha</th><th>Qué</th><th>Lote</th>'+
+    '<th class="col-opcional">Insumo</th><th class="num">ha</th><th class="col-opcional">Quién</th>'+
+    '<th>Estado</th><th class="der">Acciones</th></tr></thead><tbody>'+
+    os.map(function(o){
+      var i=o.insumoId?insumo(o.insumoId):null, acc="";
+      if(o.estado==="pendiente") acc+='<button class="btn mini" data-a="avanzarOrden" data-arg="'+o.id+'">Iniciar</button>';
+      if(o.estado==="en_curso")  acc+='<button class="btn mini" data-a="completarOrden" data-arg="'+o.id+'">Completar</button>';
+      acc+='<button class="btn sec mini" data-a="nuevaOrden" data-arg="'+o.id+'">Editar</button>'+
+           '<button class="btn peligro mini" data-a="borrarOrden" data-arg="'+o.id+'">×</button>';
+      return '<tr><td class="num">'+fecha(o.estado==="completada"?o.fechaCierre:o.fechaPlan)+'</td>'+
+        '<td style="font-weight:600">'+esc(o.tipo)+(o.detalle?'<br><span class="lote-est" style="font-weight:400">'+esc(o.detalle.slice(0,58))+(o.detalle.length>58?"…":"")+'</span>':'')+'</td>'+
+        '<td>'+esc(nombreLote(o.loteId))+'<br><span class="lote-est">'+esc(nombreEstab(o.loteId))+'</span></td>'+
+        '<td class="col-opcional" style="font-size:13px">'+(i?esc(i.nombre)+'<br><span class="lote-est">'+esc(o.dosis||"")+'</span>':'—')+'</td>'+
+        '<td class="num">'+nf(o.superficie,1)+'</td>'+
+        '<td class="col-opcional" style="font-size:13px">'+esc(o.responsable)+'</td>'+
+        '<td><span class="chip '+o.estado+'">'+esc(o.estado.replace("_"," "))+'</span></td>'+
+        '<td class="der"><span class="acc">'+acc+'</span></td></tr>';
+    }).join("")+'</tbody></table></div></div>'
+   :'<div class="bloque"><p class="vacio"><b>No hay trabajos en esta campaña.</b>'+
+    'Creá uno para mandar a sembrar, pulverizar, fertilizar o cosechar.<br><br>'+
+    '<button class="btn" data-a="nuevaOrden">+ Nuevo trabajo</button></p></div>');
+}
+function vistaInsumos(){
+  return '<div class="cabecera"><div><h1>Insumos</h1><div class="sub">Catálogo y stock. Los trabajos completados descuentan solos.</div></div>'+
+    '<div class="cabecera-acc"><button class="btn" data-a="nuevoInsumo">+ Nuevo insumo</button></div></div>'+
+  '<div class="bloque"><div class="bloque-cab"><h2>Catálogo y existencias</h2>'+
+    '<div class="aclara">Valorizado en '+nf(E.insumos.reduce(function(a,i){return a+i.stock*i.precio;},0))+' USD</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Insumo</th><th>Tipo</th><th class="num">Precio USD</th>'+
+    '<th class="num">Stock</th><th class="num col-opcional">Valor USD</th><th class="der">Acciones</th></tr></thead><tbody>'+
+    E.insumos.map(function(i){
+      return '<tr><td class="lote-nom">'+esc(i.nombre)+'</td><td style="font-size:13.5px">'+esc(i.tipo)+'</td>'+
+        '<td class="num">'+nf(i.precio,2)+'</td><td class="num">'+nf(i.stock,1)+' <span class="lote-est">'+esc(i.unidad)+'</span></td>'+
+        '<td class="num col-opcional">'+nf(i.stock*i.precio)+'</td>'+
+        '<td class="der"><button class="btn sec mini" data-a="moverStock" data-arg="'+i.id+'">Movimiento</button></td></tr>';
+    }).join("")+'</tbody></table></div></div>';
+}
+function vistaClima(){
+  var c=campania(campActiva);
+  return '<div class="cabecera"><div><h1>Lluvias</h1>'+
+    '<div class="sub">Se completan solas con Open-Meteo. Si cargás el pluviómetro, tu dato manda.</div></div></div>'+
+  '<div class="bloque"><div class="bloque-cab"><h2>Lluvia mensual · '+esc(c.nombre)+'</h2>'+
+    '<div class="aclara">'+(c.traidoHasta?"Automático hasta el "+fecha(c.traidoHasta):"Sin datos automáticos")+'</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Mes</th><th class="num">Registrado</th><th class="num">Media histórica</th>'+
+    '<th class="num">Desvío</th><th>Origen</th><th class="der">Acciones</th></tr></thead><tbody>'+
+    MESES.map(function(m,i){
+      var mm=c.lluvia[i], d=mm-NORMAL[i];
+      var col=mm===0?"var(--tierra-3)":(mm<NORMAL[i]*0.6?"var(--alerta)":(d>0?"var(--lluvia)":"var(--tierra-2)"));
+      return '<tr><td class="lote-nom">'+m+'</td><td class="num">'+(mm?nf(mm,1)+" mm":"—")+'</td>'+
+        '<td class="num" style="color:var(--tierra-3)">'+NORMAL[i]+' mm</td>'+
+        '<td class="num" style="color:'+col+';font-weight:600">'+(mm?(d>0?"+":"")+nf(d)+" mm":"—")+'</td>'+
+        '<td style="font-size:13px;color:var(--tierra-2)">'+(c.manual[i]?"Pluviómetro":"Open-Meteo")+'</td>'+
+        '<td class="der"><span class="acc"><button class="btn sec mini" data-a="cargarLluvia" data-arg="'+i+'">Cargar</button>'+
+        (c.manual[i]?'<button class="btn sec mini" data-a="soltarMes" data-arg="'+i+'">Volver al automático</button>':'')+
+        '</span></td></tr>';
+    }).join("")+'</tbody></table></div></div>'+
+  '<div class="bloque"><div class="bloque-cab"><h2>Estación meteorológica propia</h2></div>'+
+    '<p class="vacio">Sin estación configurada. Cuando definas marca y modelo, se enchufa el adaptador y sus datos pasan a mandar sobre el pluviómetro y sobre Open-Meteo.</p></div>';
+}
+function vistaMonitoreo(){
+  var obs=E.monitoreo.filter(function(o){return o.campaniaId===campActiva;});
+  return '<div class="cabecera"><div><h1>Monitoreo</h1><div class="sub">Lo que ves en el lote: plagas, enfermedades, malezas y daños</div></div>'+
+    '<div class="cabecera-acc"><button class="btn" data-a="nuevaObservacion">+ Nueva observación</button></div></div>'+
+  (obs.length?'<div class="bloque"><div class="bloque-cab"><h2>Observaciones</h2><div class="aclara">'+obs.length+' registros</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th class="num">Fecha</th><th>Lote</th><th>Tipo</th>'+
+    '<th class="col-opcional">Estadio</th><th>Severidad</th><th>Observación</th></tr></thead><tbody>'+
+    obs.map(function(o){
+      var col=o.severidad==="Alta"?"var(--alerta)":(o.severidad==="Media"?"var(--ojo)":"var(--ok)");
+      return '<tr><td class="num">'+fecha(o.fecha)+'</td>'+
+        '<td>'+esc(nombreLote(o.loteId))+'<br><span class="lote-est">'+esc(nombreEstab(o.loteId))+'</span></td>'+
+        '<td style="font-weight:600">'+esc(o.tipo)+'</td>'+
+        '<td class="col-opcional" style="font-size:13px">'+(esc(o.estadio)||"—")+'</td>'+
+        '<td><span style="color:'+col+';font-weight:700;font-size:13px">'+esc(o.severidad)+'</span></td>'+
+        '<td style="font-size:13.5px;color:var(--tierra-2)">'+esc(o.nota)+'</td></tr>';
+    }).join("")+'</tbody></table></div></div>'
+   :'<div class="bloque"><p class="vacio"><b>Sin observaciones en esta campaña.</b>'+
+    'Registrá lo que veas para poder cruzarlo después contra el rendimiento.</p></div>');
+}
+function vistaLote(){
+  var cl=clDe(loteAbierto);
+  if(!cl){ vistaActual="campania"; return vistaCampania(); }
+  var l=lote(cl.loteId), cu=CULTIVOS[cl.cultivo], r=rendimiento(cl);
+  var ts=ticketsDe(cl.id).slice().sort(function(a,b){return a.fecha.localeCompare(b.fecha);});
+  var kgN=ts.reduce(function(a,t){return a+t.kgNetos;},0);
+  var desc=kgN-ts.reduce(function(a,t){return a+kgSecos(t.kgNetos,t.humedad,cu.recibo);},0);
+  var perd=cl.haSembrada-cl.haCosechada, amb=cl.rindesAmbiente;
+  var topeA=amb?Math.max.apply(null,amb.map(function(a){return a.rinde;})):1;
+  var delta=(r.fuente==="balanza"&&cl.rindeDeclarado>0)?(cl.rindeDeclarado-r.rinde):0;
+  var ords=E.ordenes.filter(function(o){return o.cultivoLoteId===cl.id;});
+
+  return '<button class="volver" data-a="volver">← Volver</button>'+
+  '<div class="cabecera"><div><h1>'+esc(l.nombre)+'</h1>'+
+    '<div class="sub">'+esc(nombreEstab(cl.loteId))+' · '+esc(cu.nom)+' · Campaña '+esc(campania(cl.campaniaId).nombre)+'</div></div>'+
+    '<div class="cabecera-acc"><span class="chip '+cl.estado+'">'+esc(cl.estado)+'</span></div></div>'+
+  '<div class="dos-col"><div>'+
+    '<div class="bloque"><div class="bloque-cab"><h2>Cómo se calcula el rendimiento</h2>'+
+      '<div class="aclara"><button class="btn sec mini" data-a="cargarTicket" data-arg="'+cl.id+'">+ Carta de porte</button></div></div>'+
+      (ts.length?'<div class="cadena">'+
+        '<div class="cadena-paso"><span class="cadena-i">1</span><span class="cadena-t">Kilos netos de balanza'+
+          '<small>'+ts.length+' carta'+(ts.length>1?"s":"")+', '+fecha(ts[0].fecha)+' al '+fecha(ts[ts.length-1].fecha)+'</small></span>'+
+          '<span class="cadena-v">'+nf(kgN)+' kg</span></div>'+
+        '<div class="cadena-paso"><span class="cadena-i">2</span><span class="cadena-t">Descuento por humedad'+
+          '<small>hasta el '+nf(cu.recibo,1)+' % de recibo</small></span><span class="cadena-v">−'+nf(desc)+' kg</span></div>'+
+        '<div class="cadena-paso"><span class="cadena-i">3</span><span class="cadena-t">Kilos secos</span>'+
+          '<span class="cadena-v">'+nf(r.kg)+' kg</span></div>'+
+        '<div class="cadena-paso"><span class="cadena-i">4</span><span class="cadena-t">Superficie cosechada'+
+          (perd>0.05?'<small>'+nf(perd,1)+' ha no cosechadas</small>':'')+'</span><span class="cadena-v">'+nf(cl.haCosechada,1)+' ha</span></div>'+
+        '<div class="cadena-paso final"><span class="cadena-i">=</span><span class="cadena-t"><strong>Rendimiento</strong></span>'+
+          '<span class="cadena-v">'+nf(r.rinde)+' kg/ha</span></div></div>'+
+        (cl.rindeDeclarado>0?'<div class="contraste"><div><div class="eyebrow">Calculado de balanza</div>'+
+          '<div class="v">'+nf(r.rinde)+' <span style="font-size:11.5px;font-weight:500;color:var(--tierra-3)">kg/ha</span></div></div>'+
+          '<div'+(Math.abs(delta)>r.rinde*0.02?' style="background:var(--alerta-bg)"':'')+'><div class="eyebrow">Declarado a campo</div>'+
+          '<div class="v">'+nf(cl.rindeDeclarado)+' <span style="font-size:12px;font-weight:600;color:'+(Math.abs(delta)>r.rinde*0.02?"var(--alerta)":"var(--ok)")+'">'+
+          (delta>0?"+":"")+nf(delta/r.rinde*100,1)+' %</span></div></div></div>'+
+          (Math.abs(delta)>r.rinde*0.02?'<p class="aviso">La estimación de campo difiere de la balanza en '+nf(Math.abs(delta))+' kg/ha. Revisá el tarado del monitor o el pesaje de los camiones.</p>'
+            :'<p class="aviso bueno">La estimación de campo coincide con la balanza dentro del 2 %.</p>'):'')
+       :'<p class="vacio"><b>Sin cartas de porte cargadas.</b>'+
+        (cl.rindeDeclarado>0?'El rinde de '+nf(cl.rindeDeclarado)+' kg/ha es el declarado a campo. Cargá las cartas para calcularlo de balanza.'
+                            :'Cargá las cartas de porte y el rendimiento se calcula solo.')+'</p>')+'</div>'+
+    (amb?'<div class="bloque"><div class="bloque-cab"><h2>Rendimiento por ambiente</h2>'+
+      '<div class="aclara">'+nf(topeA-Math.min.apply(null,amb.map(function(a){return a.rinde;})))+' kg/ha de brecha</div></div>'+
+      '<div class="bloque-cuerpo">'+amb.map(function(a){
+        return '<div class="amb-fila"><div class="amb-nom">'+esc(a.nombre)+'<small>'+nf(a.ha,1)+' ha</small></div>'+
+          '<div class="amb-pista"><div class="amb-barra" style="width:'+(a.rinde/topeA*100)+'%;background:'+cu.color+'"></div></div>'+
+          '<div class="amb-val">'+nf(a.rinde)+'<small>kg/ha</small></div></div>';}).join("")+'</div></div>':'')+
+  '</div><div>'+
+    '<div class="bloque"><div class="bloque-cab"><h2>Ficha del cultivo</h2>'+
+      '<div class="aclara"><button class="btn sec mini" data-a="registrarSiembra" data-arg="'+cl.id+'">Editar siembra</button></div></div>'+
+      '<table class="datos">'+
+      '<tr><th>Híbrido o variedad</th><td>'+(esc(cl.variedad)||"—")+'</td></tr>'+
+      '<tr><th>Fecha de siembra</th><td>'+fecha(cl.fechaSiembra)+'</td></tr>'+
+      '<tr><th>Densidad</th><td>'+(esc(cl.densidad)||"—")+'</td></tr>'+
+      '<tr><th>Superficie del lote</th><td>'+nf(l.ha,1)+' ha</td></tr>'+
+      '<tr><th>Superficie sembrada</th><td>'+(cl.haSembrada?nf(cl.haSembrada,1)+" ha":"—")+'</td></tr>'+
+      '<tr><th>Superficie cosechada</th><td>'+(cl.haCosechada?nf(cl.haCosechada,1)+" ha":"—")+'</td></tr>'+
+      '<tr><th>Humedad de cosecha</th><td>'+(cl.humedadCosecha?nf(cl.humedadCosecha,1)+" %":"—")+'</td></tr>'+
+      '<tr><th>Fecha de cosecha</th><td>'+fecha(cl.fechaCosecha)+'</td></tr></table></div>'+
+    (ts.length?'<div class="bloque"><div class="bloque-cab"><h2>Cartas de porte</h2></div><div class="scroll-x">'+
+      '<table class="tabla"><thead><tr><th class="num">Fecha</th><th>Carta</th><th class="num">Kg netos</th><th class="num">Hum.</th></tr></thead><tbody>'+
+      ts.map(function(t){ return '<tr><td class="num">'+fecha(t.fecha)+'</td><td class="mono" style="font-size:13px">'+esc(t.cartaPorte)+'</td>'+
+        '<td class="num">'+nf(t.kgNetos)+'</td><td class="num">'+nf(t.humedad,1)+' %</td></tr>';}).join("")+
+      '</tbody></table></div></div>':'')+
+    '<div class="bloque"><div class="bloque-cab"><h2>Trabajos del lote</h2></div>'+
+      (ords.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th class="num">Fecha</th><th>Qué</th><th class="num">ha</th><th>Estado</th></tr></thead><tbody>'+
+      ords.map(function(o){ return '<tr><td class="num">'+fecha(o.estado==="completada"?o.fechaCierre:o.fechaPlan)+'</td>'+
+        '<td>'+esc(o.tipo)+'</td><td class="num">'+nf(o.superficie,1)+'</td>'+
+        '<td><span class="chip '+o.estado+'">'+esc(o.estado.replace("_"," "))+'</span></td></tr>';}).join("")+
+      '</tbody></table></div>':'<p class="vacio">Sin trabajos para este cultivo.</p>')+'</div>'+
+  '</div></div>';
+}
+
+/* ============================================================
+   11 · PINTADO Y EVENTOS
+   ============================================================ */
+var VISTAS={hoy:vistaHoy,campania:vistaCampania,lotes:vistaLotes,cultivos:vistaCultivos,
+            ordenes:vistaOrdenes,insumos:vistaInsumos,clima:vistaClima,monitoreo:vistaMonitoreo,lote:vistaLote};
+
+function pintar(){
+  var sel=$("sel-camp");
+  sel.innerHTML=E.campanias.map(function(c){
+    return '<option value="'+c.id+'"'+(c.id===campActiva?" selected":"")+'>'+esc(c.nombre)+' — '+(c.estado==="curso"?"en curso":"cerrada")+'</option>';}).join("");
+  var n={lotes:E.lotes.length, cultivos:clsDeCampania(campActiva).length,
+    ordenes:E.ordenes.filter(function(o){return o.campaniaId===campActiva&&o.estado!=="completada";}).length,
+    insumos:E.insumos.length, monitoreo:E.monitoreo.filter(function(o){return o.campaniaId===campActiva;}).length};
+  document.querySelectorAll("[data-n]").forEach(function(el){
+    var v=n[el.getAttribute("data-n")]; el.textContent=v||""; el.style.display=v?"":"none"; });
+  var na=vistaActual==="lote"?"campania":vistaActual;
+  document.querySelectorAll("#nav a").forEach(function(a){ a.classList.toggle("activo",a.getAttribute("data-vista")===na); });
+  $("lienzo").innerHTML=(VISTAS[vistaActual]||vistaHoy)();
+  var se=$("sel-estab");
+  if(se) se.addEventListener("change",function(){ A.verEstab(this.value); });
+}
+
+$("nav").addEventListener("click",function(ev){
+  var a=ev.target.closest("a"); if(!a) return;
+  ev.preventDefault(); vistaActual=a.getAttribute("data-vista"); pintar(); window.scrollTo(0,0);
+});
+$("sel-camp").addEventListener("change",function(){
+  campActiva=this.value; if(vistaActual==="lote") vistaActual="campania";
+  pintar(); traerLluviaCampania().then(pintar);
+});
+document.addEventListener("click",function(ev){
+  var el=ev.target.closest("[data-a]"); if(!el) return;
+  var fn=A[el.getAttribute("data-a")]; if(!fn) return;
+  ev.preventDefault(); var arg=el.getAttribute("data-arg");
+  fn(arg===null?undefined:arg);
+});
+document.addEventListener("keydown",function(ev){
+  if(ev.key!=="Enter"&&ev.key!==" ") return;
+  var t=ev.target.closest&&ev.target.closest("[data-a][tabindex]"); if(!t) return;
+  ev.preventDefault();
+  var fn=A[t.getAttribute("data-a")]; if(fn) fn(t.getAttribute("data-arg"));
+});
+
+/* ---------- arranque ---------- */
+cargar();
+pintar();
+traerPronostico().then(pintar);
+traerLluviaCampania().then(pintar);
+})();
+</script>
+
+<script>
+/* app instalable: guarda la app en el teléfono para que abra sin señal */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("sw.js").catch(function(){ /* sin service worker sigue andando */ });
+  });
+}
+</script>
+</body>
+</html>
