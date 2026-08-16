@@ -429,6 +429,7 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
     <a href="#" data-vista="campania">Resumen</a>
     <a href="#" data-vista="cultivos">Siembra y cosecha <span class="n" data-n="cultivos"></span></a>
     <a href="#" data-vista="lotes">Lotes <span class="n" data-n="lotes"></span></a>
+    <a href="#" data-vista="finanzas">Plata <span class="n" data-n="finanzas"></span></a>
     <hr>
     <div class="nav-titulo eyebrow">Apoyo</div>
     <a href="#" data-vista="insumos">Insumos <span class="n" data-n="insumos"></span></a>
@@ -487,6 +488,14 @@ var VENTANAS = {
   girasol:{et:"Floración · R5", ini:6.10,fin:6.95,f:"05 ene – 30 ene"},
   sorgo: {et:"Floración",       ini:6.80,fin:7.60,f:"25 ene – 20 feb"}
 };
+var TIPOS_OPERACION = {
+  disponible:{nom:"Disponible", ayuda:"Entrega y precio de hoy"},
+  forward:   {nom:"Forward",    ayuda:"Precio cerrado hoy, entrega más adelante"},
+  futuro:    {nom:"Futuro",     ayuda:"Posición tomada en el mercado a término"},
+  canje:     {nom:"Canje",      ayuda:"Grano entregado a cambio de insumos"}
+};
+var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
+                        "Estructura","Impuestos y comisiones","Otros"];
 var TIPOS_LABOR  = ["Siembra","Pulverización","Fertilización","Cosecha","Laboreo","Monitoreo"];
 var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
 
@@ -721,14 +730,84 @@ function semilla(){
     M("m13","i9","e3",-12,"compra",200,3.20,"Coadyuvante"),
     M("m14","i2","e2",-13,"aplicacion",-10802,0.52,"Fertilización en Lote 12 — Alto","o6")
   ];
+  /* Compras y aplicaciones de la campaña cerrada. Fechas fijas: son de 2025. */
+  var F=function(id,ins,est,f,tipo,cant,precio,nota,ordenId){
+    return {id:id,insumoId:ins,establecimientoId:est,fecha:f,tipo:tipo,cantidad:cant,
+            precioUnitario:precio,ordenId:ordenId||null,nota:nota};
+  };
+  movimientos=movimientos.concat([
+    F("m20","i1","e1","2025-09-01","compra",280,195,"Semilla de maíz 2025/26"),
+    F("m21","i3","e1","2025-09-01","compra",26000,0.68,"MAP 2025/26"),
+    F("m22","i2","e1","2025-12-20","compra",28000,0.52,"Urea 2025/26"),
+    F("m23","i4","e1","2025-12-10","compra",500,4.10,"Glifosato 2025/26"),
+    F("m24","i4","e3","2026-01-10","compra",400,4.10,"Glifosato 2025/26"),
+    F("m25","i6","e1","2025-12-10","compra",240,3.80,"Atrazina 2025/26"),
+    F("m26","i7","e3","2026-01-10","compra",30,9.00,"Cipermetrina 2025/26"),
+    F("m27","i1","e1","2025-12-15","aplicacion",-138.198,195,"Siembra en Lote 7 — Aguada","o7"),
+    F("m28","i3","e1","2025-12-15","aplicacion",-13374,0.68,"Siembra en Lote 7 — Aguada","o7"),
+    F("m29","i2","e1","2026-01-08","aplicacion",-26748,0.52,"Fertilización en Lote 7 — Aguada","o8"),
+    F("m30","i4","e1","2025-12-28","aplicacion",-475.52,4.10,"Pulverización en Lote 7 — Aguada","o9"),
+    F("m31","i6","e1","2025-12-28","aplicacion",-222.9,3.80,"Pulverización en Lote 7 — Aguada","o9"),
+    F("m32","i1","e1","2025-09-22","aplicacion",-127.49,195,"Siembra en Lote 1 — Casco","o10"),
+    F("m33","i3","e1","2025-09-22","aplicacion",-10736,0.68,"Siembra en Lote 1 — Casco","o10"),
+    F("m34","i4","e3","2026-01-15","aplicacion",-390.75,4.10,"Pulverización en Lote 2 — Frente","o11"),
+    F("m35","i7","e3","2026-01-15","aplicacion",-23.445,9.00,"Pulverización en Lote 2 — Frente","o11")
+  ]);
+  /* La campaña 2025/26 ya cerrada: se vendió casi todo, con forward y canje. */
+  var ventas=[
+    {id:"v1",campaniaId:"c2526",cultivo:"maiz_d",fecha:"2026-02-10",tipoOperacion:"forward",toneladas:2000,precioTn:172,moneda:"USD",tipoCambio:null,comprador:"Exportadora del Plata",fechaEntrega:"2026-05-15",nota:"Contrato 4471"},
+    {id:"v2",campaniaId:"c2526",cultivo:"maiz_d",fecha:"2026-05-20",tipoOperacion:"disponible",toneladas:1580,precioTn:165,moneda:"USD",tipoCambio:null,comprador:"Acopio Areco",fechaEntrega:null,nota:""},
+    {id:"v3",campaniaId:"c2526",cultivo:"maiz_t",fecha:"2026-03-18",tipoOperacion:"disponible",toneladas:2820,precioTn:168,moneda:"USD",tipoCambio:null,comprador:"Acopio Areco",fechaEntrega:null,nota:""},
+    {id:"v4",campaniaId:"c2526",cultivo:"soja_1",fecha:"2026-04-28",tipoOperacion:"disponible",toneladas:800,precioTn:298,moneda:"USD",tipoCambio:null,comprador:"Terminal Rosario",fechaEntrega:null,nota:""},
+    {id:"v5",campaniaId:"c2526",cultivo:"soja_1",fecha:"2026-05-06",tipoOperacion:"canje",toneladas:400,precioTn:292,moneda:"USD",tipoCambio:null,comprador:"Distribuidora de insumos",fechaEntrega:null,nota:"Canje por fertilizante de la campaña siguiente"},
+    {id:"v6",campaniaId:"c2526",cultivo:"trigo",fecha:"2025-12-20",tipoOperacion:"disponible",toneladas:762,precioTn:205,moneda:"USD",tipoCambio:null,comprador:"Molino Luján",fechaEntrega:null,nota:""},
+    {id:"v7",campaniaId:"c2526",cultivo:"cebada",fecha:"2025-12-12",tipoOperacion:"forward",toneladas:770,precioTn:198,moneda:"USD",tipoCambio:null,comprador:"Maltería",fechaEntrega:"2026-01-20",nota:""},
+    {id:"v8",campaniaId:"c2526",cultivo:"soja_2",fecha:"2026-05-25",tipoOperacion:"disponible",toneladas:600,precioTn:289,moneda:"USD",tipoCambio:null,comprador:"Terminal Rosario",fechaEntrega:null,nota:""}
+  ];
+  var G=function(id,camp,cl,fecha,cat,desc,monto,moneda,tc,prov){
+    return {id:id,campaniaId:camp,cultivoLoteId:cl,fecha:fecha,categoria:cat,descripcion:desc,
+            monto:monto,moneda:moneda,tipoCambio:tc,proveedor:prov};
+  };
+  var gastos=[
+    G("g1","c2526",null,"2025-07-01","Arrendamiento","Arrendamiento de la campaña, 14 qq de soja por hectárea",742000,"USD",null,"Propietarios"),
+    G("g2","c2526","cl1","2026-05-04","Cosecha","Cosecha de maíz tardío",8900,"USD",null,"Contratista Gómez"),
+    G("g3","c2526","cl4","2026-03-12","Cosecha","Cosecha de maíz temprano",7850,"USD",null,"Contratista Gómez"),
+    G("g4","c2526","cl7","2026-04-22","Cosecha","Cosecha de soja",9100,"USD",null,"Contratista Gómez"),
+    G("g5","c2526","cl1","2026-05-06","Flete","Flete a puerto, 1.488 t",11200000,"ARS",1420,"Transporte del Norte"),
+    G("g6","c2526",null,"2026-04-10","Labores de terceros","Pulverizaciones de la gruesa",18600,"USD",null,"Contratista Gómez"),
+    G("g7","c2526",null,"2026-06-30","Honorarios","Asesoramiento agronómico",9600,"USD",null,"Estudio agronómico"),
+    G("g8","c2526",null,"2026-06-30","Impuestos y comisiones","Comisiones de acopio y corretaje",26400,"USD",null,"Acopio Areco"),
+    G("g9","c2526",null,"2026-06-30","Estructura","Estructura y administración",31000,"USD",null,"")
+  ];
+  /* Trabajos ya hechos de la campaña cerrada: sin ellos los insumos costarían
+     cero y el resultado por hectárea daría una cifra irreal. */
+  var ordCerradas=[
+    {id:"o7",campaniaId:"c2526",loteId:"l1",cultivoLoteId:"cl1",tipo:"Siembra",fechaPlan:"2025-12-15",responsable:"Equipo propio",superficie:148.6,detalle:"Siembra de maíz tardío con arrancador.",estado:"completada",fechaCierre:"2025-12-15"},
+    {id:"o8",campaniaId:"c2526",loteId:"l1",cultivoLoteId:"cl1",tipo:"Fertilización",fechaPlan:"2026-01-08",responsable:"Equipo propio",superficie:148.6,detalle:"Urea en V6.",estado:"completada",fechaCierre:"2026-01-08"},
+    {id:"o9",campaniaId:"c2526",loteId:"l1",cultivoLoteId:"cl1",tipo:"Pulverización",fechaPlan:"2025-12-28",responsable:"Contratista Gómez",superficie:148.6,detalle:"Barbecho corto y preemergente.",estado:"completada",fechaCierre:"2025-12-28"},
+    {id:"o10",campaniaId:"c2526",loteId:"l3",cultivoLoteId:"cl4",tipo:"Siembra",fechaPlan:"2025-09-22",responsable:"Equipo propio",superficie:134.2,detalle:"Siembra de maíz temprano.",estado:"completada",fechaCierre:"2025-09-22"},
+    {id:"o11",campaniaId:"c2526",loteId:"l9",cultivoLoteId:"cl7",tipo:"Pulverización",fechaPlan:"2026-01-15",responsable:"Contratista Gómez",superficie:156.3,detalle:"Control de malezas y chinches en soja.",estado:"completada",fechaCierre:"2026-01-15"}
+  ];
+  var oiCerradas=[
+    {id:"oi8", ordenId:"o7", insumoId:"i1", dosisHa:0.93},
+    {id:"oi9", ordenId:"o7", insumoId:"i3", dosisHa:90},
+    {id:"oi10",ordenId:"o8", insumoId:"i2", dosisHa:180},
+    {id:"oi11",ordenId:"o9", insumoId:"i4", dosisHa:3.2},
+    {id:"oi12",ordenId:"o9", insumoId:"i6", dosisHa:1.5},
+    {id:"oi13",ordenId:"o10",insumoId:"i1", dosisHa:0.95},
+    {id:"oi14",ordenId:"o10",insumoId:"i3", dosisHa:80},
+    {id:"oi15",ordenId:"o11",insumoId:"i4", dosisHa:2.5},
+    {id:"oi16",ordenId:"o11",insumoId:"i7", dosisHa:0.15}
+  ];
   var monitoreo=[
     {id:"m1",campaniaId:"c2627",loteId:"l4",fecha:d(-3),tipo:"Enfermedad",estadio:"Z39 hoja bandera",severidad:"Media",nota:"Roya anaranjada en el estrato inferior, 12 % de incidencia. Umbral alcanzado."},
     {id:"m2",campaniaId:"c2627",loteId:"l9",fecha:d(-5),tipo:"Maleza",estadio:"Z31 encañazón",severidad:"Alta",nota:"Raigrás resistente a glifosato en la cabecera norte."},
     {id:"m3",campaniaId:"c2627",loteId:"l13",fecha:d(-6),tipo:"Cultivo",estadio:"Z32 encañazón",severidad:"Baja",nota:"Buen macollaje, cobertura completa del entresurco."}
   ];
   return {establecimientos:est,lotes:lotes,campanias:camps,cultivoLotes:cl,tickets:tickets,
-          insumos:insumos,ordenes:ordenes,ordenInsumos:ordenInsumos,movimientos:movimientos,
-          monitoreo:monitoreo};
+          insumos:insumos,ordenes:ordenes.concat(ordCerradas),
+          ordenInsumos:ordenInsumos.concat(oiCerradas),movimientos:movimientos,
+          monitoreo:monitoreo,ventas:ventas,gastos:gastos};
 }
 
 /* La colección en memoria de cada tabla. Las vistas siguen leyendo de E igual
@@ -737,10 +816,10 @@ var TABLAS = {
   establecimientos:"establecimientos", lotes:"lotes", campanias:"campanias",
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
-  monitoreo:"monitoreo"
+  monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
-           ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[]};
+           ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -827,13 +906,16 @@ function semillaConIds(){
                                      x.establecimientoId=nid(x.establecimientoId);
                                      x.ordenId=x.ordenId?nid(x.ordenId):null; });
   s.monitoreo.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); x.loteId=nid(x.loteId); });
+  s.ventas.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); });
+  s.gastos.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId);
+                                x.cultivoLoteId=x.cultivoLoteId?nid(x.cultivoLoteId):null; });
   return s;
 }
 function cargarEjemplo(){
   var s=semillaConIds();
   /* orden de inserción: primero lo que otros referencian */
   var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes",
-             "ordenInsumos","movimientos","monitoreo"];
+             "ordenInsumos","movimientos","monitoreo","ventas","gastos"];
   orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
   campActiva=(s.campanias.filter(function(c){return c.estado==="curso";})[0]||s.campanias[0]).id;
   estabClima=s.establecimientos[0].id;
@@ -1090,6 +1172,78 @@ function ocupacionPadron(cid){
     if(E.cultivoLotes.some(function(x){return x.loteId===l.id&&x.campaniaId===cid;})) conCultivo+=num(l.ha);
   });
   return {total:total, asignada:conCultivo, libre:total-conCultivo};
+}
+
+/* ============================================================
+   ECONOMÍA
+   Todo se lleva a dólares al tipo de cambio del día de la operación.
+   Comparar campañas en pesos no dice nada.
+   ============================================================ */
+function aUSD(monto, moneda, tc){
+  if(moneda==="ARS") return num(tc)>0 ? num(monto)/num(tc) : 0;
+  return num(monto);
+}
+function importeVenta(v){ return aUSD(num(v.toneladas)*num(v.precioTn), v.moneda, v.tipoCambio); }
+function importeGasto(g){ return aUSD(g.monto, g.moneda, g.tipoCambio); }
+
+/* Kilos secos que produjo cada cultivo de la campaña. */
+function produccionPorCultivo(cid){
+  var m={};
+  clsDeCampania(cid).forEach(function(cl){
+    var r=rendimiento(cl); if(r.kg<=0) return;
+    if(!m[cl.cultivo]) m[cl.cultivo]={kg:0,ha:0};
+    m[cl.cultivo].kg+=r.kg; m[cl.cultivo].ha+=num(cl.haCosechada);
+  });
+  return m;
+}
+function ventasPorCultivo(cid){
+  var m={};
+  E.ventas.filter(function(v){return v.campaniaId===cid;}).forEach(function(v){
+    if(!m[v.cultivo]) m[v.cultivo]={tn:0,usd:0,n:0};
+    m[v.cultivo].tn+=num(v.toneladas); m[v.cultivo].usd+=importeVenta(v); m[v.cultivo].n++;
+  });
+  return m;
+}
+
+/* Lo que gastó cada cultivo del lote: insumos realmente aplicados, gastos
+   propios, y la parte que le toca de los gastos que no se pueden atribuir. */
+function costoInsumosDe(clId){
+  var ords={}; E.ordenes.forEach(function(o){ if(o.cultivoLoteId===clId) ords[o.id]=1; });
+  return E.movimientos.reduce(function(a,m){
+    if(m.tipo!=="aplicacion"||!m.ordenId||!ords[m.ordenId]) return a;
+    var pu=m.precioUnitario!=null?num(m.precioUnitario):num((insumo(m.insumoId)||{}).precio);
+    return a+Math.abs(num(m.cantidad))*pu;
+  },0);
+}
+function economiaCampania(cid){
+  var cls=clsDeCampania(cid);
+  var prod=produccionPorCultivo(cid), vend=ventasPorCultivo(cid);
+  var haTotal=cls.reduce(function(a,cl){ return a+num(cl.haSembrada); },0);
+  var indirectos=E.gastos.filter(function(g){ return g.campaniaId===cid && !g.cultivoLoteId; })
+                         .reduce(function(a,g){ return a+importeGasto(g); },0);
+
+  var porLote=cls.map(function(cl){
+    var r=rendimiento(cl);
+    var totalKgCultivo=(prod[cl.cultivo]||{}).kg||0;
+    var parte=totalKgCultivo>0 ? r.kg/totalKgCultivo : 0;
+    var ingreso=((vend[cl.cultivo]||{}).usd||0)*parte;
+    var insumos=costoInsumosDe(cl.id);
+    var directos=E.gastos.filter(function(g){ return g.cultivoLoteId===cl.id; })
+                         .reduce(function(a,g){ return a+importeGasto(g); },0);
+    var indir=haTotal>0 ? indirectos*(num(cl.haSembrada)/haTotal) : 0;
+    var costo=insumos+directos+indir;
+    var ha=num(cl.haCosechada)||num(cl.haSembrada);
+    return {cl:cl, kg:r.kg, ingreso:ingreso, insumos:insumos, gastosDirectos:directos,
+            gastosIndirectos:indir, costo:costo, resultado:ingreso-costo,
+            ha:ha, porHa:ha>0?(ingreso-costo)/ha:0};
+  });
+
+  var ingresos=porLote.reduce(function(a,x){return a+x.ingreso;},0);
+  var costos=porLote.reduce(function(a,x){return a+x.costo;},0);
+  return {porLote:porLote, prod:prod, vend:vend, haTotal:haTotal,
+          ingresos:ingresos, costos:costos, resultado:ingresos-costos,
+          porHa:haTotal>0?(ingresos-costos)/haTotal:0,
+          indirectos:indirectos};
 }
 
 function resumenCampania(cid){
@@ -1591,6 +1745,123 @@ A.moverOrden=function(arg){
   o.fechaPlan=p[1]; marcar("ordenes",o); guardar(); pintar();
   avisar("Movido al "+fecha(p[1])+".");
 };
+/* ---------- ventas y gastos ---------- */
+function opcCultivosDeCampania(){
+  var vistos={}, out=[];
+  clsDeCampania(campActiva).forEach(function(cl){
+    if(vistos[cl.cultivo]) return; vistos[cl.cultivo]=1;
+    out.push({v:cl.cultivo,t:CULTIVOS[cl.cultivo].nom});
+  });
+  return out.length?out:Object.keys(CULTIVOS).map(function(k){return {v:k,t:CULTIVOS[k].nom};});
+}
+A.nuevaVenta=function(id){
+  var V=id?E.ventas.filter(function(v){return v.id===id;})[0]:null;
+  if(!campActiva){ avisar("Abrí una campaña antes de cargar ventas."); return; }
+  abrirForm({titulo:V?"Editar venta":"Registrar venta de grano",
+    nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
+    valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
+               precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
+               fechaEntrega:V.fechaEntrega,nota:V.nota}
+            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible"},
+    campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
+            {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
+             opciones:Object.keys(TIPOS_OPERACION).map(function(k){return {v:k,t:TIPOS_OPERACION[k].nom};})},
+            {k:"fecha",label:"Fecha de la operación",tipo:"date",req:true},
+            {k:"fechaEntrega",label:"Fecha de entrega",tipo:"date",hint:"Para forward y futuro."},
+            {k:"toneladas",label:"Toneladas",tipo:"number",paso:"0.001",min:"0.001",req:true},
+            {k:"precioTn",label:"Precio por tonelada",tipo:"number",paso:"0.01",min:"0",req:true},
+            {k:"moneda",label:"Moneda",tipo:"select",req:true,opciones:[{v:"USD",t:"Dólares"},{v:"ARS",t:"Pesos"}]},
+            {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
+             hint:"Pesos por dólar ese día. Sólo si cobrás en pesos."},
+            {k:"comprador",label:"Comprador",ancho:true,ph:"Acopio, exportador o corredor"},
+            {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
+    panel:function(d){
+      var tn=num(d.toneladas), pu=num(d.precioTn);
+      var usd=aUSD(tn*pu,d.moneda,d.tipoCambio);
+      var prod=produccionPorCultivo(campActiva)[d.cultivo];
+      var vend=ventasPorCultivo(campActiva)[d.cultivo];
+      var producidas=prod?prod.kg/1000:0;
+      var yaVendidas=(vend?vend.tn:0)-(V?num(V.toneladas):0);
+      var quedan=producidas-yaVendidas-tn;
+      var falta=(d.moneda==="ARS"&&!num(d.tipoCambio));
+      return '<div class="panel-vivo"><h4>'+esc((CULTIVOS[d.cultivo]||{}).nom||"Cultivo")+'</h4>'+
+        '<div class="panel-fila"><span>Importe de esta venta</span><b>'+(falta?"—":nf(usd,0)+" USD")+'</b></div>'+
+        (producidas>0?
+          '<div class="panel-fila"><span>Producido en la campaña</span><b>'+nf(producidas,1)+' t</b></div>'+
+          '<div class="panel-fila"><span>Ya vendido antes de esta</span><b>'+nf(yaVendidas,1)+' t</b></div>'+
+          '<div class="panel-fila '+(quedan<-0.001?"mal":"bien")+'"><span>Quedaría sin vender</span>'+
+            '<b>'+nf(quedan,1)+' t</b></div>'
+          :'<div class="panel-fila"><span>Todavía no hay cosecha cargada de este cultivo<small>Se puede vender igual: es lo normal en un forward</small></span></div>')+
+        (falta?'<p class="panel-aviso">Cargá el tipo de cambio para poder pasarlo a dólares.</p>':'')+
+        (quedan<-0.001&&producidas>0?'<p class="panel-aviso">Estarías vendiendo más de lo que cosechaste. Si es un forward de la campaña que viene, cambiá la campaña activa.</p>':'')+
+      '</div>';
+    },
+    validar:function(d){
+      if(d.moneda==="ARS"&&!(parseFloat(d.tipoCambio)>0)) return {tipoCambio:"Con precio en pesos hace falta el tipo de cambio."};
+    },
+    guardar:function(d){
+      var b={campaniaId:campActiva,cultivo:d.cultivo,fecha:d.fecha,tipoOperacion:d.tipoOperacion,
+             toneladas:parseFloat(d.toneladas),precioTn:parseFloat(d.precioTn),moneda:d.moneda,
+             tipoCambio:parseFloat(d.tipoCambio)||null,comprador:d.comprador,
+             fechaEntrega:d.fechaEntrega||null,nota:d.nota};
+      if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
+      else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
+    }});
+};
+A.borrarVenta=function(id){
+  var v=E.ventas.filter(function(x){return x.id===id;})[0];
+  confirmar("Eliminar venta",nf(v.toneladas,1)+" t de "+esc(CULTIVOS[v.cultivo].nom)+" del "+fecha(v.fecha)+".",function(){
+    E.ventas=E.ventas.filter(function(x){return x.id!==id;}); marcarBaja("ventas",id); avisar("Venta eliminada."); });
+};
+A.nuevoGasto=function(id){
+  var G=id?E.gastos.filter(function(g){return g.id===id;})[0]:null;
+  if(!campActiva){ avisar("Abrí una campaña antes de cargar gastos."); return; }
+  abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
+    nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
+    valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor}
+            :{fecha:hoyISO(),moneda:"USD"},
+    campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
+             opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
+            {k:"fecha",label:"Fecha",tipo:"date",req:true},
+            {k:"cultivoLoteId",label:"Lote y cultivo",tipo:"select",opciones:opcCLCampania(),
+             vacio:"Sin asignar — se reparte por hectárea",ancho:true},
+            {k:"monto",label:"Monto",tipo:"number",paso:"0.01",min:"0",req:true},
+            {k:"moneda",label:"Moneda",tipo:"select",req:true,opciones:[{v:"USD",t:"Dólares"},{v:"ARS",t:"Pesos"}]},
+            {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
+             hint:"Pesos por dólar ese día."},
+            {k:"proveedor",label:"Proveedor",ph:"Quién lo cobró"},
+            {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
+    panel:function(d){
+      var usd=aUSD(d.monto,d.moneda,d.tipoCambio);
+      var falta=(d.moneda==="ARS"&&!num(d.tipoCambio));
+      var cl=d.cultivoLoteId?clDe(d.cultivoLoteId):null;
+      var ha=cl?(num(cl.haCosechada)||num(cl.haSembrada)):0;
+      return '<div class="panel-vivo"><h4>'+esc(d.categoria||"Gasto")+'</h4>'+
+        '<div class="panel-fila"><span>En dólares</span><b>'+(falta?"—":nf(usd,0)+" USD")+'</b></div>'+
+        (cl?'<div class="panel-fila"><span>Va a '+esc(nombreLote(cl.loteId))+' · '+esc(CULTIVOS[cl.cultivo].nom)+'</span>'+
+            '<b>'+(ha>0&&!falta?nf(usd/ha,1)+" USD/ha":"—")+'</b></div>'
+           :'<div class="panel-fila"><span>Sin asignar: se reparte entre todos los cultivos<small>Según la superficie sembrada de cada uno</small></span></div>')+
+        (falta?'<p class="panel-aviso">Cargá el tipo de cambio para poder pasarlo a dólares.</p>':'')+
+      '</div>';
+    },
+    validar:function(d){
+      if(d.moneda==="ARS"&&!(parseFloat(d.tipoCambio)>0)) return {tipoCambio:"Con monto en pesos hace falta el tipo de cambio."};
+    },
+    guardar:function(d){
+      var b={campaniaId:campActiva,cultivoLoteId:d.cultivoLoteId||null,fecha:d.fecha,categoria:d.categoria,
+             descripcion:d.descripcion,monto:parseFloat(d.monto),moneda:d.moneda,
+             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor};
+      if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
+      else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
+    }});
+};
+A.borrarGasto=function(id){
+  var g=E.gastos.filter(function(x){return x.id===id;})[0];
+  confirmar("Eliminar gasto",esc(g.categoria)+" de "+nf(g.monto,0)+" "+esc(g.moneda)+" del "+fecha(g.fecha)+".",function(){
+    E.gastos=E.gastos.filter(function(x){return x.id!==id;}); marcarBaja("gastos",id); avisar("Gasto eliminado."); });
+};
+
 A.nuevoInsumo=function(id){
   var I=id?insumo(id):null;
   abrirForm({titulo:I?"Editar insumo":"Nuevo insumo",
@@ -2206,6 +2477,140 @@ function vistaInsumos(){
 
   return cab+alerta+tabla+libro;
 }
+function vistaFinanzas(){
+  var c=campania(campActiva), ec=economiaCampania(campActiva);
+  var cab='<div class="cabecera"><div><h1>Plata</h1>'+
+    '<div class="sub">Ventas, gastos y resultado de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
+    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
+    '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
+
+  var ventas=E.ventas.filter(function(v){return v.campaniaId===campActiva;})
+                     .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
+  var gastos=E.gastos.filter(function(g){return g.campaniaId===campActiva;})
+                     .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
+
+  if(!ventas.length && !gastos.length && ec.costos<0.01)
+    return cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
+      'Registrá las ventas de grano y los gastos que no son insumos —contratistas, fletes, arrendamiento— '+
+      'y acá vas a ver el resultado por lote y por cultivo.<br><br>'+
+      '<button class="btn" data-a="nuevaVenta">+ Registrar una venta</button></p></div>';
+
+  var signo=ec.resultado>=0?"":"−";
+  var color=ec.resultado>=0?"var(--ok)":"var(--alerta)";
+  var ficha='<div class="ficha">'+
+    '<div><div class="eyebrow">Ingresos por ventas</div><div class="v">'+nf(ec.ingresos)+'<span class="u">USD</span></div>'+
+      '<div class="nota">'+ventas.length+' operacion'+(ventas.length===1?"":"es")+'</div></div>'+
+    '<div><div class="eyebrow">Costos</div><div class="v">'+nf(ec.costos)+'<span class="u">USD</span></div>'+
+      '<div class="nota">Insumos aplicados más '+gastos.length+' gasto'+(gastos.length===1?"":"s")+'</div></div>'+
+    '<div><div class="eyebrow">Resultado</div><div class="v" style="color:'+color+'">'+signo+nf(Math.abs(ec.resultado))+'<span class="u">USD</span></div>'+
+      '<div class="nota">Ingresos menos costos</div></div>'+
+    '<div><div class="eyebrow">Por hectárea</div><div class="v" style="color:'+color+'">'+signo+nf(Math.abs(ec.porHa))+'<span class="u">USD/ha</span></div>'+
+      '<div class="nota">Sobre '+nf(ec.haTotal,1)+' ha sembradas</div></div>'+
+  '</div>';
+
+  /* granos: producido contra vendido */
+  var claves={}; Object.keys(ec.prod).forEach(function(k){claves[k]=1;}); Object.keys(ec.vend).forEach(function(k){claves[k]=1;});
+  var granos=Object.keys(claves).map(function(k){
+    var p=(ec.prod[k]||{}).kg/1000||0, v=ec.vend[k]||{tn:0,usd:0};
+    return {c:k, prod:p, tn:v.tn, usd:v.usd, resta:p-v.tn, precio:v.tn>0?v.usd/v.tn:0};
+  }).sort(function(a,b){return b.usd-a.usd;});
+
+  var bloqueGranos=granos.length?'<div class="bloque"><div class="bloque-cab"><h2>Granos: producido contra vendido</h2>'+
+    '<div class="aclara">El precio es el promedio ponderado de las ventas</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Cultivo</th><th class="num">Producido</th><th class="num">Vendido</th>'+
+    '<th class="num">Sin vender</th><th class="num">Precio medio</th><th class="num">Ingreso</th></tr></thead><tbody>'+
+    granos.map(function(g){
+      var cu=CULTIVOS[g.c];
+      return '<tr><td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</td>'+
+        '<td class="num">'+(g.prod>0?nf(g.prod,1)+' t':'—')+'</td>'+
+        '<td class="num">'+(g.tn>0?nf(g.tn,1)+' t':'—')+'</td>'+
+        '<td class="num" style="font-weight:700;color:'+(g.resta<-0.05?"var(--alerta)":(g.resta>0.05?"var(--ojo)":"var(--tierra-3)"))+'">'+
+          (Math.abs(g.resta)>0.05?nf(g.resta,1)+' t':'—')+'</td>'+
+        '<td class="num">'+(g.precio>0?nf(g.precio,1)+' USD':'—')+'</td>'+
+        '<td class="num" style="font-weight:700">'+(g.usd>0?nf(g.usd):'—')+'</td></tr>';
+    }).join("")+'</tbody></table></div></div>':'';
+
+  /* resultado por lote */
+  var lotes=ec.porLote.filter(function(x){ return x.ingreso>0.01||x.costo>0.01; })
+                      .sort(function(a,b){ return b.porHa-a.porHa; });
+  var bloqueLotes=lotes.length?'<div class="bloque"><div class="bloque-cab"><h2>Resultado por lote</h2>'+
+    '<div class="aclara">El ingreso de cada lote es su parte de lo vendido de ese cultivo</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Lote</th><th>Cultivo</th><th class="num">Ingreso</th>'+
+    '<th class="num col-opcional">Insumos</th><th class="num col-opcional">Otros gastos</th>'+
+    '<th class="num">Resultado</th><th class="num">USD/ha</th></tr></thead><tbody>'+
+    lotes.map(function(x){
+      var cu=CULTIVOS[x.cl.cultivo], pos=x.resultado>=0;
+      return '<tr><td><span class="lote-nom">'+esc(nombreLote(x.cl.loteId))+'</span><br>'+
+          '<span class="lote-est">'+nf(x.ha,1)+' ha</span></td>'+
+        '<td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</td>'+
+        '<td class="num">'+nf(x.ingreso)+'</td>'+
+        '<td class="num col-opcional">'+nf(x.insumos)+'</td>'+
+        '<td class="num col-opcional">'+nf(x.gastosDirectos+x.gastosIndirectos)+'</td>'+
+        '<td class="num" style="font-weight:700;color:'+(pos?"var(--ok)":"var(--alerta)")+'">'+
+          (pos?"":"−")+nf(Math.abs(x.resultado))+'</td>'+
+        '<td class="num" style="font-weight:700;color:'+(pos?"var(--ok)":"var(--alerta)")+'">'+
+          (pos?"":"−")+nf(Math.abs(x.porHa))+'</td></tr>';
+    }).join("")+'</tbody></table></div>'+
+    (ec.indirectos>0.01?'<p class="aviso bueno" style="margin:0 16px 16px">De los gastos hay '+nf(ec.indirectos)+
+      ' USD sin asignar a un cultivo. Se repartieron entre los lotes según la superficie sembrada de cada uno.</p>':'')+
+    '</div>':'';
+
+  var bloqueVentas='<div class="bloque"><div class="bloque-cab"><h2>Ventas</h2>'+
+    '<div class="aclara">'+ventas.length+' operaciones</div></div>'+
+    (ventas.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th class="num">Fecha</th><th>Cultivo</th>'+
+      '<th>Operación</th><th class="num">Toneladas</th><th class="num">Precio</th><th class="num">USD</th>'+
+      '<th class="col-opcional">Comprador</th><th class="der">Acciones</th></tr></thead><tbody>'+
+      ventas.map(function(v){
+        var cu=CULTIVOS[v.cultivo], op=TIPOS_OPERACION[v.tipoOperacion]||{nom:v.tipoOperacion};
+        return '<tr><td class="num">'+fecha(v.fecha)+'</td>'+
+          '<td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</td>'+
+          '<td><span style="font-weight:600">'+esc(op.nom)+'</span>'+
+            (v.fechaEntrega?'<br><span class="lote-est">entrega '+fecha(v.fechaEntrega)+'</span>':'')+'</td>'+
+          '<td class="num">'+nf(v.toneladas,1)+'</td>'+
+          '<td class="num">'+nf(v.precioTn,1)+' <span class="lote-est">'+esc(v.moneda)+'</span></td>'+
+          '<td class="num" style="font-weight:700">'+nf(importeVenta(v))+'</td>'+
+          '<td class="col-opcional" style="font-size:13px">'+(esc(v.comprador)||"—")+'</td>'+
+          '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevaVenta" data-arg="'+v.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarVenta" data-arg="'+v.id+'">×</button></span></td></tr>';
+      }).join("")+'</tbody></table></div>'
+     :'<p class="vacio">Sin ventas cargadas todavía.</p>')+'</div>';
+
+  var porCat={};
+  gastos.forEach(function(g){ porCat[g.categoria]=(porCat[g.categoria]||0)+importeGasto(g); });
+  var catOrden=Object.keys(porCat).sort(function(a,b){return porCat[b]-porCat[a];});
+  var totalIns=ec.porLote.reduce(function(a,x){return a+x.insumos;},0);
+  var topeCat=Math.max(totalIns, catOrden.length?porCat[catOrden[0]]:0)||1;
+
+  var bloqueGastos='<div class="bloque"><div class="bloque-cab"><h2>En qué se fue la plata</h2>'+
+    '<div class="aclara">'+nf(ec.costos)+' USD en total</div></div><div class="bloque-cuerpo">'+
+    '<div class="rinde-fila"><div class="rinde-nom"><i class="punto" style="background:var(--c-soja-1)"></i>Insumos</div>'+
+      '<div class="rinde-pista"><div class="rinde-barra" style="width:'+(totalIns/topeCat*100)+'%;background:var(--c-soja-1)"></div></div>'+
+      '<div class="rinde-val">'+nf(totalIns)+'</div><div class="rinde-lotes">USD</div></div>'+
+    catOrden.map(function(k){
+      return '<div class="rinde-fila"><div class="rinde-nom"><i class="punto" style="background:var(--c-maiz-t)"></i>'+esc(k)+'</div>'+
+        '<div class="rinde-pista"><div class="rinde-barra" style="width:'+(porCat[k]/topeCat*100)+'%;background:var(--c-maiz-t)"></div></div>'+
+        '<div class="rinde-val">'+nf(porCat[k])+'</div><div class="rinde-lotes">USD</div></div>';
+    }).join("")+'</div>'+
+    (gastos.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th class="num">Fecha</th><th>Categoría</th>'+
+      '<th class="col-opcional">Detalle</th><th>Asignado a</th><th class="num">Monto</th><th class="num">USD</th>'+
+      '<th class="der">Acciones</th></tr></thead><tbody>'+
+      gastos.map(function(g){
+        var cl=g.cultivoLoteId?clDe(g.cultivoLoteId):null;
+        return '<tr><td class="num">'+fecha(g.fecha)+'</td>'+
+          '<td style="font-weight:600">'+esc(g.categoria)+'</td>'+
+          '<td class="col-opcional" style="font-size:13px">'+(esc(g.descripcion)||"—")+
+            (g.proveedor?'<br><span class="lote-est">'+esc(g.proveedor)+'</span>':'')+'</td>'+
+          '<td style="font-size:13px">'+(cl?esc(nombreLote(cl.loteId))+'<br><span class="lote-est">'+esc(CULTIVOS[cl.cultivo].nom)+'</span>'
+                                            :'<span class="lote-est">Se reparte por hectárea</span>')+'</td>'+
+          '<td class="num">'+nf(g.monto)+' <span class="lote-est">'+esc(g.moneda)+'</span></td>'+
+          '<td class="num" style="font-weight:700">'+nf(importeGasto(g))+'</td>'+
+          '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoGasto" data-arg="'+g.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarGasto" data-arg="'+g.id+'">×</button></span></td></tr>';
+      }).join("")+'</tbody></table></div>':'')+'</div>';
+
+  return cab+ficha+bloqueGranos+bloqueLotes+bloqueVentas+bloqueGastos;
+}
+
 function vistaClima(){
   var c=campania(campActiva);
   return '<div class="cabecera"><div><h1>Lluvias</h1>'+
@@ -2324,9 +2729,10 @@ function vistaLote(){
    11 · PINTADO Y EVENTOS
    ============================================================ */
 var VISTAS={hoy:vistaHoy,campania:vistaCampania,lotes:vistaLotes,cultivos:vistaCultivos,
-            ordenes:vistaOrdenes,insumos:vistaInsumos,clima:vistaClima,monitoreo:vistaMonitoreo,lote:vistaLote};
+            ordenes:vistaOrdenes,insumos:vistaInsumos,clima:vistaClima,monitoreo:vistaMonitoreo,
+            finanzas:vistaFinanzas,lote:vistaLote};
 /* Estas vistas no existen sin una campaña abierta. */
-var NECESITAN_CAMPANIA={campania:1,cultivos:1,clima:1,lote:1};
+var NECESITAN_CAMPANIA={campania:1,cultivos:1,clima:1,lote:1,finanzas:1};
 
 function vistaPrimerosPasos(){
   var hayCampos=E.establecimientos.length>0, hayLotes=E.lotes.length>0;
@@ -2440,7 +2846,8 @@ function pintar(){
     return '<option value="'+c.id+'"'+(c.id===campActiva?" selected":"")+'>'+esc(c.nombre)+' — '+(c.estado==="curso"?"en curso":"cerrada")+'</option>';}).join("");
   var n={lotes:E.lotes.length, cultivos:clsDeCampania(campActiva).length,
     ordenes:E.ordenes.filter(function(o){return o.campaniaId===campActiva&&o.estado!=="completada";}).length,
-    insumos:E.insumos.length, monitoreo:E.monitoreo.filter(function(o){return o.campaniaId===campActiva;}).length};
+    insumos:E.insumos.length, monitoreo:E.monitoreo.filter(function(o){return o.campaniaId===campActiva;}).length,
+    finanzas:E.ventas.filter(function(v){return v.campaniaId===campActiva;}).length};
   document.querySelectorAll("[data-n]").forEach(function(el){
     var v=n[el.getAttribute("data-n")]; el.textContent=v||""; el.style.display=v?"":"none"; });
   var na=vistaActual==="lote"?"campania":vistaActual;
