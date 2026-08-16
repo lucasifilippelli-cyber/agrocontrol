@@ -429,7 +429,7 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
     <a href="#" data-vista="campania">Resumen</a>
     <a href="#" data-vista="cultivos">Siembra y cosecha <span class="n" data-n="cultivos"></span></a>
     <a href="#" data-vista="lotes">Lotes <span class="n" data-n="lotes"></span></a>
-    <a href="#" data-vista="finanzas">Plata <span class="n" data-n="finanzas"></span></a>
+    <a href="#" data-vista="finanzas">Finanzas <span class="n" data-n="finanzas"></span></a>
     <hr>
     <div class="nav-titulo eyebrow">Apoyo</div>
     <a href="#" data-vista="insumos">Insumos <span class="n" data-n="insumos"></span></a>
@@ -2511,7 +2511,7 @@ function vistaInsumos(){
 }
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
-  var cab='<div class="cabecera"><div><h1>Plata</h1>'+
+  var cab='<div class="cabecera"><div><h1>Finanzas</h1>'+
     '<div class="sub">Ventas, gastos y resultado de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
     '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
     '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
@@ -2613,7 +2613,7 @@ function vistaFinanzas(){
   var totalIns=ec.porLote.reduce(function(a,x){return a+x.insumos;},0);
   var topeCat=Math.max(totalIns, catOrden.length?porCat[catOrden[0]]:0)||1;
 
-  var bloqueGastos='<div class="bloque"><div class="bloque-cab"><h2>En qué se fue la plata</h2>'+
+  var bloqueGastos='<div class="bloque"><div class="bloque-cab"><h2>Composición de los costos</h2>'+
     '<div class="aclara">'+nf(ec.costos)+' USD en total</div></div><div class="bloque-cuerpo">'+
     '<div class="rinde-fila"><div class="rinde-nom"><i class="punto" style="background:var(--c-soja-1)"></i>Insumos</div>'+
       '<div class="rinde-pista"><div class="rinde-barra" style="width:'+(totalIns/topeCat*100)+'%;background:var(--c-soja-1)"></div></div>'+
