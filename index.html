@@ -329,6 +329,29 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .campo .err{font-size:12px;color:var(--alerta);font-weight:600}
 .modal-nota{font-size:13px;color:var(--tierra-2);background:var(--panel-2);border-left:3px solid var(--c-maiz-t);padding:10px 13px;margin-bottom:16px;border-radius:0 3px 3px 0}
 
+/* panel que se recalcula mientras se completa el formulario */
+.panel-vivo{margin-top:17px;border:1px solid var(--linea);border-radius:3px;overflow:hidden}
+.panel-vivo h4{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--tierra-3);
+  padding:9px 13px;background:var(--panel-2);border-bottom:1px solid var(--linea)}
+.panel-fila{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:7px 13px;font-size:13px;border-bottom:1px solid var(--linea-suave)}
+.panel-fila:last-child{border-bottom:0}
+.panel-fila b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
+.panel-fila.mal b{color:var(--alerta)}
+.panel-fila.bien b{color:var(--ok)}
+.panel-fila small{display:block;color:var(--tierra-3);font-size:11.5px;font-weight:400}
+.panel-aviso{padding:9px 13px;font-size:12.5px;background:var(--alerta-bg);color:var(--tierra);border-top:1px solid var(--alerta)}
+.panel-aviso.bien{background:var(--ok-bg);border-top-color:var(--ok)}
+
+/* mezcla de tanque: varios insumos con su dosis */
+.mezcla-fila{display:grid;grid-template-columns:1fr 104px 34px;gap:8px;align-items:center;margin-bottom:8px}
+.mezcla-fila select,.mezcla-fila input{font-family:var(--sans);font-size:13.5px;padding:8px 10px;border:1px solid var(--linea-fuerte);border-radius:3px;background:var(--campo-bg);color:var(--tierra);width:100%}
+.mezcla-fila input{font-family:var(--mono)}
+.mezcla-quitar{background:none;border:1px solid var(--linea-fuerte);border-radius:3px;color:var(--alerta);font-size:16px;line-height:1;cursor:pointer;padding:7px 0}
+.mezcla-quitar:hover{background:var(--alerta-bg)}
+.mezcla-sumar{background:none;border:1px dashed var(--linea-fuerte);border-radius:3px;color:var(--lluvia);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;padding:9px;width:100%}
+.mezcla-sumar:hover{border-color:var(--lluvia);background:var(--panel-2)}
+.mezcla-vacia{font-size:12.5px;color:var(--tierra-3);padding:4px 0 10px}
+
 /* ---------- portada: entrar o crear cuenta ---------- */
 .portada{min-height:100vh;display:grid;place-items:center;padding:28px 18px;background:var(--horizonte)}
 .portada-caja{width:min(430px,100%)}
@@ -419,7 +442,8 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
 <dialog id="dlg"><div class="modal">
   <div class="modal-cab"><h3 id="dlg-titulo"></h3><button type="button" id="dlg-x" aria-label="Cerrar">×</button></div>
   <form id="dlg-form" novalidate>
-    <div class="modal-cuerpo"><div id="dlg-nota"></div><div class="campos" id="dlg-campos"></div></div>
+    <div class="modal-cuerpo"><div id="dlg-nota"></div><div class="campos" id="dlg-campos"></div>
+      <div id="dlg-panel"></div></div>
     <div class="modal-pie">
       <button type="button" class="btn sec" id="dlg-cancelar">Cancelar</button>
       <button type="submit" class="btn" id="dlg-ok">Guardar</button>
@@ -646,23 +670,56 @@ function semilla(){
     {id:"t6",cultivoLoteId:"cl1",fecha:"2026-05-04",cartaPorte:"0032-45134",kgNetos:236550,humedad:16.2}
   ];
   var insumos=[
-    {id:"i1",nombre:"Semilla DK 7220 VT3P",tipo:"Semilla",unidad:"bolsa",precio:195,stock:420},
-    {id:"i2",nombre:"Urea granulada",tipo:"Fertilizante",unidad:"kg",precio:0.52,stock:184000},
-    {id:"i3",nombre:"MAP arrancador",tipo:"Fertilizante",unidad:"kg",precio:0.68,stock:96000},
-    {id:"i4",nombre:"Glifosato 62 %",tipo:"Herbicida",unidad:"l",precio:4.10,stock:12400},
-    {id:"i5",nombre:"Acetoclor",tipo:"Herbicida",unidad:"l",precio:6.40,stock:3800},
-    {id:"i6",nombre:"Atrazina 90",tipo:"Herbicida",unidad:"kg",precio:3.80,stock:2600},
-    {id:"i7",nombre:"Cipermetrina",tipo:"Insecticida",unidad:"l",precio:9.00,stock:640},
-    {id:"i8",nombre:"Azoxistrobina + Ciproconazol",tipo:"Fungicida",unidad:"l",precio:22.50,stock:410}
+    {id:"i1",nombre:"Semilla DK 7220 VT3P",tipo:"Semilla",unidad:"bolsa",precio:195},
+    {id:"i2",nombre:"Urea granulada",tipo:"Fertilizante",unidad:"kg",precio:0.52},
+    {id:"i3",nombre:"MAP arrancador",tipo:"Fertilizante",unidad:"kg",precio:0.68},
+    {id:"i4",nombre:"Glifosato 62 %",tipo:"Herbicida",unidad:"l",precio:4.10},
+    {id:"i5",nombre:"Acetoclor",tipo:"Herbicida",unidad:"l",precio:6.40},
+    {id:"i6",nombre:"Atrazina 90",tipo:"Herbicida",unidad:"kg",precio:3.80},
+    {id:"i7",nombre:"Cipermetrina",tipo:"Insecticida",unidad:"l",precio:9.00},
+    {id:"i8",nombre:"Azoxistrobina + Ciproconazol",tipo:"Fungicida",unidad:"l",precio:22.50},
+    {id:"i9",nombre:"Aceite metilado",tipo:"Coadyuvante",unidad:"l",precio:3.20}
   ];
   var h=new Date(); var d=function(n){var x=new Date(h.getTime()+n*864e5);return x.toISOString().slice(0,10);};
   var ordenes=[
-    {id:"o1",campaniaId:"c2627",loteId:"l4",cultivoLoteId:"cl16",tipo:"Pulverización",fechaPlan:d(2),responsable:"Contratista Gómez",superficie:148.3,insumoId:"i8",dosis:"0,4 l/ha",detalle:"Fungicida en hoja bandera. Se alcanzó el umbral de roya en el último monitoreo.",estado:"pendiente",fechaCierre:null},
-    {id:"o2",campaniaId:"c2627",loteId:"l13",cultivoLoteId:"cl17",tipo:"Fertilización",fechaPlan:d(1),responsable:"Equipo propio",superficie:134.0,insumoId:"i2",dosis:"120 kg/ha",detalle:"Refertilización nitrogenada en encañazón.",estado:"en_curso",fechaCierre:null},
-    {id:"o3",campaniaId:"c2627",loteId:"l9",cultivoLoteId:"cl18",tipo:"Pulverización",fechaPlan:d(4),responsable:"Contratista Gómez",superficie:151.7,insumoId:"i4",dosis:"2,5 l/ha",detalle:"Control de raigrás resistente en la cabecera norte.",estado:"pendiente",fechaCierre:null},
-    {id:"o4",campaniaId:"c2627",loteId:"l10",cultivoLoteId:"cl19",tipo:"Monitoreo",fechaPlan:d(3),responsable:"Vos",superficie:140.5,insumoId:"",dosis:"",detalle:"Recorrida de roya y pulgón en trigo.",estado:"pendiente",fechaCierre:null},
-    {id:"o5",campaniaId:"c2627",loteId:"l1",cultivoLoteId:"cl21",tipo:"Siembra",fechaPlan:"2026-12-14",responsable:"Equipo propio",superficie:148.6,insumoId:"i1",dosis:"0,93 bolsa/ha",detalle:"Maíz tardío. Sembradora de 52 cm, 78.000 pl/ha.",estado:"pendiente",fechaCierre:null},
-    {id:"o6",campaniaId:"c2627",loteId:"l5",cultivoLoteId:"cl20",tipo:"Fertilización",fechaPlan:d(-14),responsable:"Equipo propio",superficie:98.2,insumoId:"i2",dosis:"110 kg/ha",detalle:"Nitrógeno en macollaje.",estado:"completada",fechaCierre:d(-13)}
+    {id:"o1",campaniaId:"c2627",loteId:"l4",cultivoLoteId:"cl16",tipo:"Pulverización",fechaPlan:d(2),responsable:"Contratista Gómez",superficie:148.3,detalle:"Fungicida en hoja bandera. Se alcanzó el umbral de roya en el último monitoreo.",estado:"pendiente",fechaCierre:null},
+    {id:"o2",campaniaId:"c2627",loteId:"l13",cultivoLoteId:"cl17",tipo:"Fertilización",fechaPlan:d(1),responsable:"Equipo propio",superficie:134.0,detalle:"Refertilización nitrogenada en encañazón.",estado:"en_curso",fechaCierre:null},
+    {id:"o3",campaniaId:"c2627",loteId:"l9",cultivoLoteId:"cl18",tipo:"Pulverización",fechaPlan:d(4),responsable:"Contratista Gómez",superficie:151.7,detalle:"Raigrás resistente en la cabecera norte. Va con coadyuvante.",estado:"pendiente",fechaCierre:null},
+    {id:"o4",campaniaId:"c2627",loteId:"l10",cultivoLoteId:"cl19",tipo:"Monitoreo",fechaPlan:d(3),responsable:"Vos",superficie:140.5,detalle:"Recorrida de roya y pulgón en trigo.",estado:"pendiente",fechaCierre:null},
+    {id:"o5",campaniaId:"c2627",loteId:"l1",cultivoLoteId:"cl21",tipo:"Siembra",fechaPlan:"2026-12-14",responsable:"Equipo propio",superficie:148.6,detalle:"Maíz tardío. Sembradora de 52 cm, 78.000 pl/ha.",estado:"pendiente",fechaCierre:null},
+    {id:"o6",campaniaId:"c2627",loteId:"l5",cultivoLoteId:"cl20",tipo:"Fertilización",fechaPlan:d(-14),responsable:"Equipo propio",superficie:98.2,detalle:"Nitrógeno en macollaje.",estado:"completada",fechaCierre:d(-13)}
+  ];
+  /* La mezcla de tanque: una pulverización real lleva más de un producto. */
+  var ordenInsumos=[
+    {id:"oi1",ordenId:"o1",insumoId:"i8",dosisHa:0.4},
+    {id:"oi2",ordenId:"o1",insumoId:"i9",dosisHa:0.5},
+    {id:"oi3",ordenId:"o2",insumoId:"i2",dosisHa:120},
+    {id:"oi4",ordenId:"o3",insumoId:"i4",dosisHa:2.5},
+    {id:"oi5",ordenId:"o3",insumoId:"i9",dosisHa:0.5},
+    {id:"oi6",ordenId:"o5",insumoId:"i1",dosisHa:0.93},
+    {id:"oi7",ordenId:"o6",insumoId:"i2",dosisHa:110}
+  ];
+  /* Compras que le dan existencia al galpón de cada campo, y la salida
+     del único trabajo que ya se completó. */
+  var M=function(id,ins,est,dias,tipo,cant,precio,nota,ordenId){
+    return {id:id,insumoId:ins,establecimientoId:est,fecha:d(dias),tipo:tipo,cantidad:cant,
+            precioUnitario:precio,ordenId:ordenId||null,nota:nota};
+  };
+  var movimientos=[
+    M("m1","i1","e1",-60,"compra",420,195,"Compra de semilla de maíz"),
+    M("m2","i2","e1",-45,"compra",120000,0.52,"Urea a granel"),
+    M("m3","i2","e2",-45,"compra",40000,0.52,"Urea a granel"),
+    M("m4","i2","e4",-40,"compra",24000,0.52,"Urea a granel"),
+    M("m5","i3","e1",-45,"compra",96000,0.68,"MAP arrancador"),
+    M("m6","i4","e1",-30,"compra",6000,4.10,"Glifosato"),
+    M("m7","i4","e3",-30,"compra",6400,4.10,"Glifosato"),
+    M("m8","i5","e1",-30,"compra",3800,6.40,"Acetoclor"),
+    M("m9","i6","e1",-30,"compra",2600,3.80,"Atrazina"),
+    M("m10","i7","e1",-20,"compra",640,9.00,"Cipermetrina"),
+    M("m11","i8","e1",-12,"compra",410,22.50,"Fungicida para la fina"),
+    M("m12","i9","e1",-12,"compra",300,3.20,"Coadyuvante"),
+    M("m13","i9","e3",-12,"compra",200,3.20,"Coadyuvante"),
+    M("m14","i2","e2",-13,"aplicacion",-10802,0.52,"Fertilización en Lote 12 — Alto","o6")
   ];
   var monitoreo=[
     {id:"m1",campaniaId:"c2627",loteId:"l4",fecha:d(-3),tipo:"Enfermedad",estadio:"Z39 hoja bandera",severidad:"Media",nota:"Roya anaranjada en el estrato inferior, 12 % de incidencia. Umbral alcanzado."},
@@ -670,7 +727,8 @@ function semilla(){
     {id:"m3",campaniaId:"c2627",loteId:"l13",fecha:d(-6),tipo:"Cultivo",estadio:"Z32 encañazón",severidad:"Baja",nota:"Buen macollaje, cobertura completa del entresurco."}
   ];
   return {establecimientos:est,lotes:lotes,campanias:camps,cultivoLotes:cl,tickets:tickets,
-          insumos:insumos,ordenes:ordenes,monitoreo:monitoreo};
+          insumos:insumos,ordenes:ordenes,ordenInsumos:ordenInsumos,movimientos:movimientos,
+          monitoreo:monitoreo};
 }
 
 /* La colección en memoria de cada tabla. Las vistas siguen leyendo de E igual
@@ -678,9 +736,11 @@ function semilla(){
 var TABLAS = {
   establecimientos:"establecimientos", lotes:"lotes", campanias:"campanias",
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
-  ordenes:"ordenes", monitoreo:"monitoreo"
+  ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
+  monitoreo:"monitoreo"
 };
-var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],ordenes:[],monitoreo:[]};
+var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
+           ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -761,14 +821,19 @@ function semillaConIds(){
   s.cultivoLotes.forEach(function(x){ x.id=nid(x.id); x.loteId=nid(x.loteId); x.campaniaId=nid(x.campaniaId); });
   s.tickets.forEach(function(x){ x.id=nid(x.id); x.cultivoLoteId=nid(x.cultivoLoteId); });
   s.ordenes.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); x.loteId=nid(x.loteId);
-                                 x.cultivoLoteId=nid(x.cultivoLoteId); x.insumoId=x.insumoId?nid(x.insumoId):null; });
+                                 x.cultivoLoteId=nid(x.cultivoLoteId); });
+  s.ordenInsumos.forEach(function(x){ x.id=nid(x.id); x.ordenId=nid(x.ordenId); x.insumoId=nid(x.insumoId); });
+  s.movimientos.forEach(function(x){ x.id=nid(x.id); x.insumoId=nid(x.insumoId);
+                                     x.establecimientoId=nid(x.establecimientoId);
+                                     x.ordenId=x.ordenId?nid(x.ordenId):null; });
   s.monitoreo.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); x.loteId=nid(x.loteId); });
   return s;
 }
 function cargarEjemplo(){
   var s=semillaConIds();
   /* orden de inserción: primero lo que otros referencian */
-  var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes","monitoreo"];
+  var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes",
+             "ordenInsumos","movimientos","monitoreo"];
   orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
   campActiva=(s.campanias.filter(function(c){return c.estado==="curso";})[0]||s.campanias[0]).id;
   estabClima=s.establecimientos[0].id;
@@ -969,6 +1034,64 @@ function nombreLote(id){ var l=lote(id); return l?l.nombre:"—"; }
 function estabDeLote(id){ var l=lote(id); return l?estab(l.establecimientoId):null; }
 function nombreEstab(id){ var e=estabDeLote(id); return e?e.nombre:""; }
 
+/* ---------- stock: la existencia sale de los movimientos ----------
+   Nunca se guarda un número de stock: se suma el libro. Así el saldo y su
+   historia no pueden discrepar, que era el problema de tener las dos cosas. */
+function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
+function movimientosDe(insumoId, estId){
+  return E.movimientos.filter(function(m){
+    return m.insumoId===insumoId && (!estId||m.establecimientoId===estId);
+  });
+}
+function stockDe(insumoId, estId){
+  return movimientosDe(insumoId,estId).reduce(function(a,m){ return a+num(m.cantidad); },0);
+}
+/* Comprometido en trabajos abiertos: todavía está en el galpón pero ya tiene dueño. */
+function reservadoDe(insumoId, estId){
+  var t=0;
+  E.ordenes.forEach(function(o){
+    if(o.estado==="completada") return;
+    var l=lote(o.loteId); if(!l) return;
+    if(estId && l.establecimientoId!==estId) return;
+    E.ordenInsumos.forEach(function(x){
+      if(x.ordenId===o.id && x.insumoId===insumoId) t+=num(x.dosisHa)*num(o.superficie);
+    });
+  });
+  return t;
+}
+function disponibleDe(insumoId, estId){ return stockDe(insumoId,estId)-reservadoDe(insumoId,estId); }
+function insumosDeOrden(id){ return E.ordenInsumos.filter(function(x){ return x.ordenId===id; }); }
+function estabDeOrden(o){ var l=lote(o.loteId); return l?l.establecimientoId:null; }
+function costoOrden(o){
+  return insumosDeOrden(o.id).reduce(function(a,x){
+    var i=insumo(x.insumoId); return a+(i?num(i.precio)*num(x.dosisHa)*num(o.superficie):0);
+  },0);
+}
+
+/* ---------- cuánto del lote está tomado en la campaña ----------
+   El doble cultivo usa el lote entero dos veces en el año, así que la
+   disponibilidad se mira por orden, no sumando superficies. */
+function ocupacionLote(loteId, cid){
+  var l=lote(loteId); if(!l) return null;
+  var cs=E.cultivoLotes.filter(function(x){ return x.loteId===loteId&&x.campaniaId===cid; });
+  var porOrden={}; cs.forEach(function(x){ porOrden[x.orden]=x; });
+  return {
+    total:l.ha, cultivos:cs, porOrden:porOrden,
+    sembrada:cs.reduce(function(a,x){return a+num(x.haSembrada);},0),
+    cosechada:cs.reduce(function(a,x){return a+num(x.haCosechada);},0),
+    libre:function(orden){ return porOrden[orden]?0:l.ha; }
+  };
+}
+/* Del padrón entero: cuánto tiene cultivo asignado y cuánto sigue libre. */
+function ocupacionPadron(cid){
+  var conCultivo=0, total=0;
+  E.lotes.forEach(function(l){
+    total+=num(l.ha);
+    if(E.cultivoLotes.some(function(x){return x.loteId===l.id&&x.campaniaId===cid;})) conCultivo+=num(l.ha);
+  });
+  return {total:total, asignada:conCultivo, libre:total-conCultivo};
+}
+
 function resumenCampania(cid){
   var cls=clsDeCampania(cid), haPlan=0,haSem=0,haCos=0,kg=0;
   cls.forEach(function(cl){ var l=lote(cl.loteId);
@@ -1002,15 +1125,53 @@ function avisar(m){ var t=$("toast"); t.textContent=m; t.classList.add("ver"); c
 /* ============================================================
    7 · FORMULARIOS
    ============================================================ */
-var alEnviar=null;
+var alEnviar=null, cfgActual=null;
+
+/* ---------- mezcla de tanque ---------- */
+function filaMezcla(insumoId, dosis){
+  return '<div class="mezcla-fila">'+
+    '<select class="mezcla-insumo">'+
+      '<option value="">Elegí un insumo</option>'+
+      E.insumos.map(function(i){
+        return '<option value="'+i.id+'"'+(i.id===insumoId?" selected":"")+'>'+esc(i.nombre)+' ('+esc(i.unidad)+'/ha)</option>';
+      }).join("")+
+    '</select>'+
+    '<input type="number" class="mezcla-dosis" step="0.001" min="0" placeholder="Dosis" value="'+(dosis!=null?dosis:"")+'">'+
+    '<button type="button" class="mezcla-quitar" aria-label="Quitar">×</button>'+
+  '</div>';
+}
+function leerMezcla(){
+  return Array.prototype.map.call(document.querySelectorAll(".mezcla-fila"),function(f){
+    return {insumoId:f.querySelector(".mezcla-insumo").value,
+            dosisHa:parseFloat(f.querySelector(".mezcla-dosis").value)||0};
+  }).filter(function(x){ return x.insumoId && x.dosisHa>0; });
+}
+function datosDelForm(){
+  var d={};
+  new FormData($("dlg-form")).forEach(function(v,k){ d[k]=typeof v==="string"?v.trim():v; });
+  if(document.getElementById("caja-mezcla")) d.mezcla=leerMezcla();
+  return d;
+}
+function refrescarPanel(){
+  if(!cfgActual||!cfgActual.panel) return;
+  $("dlg-panel").innerHTML=cfgActual.panel(datosDelForm())||"";
+}
+
 function abrirForm(cfg){
+  cfgActual=cfg;
   $("dlg-titulo").textContent=cfg.titulo;
   $("dlg-ok").textContent=cfg.ok||"Guardar";
   $("dlg-nota").innerHTML=cfg.nota?'<p class="modal-nota">'+cfg.nota+'</p>':"";
   $("dlg-campos").innerHTML=cfg.campos.map(function(c){
     var v=(cfg.valores&&cfg.valores[c.k]!=null)?cfg.valores[c.k]:(c.valor!=null?c.valor:"");
     var ctrl;
-    if(c.tipo==="select"){
+    if(c.tipo==="mezcla"){
+      var filas=(v&&v.length)?v:[];
+      ctrl='<div id="caja-mezcla">'+
+        '<div id="mezcla-filas">'+filas.map(function(x){ return filaMezcla(x.insumoId,x.dosisHa); }).join("")+'</div>'+
+        (filas.length?'':'<p class="mezcla-vacia">Sin insumos. Una pulverización suele llevar varios.</p>')+
+        '<button type="button" class="mezcla-sumar" id="mezcla-sumar">+ Agregar insumo a la mezcla</button></div>';
+    } else if(c.tipo==="select"){
       ctrl='<select name="'+c.k+'"'+(c.req?" required":"")+'>'+(c.vacio?'<option value="">'+esc(c.vacio)+'</option>':'')+
         c.opciones.map(function(o){return '<option value="'+esc(o.v)+'"'+(String(o.v)===String(v)?" selected":"")+'>'+esc(o.t)+'</option>';}).join("")+'</select>';
     } else if(c.tipo==="textarea"){
@@ -1028,12 +1189,33 @@ function abrirForm(cfg){
     if(k.length){ k.forEach(function(x){ var s=$("dlg-campos").querySelector('[data-err="'+x+'"]'); if(s) s.textContent=e[x]; }); return false; }
     cfg.guardar(d); return true;
   };
+  /* la mezcla crece y se achica; el panel se recalcula con cada cambio */
+  var sumar=$("mezcla-sumar");
+  if(sumar){
+    sumar.addEventListener("click",function(){
+      var vacia=$("dlg-campos").querySelector(".mezcla-vacia"); if(vacia) vacia.remove();
+      $("mezcla-filas").insertAdjacentHTML("beforeend",filaMezcla("",""));
+      refrescarPanel();
+      var ult=$("mezcla-filas").lastElementChild; if(ult) ult.querySelector("select").focus();
+    });
+    $("mezcla-filas").addEventListener("click",function(ev){
+      var q=ev.target.closest(".mezcla-quitar"); if(!q) return;
+      q.closest(".mezcla-fila").remove(); refrescarPanel();
+    });
+  }
+  $("dlg-panel").innerHTML="";
+  if(cfg.panel){
+    refrescarPanel();
+    $("dlg-form").addEventListener("input",refrescarPanel);
+    $("dlg-form").addEventListener("change",refrescarPanel);
+  }
+
   $("dlg").showModal();
   var p=$("dlg-campos").querySelector("input,select,textarea"); if(p) p.focus();
 }
 $("dlg-form").addEventListener("submit",function(ev){
   ev.preventDefault();
-  var d={}; new FormData(ev.target).forEach(function(v,k){ d[k]=typeof v==="string"?v.trim():v; });
+  var d=datosDelForm();
   var falta={};
   $("dlg-campos").querySelectorAll("[required]").forEach(function(el){ if(!String(el.value).trim()) falta[el.name]="Este dato es obligatorio."; });
   if(Object.keys(falta).length){
@@ -1059,6 +1241,73 @@ function opcCLCampania(){ return clsDeCampania(campActiva).map(function(cl){retu
 /* ============================================================
    8 · ACCIONES
    ============================================================ */
+/* ---------- paneles que se recalculan mientras completás ---------- */
+/* modo "planificar": interesa cuánto queda libre. modo "trabajo": ya hay un
+   cultivo y lo que interesa es sobre cuánta superficie se va a trabajar. */
+function panelLote(loteId, orden, modo){
+  if(!loteId) return '<div class="panel-vivo"><h4>Superficie</h4>'+
+    '<div class="panel-fila"><span>Elegí un lote para ver cuánto tiene disponible</span></div></div>';
+  var planificando=(modo!=="trabajo");
+  var l=lote(loteId), oc=ocupacionLote(loteId,campActiva), c=campania(campActiva);
+  var libre=oc.libre(orden), tomado=oc.porOrden[orden];
+  var detalle=oc.cultivos.length
+    ? oc.cultivos.sort(function(a,b){return a.orden-b.orden;}).map(function(x){
+        var cu=CULTIVOS[x.cultivo];
+        return '<div class="panel-fila"><span><i class="punto" style="background:'+cu.color+'"></i>'+
+          esc(cu.nom)+' <small>'+x.orden+'º cultivo · '+esc(x.estado)+'</small></span>'+
+          '<b>'+(x.haSembrada?nf(x.haSembrada,1)+' ha':'sin sembrar')+'</b></div>';
+      }).join("")
+    : '<div class="panel-fila"><span>Todavía no tiene nada en '+esc(c.nombre)+'</span></div>';
+  return '<div class="panel-vivo"><h4>'+esc(l.nombre)+' · '+esc(nombreEstab(loteId))+'</h4>'+
+    '<div class="panel-fila"><span>Superficie del lote</span><b>'+nf(l.ha,1)+' ha</b></div>'+
+    detalle+
+    '<div class="panel-fila"><span>Sembrado en la campaña<small>Sumando los dos cultivos del año</small></span>'+
+      '<b>'+nf(oc.sembrada,1)+' ha</b></div>'+
+    (planificando
+      ? '<div class="panel-fila '+(libre?"bien":"mal")+'"><span>Disponible para el '+orden+'º cultivo</span>'+
+        '<b>'+nf(libre,1)+' ha</b></div>'+
+        (tomado?'<p class="panel-aviso">El '+orden+'º cultivo del lote ya está tomado por '+
+          esc(CULTIVOS[tomado.cultivo].nom)+'. Elegí el otro orden o sacá ese cultivo.</p>':'')
+      : (oc.cosechada>0.05?'<div class="panel-fila"><span>Ya cosechado</span><b>'+nf(oc.cosechada,1)+' ha</b></div>':''))+
+  '</div>';
+}
+
+/* Cuánto insumo pide la mezcla y si alcanza en el campo de ese lote. */
+function panelMezcla(cultivoLoteId, superficie, mezcla, ordenId){
+  var cl=cultivoLoteId?clDe(cultivoLoteId):null;
+  var estId=cl?(lote(cl.loteId)||{}).establecimientoId:null;
+  var ha=num(superficie);
+  var filas=[], faltantes=[], costo=0;
+  (mezcla||[]).forEach(function(x){
+    var i=insumo(x.insumoId); if(!i) return;
+    var necesita=num(x.dosisHa)*ha;
+    /* al editar, lo que esta misma orden ya tenía reservado no cuenta como ajeno */
+    var reservaPropia=0;
+    if(ordenId){
+      var prev=E.ordenInsumos.filter(function(y){return y.ordenId===ordenId&&y.insumoId===x.insumoId;})[0];
+      var o=E.ordenes.filter(function(y){return y.id===ordenId;})[0];
+      if(prev&&o&&o.estado!=="completada") reservaPropia=num(prev.dosisHa)*num(o.superficie);
+    }
+    var disp=disponibleDe(x.insumoId,estId)+reservaPropia;
+    var falta=necesita-disp;
+    costo+=num(i.precio)*necesita;
+    filas.push('<div class="panel-fila '+(falta>0.001?"mal":"bien")+'"><span>'+esc(i.nombre)+
+      '<small>'+nf(x.dosisHa,3)+' '+esc(i.unidad)+'/ha × '+nf(ha,1)+' ha</small></span>'+
+      '<b>'+nf(necesita,1)+' '+esc(i.unidad)+'</b></div>');
+    if(falta>0.001) faltantes.push(nf(falta,1)+" "+i.unidad+" de "+i.nombre);
+  });
+  if(!filas.length) return '';
+  return '<div class="panel-vivo"><h4>Lo que consume la mezcla</h4>'+filas.join("")+
+    '<div class="panel-fila"><span>Costo de insumos</span><b>'+nf(costo,0)+' USD'+
+      (ha>0?' <small>'+nf(costo/ha,1)+' USD/ha</small>':'')+'</b></div>'+
+    (faltantes.length
+      ? '<p class="panel-aviso">Falta comprar: '+esc(faltantes.join(", "))+
+        '. Se descuenta del stock de '+esc((estab(estId)||{}).nombre||"ese campo")+
+        ', contando lo ya comprometido en otros trabajos.</p>'
+      : '<p class="panel-aviso bien">Hay stock suficiente en '+esc((estab(estId)||{}).nombre||"el campo")+'.</p>')+
+  '</div>';
+}
+
 var A={};
 A.nuevaCampania=function(){
   abrirForm({titulo:"Nueva campaña",
@@ -1160,6 +1409,7 @@ A.asignarCultivo=function(){
             {k:"orden",label:"Orden en el año",tipo:"select",req:true,opciones:[{v:1,t:"1º cultivo"},{v:2,t:"2º cultivo"}],valor:1},
             {k:"variedad",label:"Híbrido o variedad",ph:"DK 7220 VT3P",ancho:true},
             {k:"densidad",label:"Densidad prevista",ph:"78.000 pl/ha",ancho:true}],
+    panel:function(d){ return panelLote(d.loteId, parseInt(d.orden,10)||1); },
     validar:function(d){
       if(E.cultivoLotes.some(function(x){return x.campaniaId===campActiva&&x.loteId===d.loteId&&String(x.orden)===String(d.orden);}))
         return {loteId:"Ese lote ya tiene un "+d.orden+"º cultivo en "+c.nombre+"."};
@@ -1235,26 +1485,56 @@ A.borrarCultivo=function(id){
 };
 A.nuevaOrden=function(id){
   var O=id?E.ordenes.filter(function(o){return o.id===id;})[0]:null;
+  var mezclaInicial=O?insumosDeOrden(O.id).map(function(x){return {insumoId:x.insumoId,dosisHa:x.dosisHa};}):[];
+  if(!E.insumos.length && !O) avisar("Todavía no cargaste insumos. El trabajo se puede crear igual.");
   abrirForm({titulo:O?"Editar trabajo":"Nuevo trabajo",
-    nota:"Al completarlo avanza el lote: si es siembra queda sembrado, si es cosecha se habilitan las cartas de porte, y se descuenta el insumo del stock.",
+    nota:"Al completarlo avanza el lote y sale del stock lo que consumió: si es siembra el cultivo queda sembrado, si es cosecha se habilitan las cartas de porte.",
     valores:O?{tipo:O.tipo,cultivoLoteId:O.cultivoLoteId,fechaPlan:O.fechaPlan,responsable:O.responsable,
-      superficie:O.superficie,insumoId:O.insumoId,dosis:O.dosis,detalle:O.detalle}:{fechaPlan:hoyISO()},
+      superficie:O.superficie,detalle:O.detalle,mezcla:mezclaInicial}:{fechaPlan:hoyISO(),mezcla:[]},
     campos:[{k:"tipo",label:"Qué hay que hacer",tipo:"select",req:true,opciones:TIPOS_LABOR.map(function(t){return {v:t,t:t};})},
             {k:"fechaPlan",label:"Para cuándo",tipo:"date",req:true},
             {k:"cultivoLoteId",label:"Lote y cultivo",tipo:"select",req:true,opciones:opcCLCampania(),vacio:"Elegí un lote",ancho:true,
              hint:"Sólo aparecen los cultivos cargados en la campaña activa."},
             {k:"responsable",label:"Quién lo hace",req:true,ph:"Equipo propio"},
-            {k:"superficie",label:"Superficie (ha)",tipo:"number",paso:"0.1",min:"0",req:true},
-            {k:"insumoId",label:"Insumo",tipo:"select",opciones:opcInsumos(),vacio:"Sin insumo"},
-            {k:"dosis",label:"Dosis por hectárea",ph:"0,4 l/ha"},
+            {k:"superficie",label:"Superficie (ha)",tipo:"number",paso:"0.1",min:"0",req:true,
+             hint:"Se completa sola con la del lote."},
+            {k:"mezcla",label:"Insumos",tipo:"mezcla",ancho:true},
             {k:"detalle",label:"Indicaciones",tipo:"textarea",ancho:true,ph:"Qué hay que hacer y por qué."}],
+    panel:function(d){
+      /* la superficie se sugiere sola al elegir el lote, sin pisar lo que hayas escrito */
+      var campo=$("dlg-campos").querySelector('[name="superficie"]');
+      if(campo && !campo.value && d.cultivoLoteId){
+        var cl0=clDe(d.cultivoLoteId), l0=cl0?lote(cl0.loteId):null;
+        if(l0) campo.value=(cl0.haSembrada>0?cl0.haSembrada:l0.ha);
+      }
+      var sup=campo?campo.value:d.superficie;
+      var cl1=d.cultivoLoteId?clDe(d.cultivoLoteId):null;
+      return (cl1?panelLote(cl1.loteId,cl1.orden,"trabajo"):panelLote("",1,"trabajo"))+
+             panelMezcla(d.cultivoLoteId,sup,d.mezcla,O?O.id:null);
+    },
+    validar:function(d){
+      var cl=clDe(d.cultivoLoteId); if(!cl) return {cultivoLoteId:"Elegí el lote."};
+      var l=lote(cl.loteId);
+      if(parseFloat(d.superficie)>l.ha+0.15) return {superficie:"El lote tiene "+nf(l.ha,1)+" ha."};
+      var repetidos={}, dup=null;
+      (d.mezcla||[]).forEach(function(x){ if(repetidos[x.insumoId]) dup=x.insumoId; repetidos[x.insumoId]=1; });
+      if(dup) return {mezcla:"“"+esc((insumo(dup)||{}).nombre||"")+"” está dos veces en la mezcla."};
+    },
     guardar:function(d){
       var cl=clDe(d.cultivoLoteId);
       var b={campaniaId:campActiva,loteId:cl.loteId,cultivoLoteId:d.cultivoLoteId,tipo:d.tipo,fechaPlan:d.fechaPlan,
-             responsable:d.responsable,superficie:parseFloat(d.superficie)||0,insumoId:d.insumoId,dosis:d.dosis,detalle:d.detalle};
-      if(O){ Object.keys(b).forEach(function(k){O[k]=b[k];}); marcar("ordenes",O); avisar("Trabajo actualizado."); }
-      else { b.id=uid(); b.estado="pendiente"; b.fechaCierre=null; b.insumoId=b.insumoId||null;
-             E.ordenes.push(b); marcar("ordenes",b); avisar("Trabajo creado."); }
+             responsable:d.responsable,superficie:parseFloat(d.superficie)||0,detalle:d.detalle};
+      var ordenId;
+      if(O){ Object.keys(b).forEach(function(k){O[k]=b[k];}); marcar("ordenes",O); ordenId=O.id; avisar("Trabajo actualizado."); }
+      else { b.id=uid(); b.estado="pendiente"; b.fechaCierre=null;
+             E.ordenes.push(b); marcar("ordenes",b); ordenId=b.id; avisar("Trabajo creado."); }
+      /* la mezcla se reescribe entera: más simple que ir diferencia por diferencia */
+      insumosDeOrden(ordenId).forEach(function(x){ marcarBaja("ordenInsumos",x.id); });
+      E.ordenInsumos=E.ordenInsumos.filter(function(x){ return x.ordenId!==ordenId; });
+      (d.mezcla||[]).forEach(function(x){
+        var f={id:uid(),ordenId:ordenId,insumoId:x.insumoId,dosisHa:x.dosisHa};
+        E.ordenInsumos.push(f); marcar("ordenInsumos",f);
+      });
     }});
 };
 A.avanzarOrden=function(id){
@@ -1284,61 +1564,113 @@ A.completarOrden=function(id){
         avisar("Listo. Cargá las cartas de porte del lote.");
       } else avisar("Trabajo completado.");
       marcar("ordenes",o); if(cl) marcar("cultivoLotes",cl);
-      if(o.insumoId){
-        var i=insumo(o.insumoId), dn=parseFloat(String(o.dosis||"").replace(",","."));
-        if(i&&dn>0){ i.stock=Math.max(0,i.stock-dn*o.superficie); marcar("insumos",i); }
+      /* la salida de stock queda asentada en el libro, atada a este trabajo */
+      var estId=estabDeOrden(o);
+      if(estId){
+        insumosDeOrden(o.id).forEach(function(x){
+          var i=insumo(x.insumoId); if(!i) return;
+          var m={id:uid(),insumoId:x.insumoId,establecimientoId:estId,fecha:d.fechaCierre,
+                 tipo:"aplicacion",cantidad:-(num(x.dosisHa)*num(o.superficie)),
+                 precioUnitario:num(i.precio),ordenId:o.id,
+                 nota:o.tipo+" en "+nombreLote(o.loteId)};
+          E.movimientos.push(m); marcar("movimientos",m);
+        });
       }
     }});
 };
 A.borrarOrden=function(id){
   confirmar("Eliminar trabajo","Se elimina de la lista. No se puede deshacer.",function(){
-    E.ordenes=E.ordenes.filter(function(o){return o.id!==id;}); marcarBaja("ordenes",id); avisar("Trabajo eliminado."); });
+    E.ordenInsumos=E.ordenInsumos.filter(function(x){ return x.ordenId!==id; });
+    E.movimientos.forEach(function(m){ if(m.ordenId===id) m.ordenId=null; });
+    E.ordenes=E.ordenes.filter(function(o){return o.id!==id;});
+    marcarBaja("ordenes",id);   /* la base se lleva su mezcla en cascada */
+    avisar("Trabajo eliminado."); });
 };
 A.moverOrden=function(arg){
   var p=arg.split("|"), o=E.ordenes.filter(function(x){return x.id===p[0];})[0];
   o.fechaPlan=p[1]; marcar("ordenes",o); guardar(); pintar();
   avisar("Movido al "+fecha(p[1])+".");
 };
-A.nuevoInsumo=function(){
-  abrirForm({titulo:"Nuevo insumo",
-    nota:"Los precios van en dólares. Es la única forma de comparar el costo de una campaña contra otra.",
+A.nuevoInsumo=function(id){
+  var I=id?insumo(id):null;
+  abrirForm({titulo:I?"Editar insumo":"Nuevo insumo",
+    nota:"Los precios van en dólares: es la única forma de comparar el costo de una campaña contra otra. "+
+         (I?"":"El stock no se carga acá — entra con una compra, para que quede el registro."),
+    valores:I?{nombre:I.nombre,tipo:I.tipo,unidad:I.unidad,precio:I.precio}:null,
     campos:[{k:"nombre",label:"Nombre",req:true,ancho:true,ph:"Azoxistrobina + Ciproconazol"},
             {k:"tipo",label:"Tipo",tipo:"select",req:true,opciones:TIPOS_INSUMO.map(function(t){return {v:t,t:t};})},
             {k:"unidad",label:"Unidad",tipo:"select",req:true,opciones:[{v:"kg",t:"kg"},{v:"l",t:"litros"},{v:"bolsa",t:"bolsa"}]},
-            {k:"precio",label:"Precio unitario (USD)",tipo:"number",paso:"0.01",min:"0",req:true},
-            {k:"stock",label:"Stock inicial",tipo:"number",paso:"0.1",min:"0",req:true}],
+            {k:"precio",label:"Precio unitario (USD)",tipo:"number",paso:"0.01",min:"0",req:true}],
     guardar:function(d){
-      var ni={id:uid(),nombre:d.nombre,tipo:d.tipo,unidad:d.unidad,precio:parseFloat(d.precio),stock:parseFloat(d.stock)};
-      E.insumos.push(ni); marcar("insumos",ni);
-      avisar("Insumo agregado."); }});
+      if(I){ I.nombre=d.nombre; I.tipo=d.tipo; I.unidad=d.unidad; I.precio=parseFloat(d.precio);
+             marcar("insumos",I); avisar("Insumo actualizado."); }
+      else { var ni={id:uid(),nombre:d.nombre,tipo:d.tipo,unidad:d.unidad,precio:parseFloat(d.precio)};
+             E.insumos.push(ni); marcar("insumos",ni); avisar("Insumo agregado. Cargale una compra para darle stock."); }
+    }});
 };
-A.moverStock=function(id){
-  var i=insumo(id);
+A.nuevoMovimiento=function(id){
+  if(!E.establecimientos.length){ avisar("Cargá primero un establecimiento: el stock vive en un campo."); return; }
+  var I=id?insumo(id):null;
   abrirForm({titulo:"Movimiento de stock",
-    nota:"Stock actual de <b>"+esc(i.nombre)+"</b>: "+nf(i.stock,1)+" "+esc(i.unidad)+".",
-    campos:[{k:"signo",label:"Movimiento",tipo:"select",req:true,opciones:[{v:"1",t:"Compra (entra)"},{v:"-1",t:"Ajuste (sale)"}]},
-            {k:"cantidad",label:"Cantidad ("+i.unidad+")",tipo:"number",paso:"0.1",min:"0.1",req:true}],
-    guardar:function(d){ i.stock=Math.max(0,i.stock+parseInt(d.signo,10)*parseFloat(d.cantidad));
-                         marcar("insumos",i); avisar("Stock actualizado."); }});
+    nota:"El stock de cada insumo es la suma de sus movimientos. Nada sube ni baja sin quedar asentado acá.",
+    valores:{insumoId:id||"",fecha:hoyISO(),tipo:"compra",establecimientoId:(E.establecimientos[0]||{}).id},
+    campos:[{k:"insumoId",label:"Insumo",tipo:"select",req:true,ancho:true,opciones:opcInsumos(),vacio:"Elegí el insumo"},
+            {k:"establecimientoId",label:"En qué campo",tipo:"select",req:true,opciones:opcEstab(),ancho:true,
+             hint:"El bidón que está en un campo no sirve para pulverizar en otro."},
+            {k:"tipo",label:"Tipo",tipo:"select",req:true,
+             opciones:[{v:"compra",t:"Compra (entra)"},{v:"ajuste",t:"Ajuste de inventario"},{v:"traslado",t:"Traslado (sale)"}]},
+            {k:"fecha",label:"Fecha",tipo:"date",req:true},
+            {k:"cantidad",label:"Cantidad",tipo:"number",paso:"0.001",req:true,
+             hint:"Negativa si sale del campo."},
+            {k:"precioUnitario",label:"Precio unitario (USD)",tipo:"number",paso:"0.01",min:"0"},
+            {k:"nota",label:"Nota",ancho:true,ph:"Remito, proveedor, motivo del ajuste."}],
+    panel:function(d){
+      if(!d.insumoId||!d.establecimientoId) return "";
+      var i=insumo(d.insumoId), e=estab(d.establecimientoId);
+      var actual=stockDe(d.insumoId,d.establecimientoId);
+      var delta=num(d.cantidad)*(d.tipo==="traslado"?-1:1);
+      return '<div class="panel-vivo"><h4>'+esc(i.nombre)+' en '+esc(e.nombre)+'</h4>'+
+        '<div class="panel-fila"><span>Stock actual</span><b>'+nf(actual,1)+' '+esc(i.unidad)+'</b></div>'+
+        '<div class="panel-fila"><span>Comprometido en trabajos abiertos</span><b>'+
+          nf(reservadoDe(d.insumoId,d.establecimientoId),1)+' '+esc(i.unidad)+'</b></div>'+
+        '<div class="panel-fila '+(actual+delta<0?"mal":"bien")+'"><span>Queda después de este movimiento</span>'+
+          '<b>'+nf(actual+delta,1)+' '+esc(i.unidad)+'</b></div>'+
+        (actual+delta<0?'<p class="panel-aviso">Quedaría en negativo. Revisá la cantidad o el campo.</p>':'')+
+      '</div>';
+    },
+    guardar:function(d){
+      var cant=parseFloat(d.cantidad)||0;
+      if(d.tipo==="traslado") cant=-Math.abs(cant);
+      var m={id:uid(),insumoId:d.insumoId,establecimientoId:d.establecimientoId,fecha:d.fecha,
+             tipo:d.tipo,cantidad:cant,precioUnitario:parseFloat(d.precioUnitario)||null,
+             ordenId:null,nota:d.nota||""};
+      E.movimientos.push(m); marcar("movimientos",m);
+      avisar("Movimiento asentado.");
+    }});
 };
 A.borrarInsumo=function(id){
   var i=insumo(id);
-  var usos=E.ordenes.filter(function(o){ return o.insumoId===id; });
-  var abiertos=usos.filter(function(o){ return o.estado!=="completada"; });
+  var enOrdenes=E.ordenInsumos.filter(function(x){ return x.insumoId===id; });
+  var idsOrden={}; enOrdenes.forEach(function(x){ idsOrden[x.ordenId]=1; });
+  var abiertos=E.ordenes.filter(function(o){ return idsOrden[o.id] && o.estado!=="completada"; });
   if(abiertos.length){
-    avisar("No se puede: "+abiertos.length+" trabajo"+(abiertos.length>1?"s abiertos lo usan":" abierto lo usa")+". Completalo o cambiale el insumo.");
+    avisar("No se puede: "+abiertos.length+" trabajo"+(abiertos.length>1?"s abiertos lo usan":" abierto lo usa")+". Completalo o sacalo de la mezcla.");
     return;
   }
+  var movs=movimientosDe(id), saldo=stockDe(id);
   var arrastra=[];
-  if(usos.length) arrastra.push(usos.length+" trabajo"+(usos.length>1?"s ya completados quedan":" ya completado queda")+" sin insumo asociado");
-  if(i.stock>0)   arrastra.push("se pierde el registro de "+nf(i.stock,1)+" "+esc(i.unidad)+" en stock");
+  if(enOrdenes.length) arrastra.push("sale de la mezcla de "+Object.keys(idsOrden).length+" trabajo"+(Object.keys(idsOrden).length>1?"s ya completados":" ya completado"));
+  if(movs.length)      arrastra.push("se borran sus "+movs.length+" movimiento"+(movs.length>1?"s":"")+" de stock");
+  if(Math.abs(saldo)>0.001) arrastra.push("hoy quedan "+nf(saldo,1)+" "+esc(i.unidad)+" en existencia");
   confirmar("Eliminar "+esc(i.nombre),
-    arrastra.length ? "Al borrarlo, "+arrastra.join(", y ")+". No se puede deshacer."
-                    : "No lo usa ningún trabajo y no tiene stock cargado.",
+    arrastra.length ? "Al borrarlo "+arrastra.join(", ")+". No se puede deshacer."
+                    : "No lo usa ningún trabajo y no tiene movimientos.",
     function(){
-      E.ordenes.forEach(function(o){ if(o.insumoId===id){ o.insumoId=null; marcar("ordenes",o); } });
+      enOrdenes.forEach(function(x){ marcarBaja("ordenInsumos",x.id); });
+      E.ordenInsumos=E.ordenInsumos.filter(function(x){ return x.insumoId!==id; });
+      E.movimientos=E.movimientos.filter(function(m){ return m.insumoId!==id; });
       E.insumos=E.insumos.filter(function(x){ return x.id!==id; });
-      marcarBaja("insumos",id);
+      marcarBaja("insumos",id);   /* la base se lleva sus movimientos en cascada */
       avisar("Insumo eliminado.");
     });
 };
@@ -1577,11 +1909,13 @@ function vistaHoy(){
             }
           }
         }
-        var i=o.insumoId?insumo(o.insumoId):null;
+        var mez=insumosDeOrden(o.id).map(function(x){
+          var ins=insumo(x.insumoId); return ins?esc(ins.nombre)+" "+nf(x.dosisHa,3)+" "+esc(ins.unidad)+"/ha":null;
+        }).filter(Boolean);
         return '<div class="trab-fila"><div class="trab-sem '+v.n+'"></div><div class="trab-cuerpo">'+
           '<div class="trab-tit">'+esc(o.tipo)+' en '+esc(nombreLote(o.loteId))+'</div>'+
           '<div class="trab-meta">'+fecha(o.fechaPlan)+' · '+esc(o.responsable)+' · '+nf(o.superficie,1)+' ha'+
-            (i?' · '+esc(i.nombre)+' '+esc(o.dosis||""):"")+'</div>'+
+            (mez.length?' · '+mez.join(" + "):"")+'</div>'+
           '<div class="trab-cons '+v.n+'">'+esc(cons)+'</div></div>'+
           '<div class="trab-acc">'+mejor+'</div></div>';
       }).join("")+'</div></div>';
@@ -1692,9 +2026,21 @@ function tablaLotes(c,cls){
     }).join("")+'</tbody></table></div></div>';
 }
 function vistaLotes(){
+  var oc=campActiva?ocupacionPadron(campActiva):null;
+  var c=campActiva?campania(campActiva):null;
   return '<div class="cabecera"><div><h1>Lotes</h1><div class="sub">Padrón con superficie y ambientes</div></div>'+
     '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoEstablecimiento">+ Establecimiento</button>'+
     '<button class="btn" data-a="nuevoLote">+ Nuevo lote</button></div></div>'+
+  (oc && E.lotes.length ?
+    '<div class="ficha">'+
+      '<div><div class="eyebrow">Superficie del padrón</div><div class="v">'+nf(oc.total,1)+'<span class="u">ha</span></div>'+
+        '<div class="nota">'+E.lotes.length+' lotes en '+E.establecimientos.length+' establecimientos</div></div>'+
+      '<div><div class="eyebrow">Con cultivo asignado</div><div class="v">'+nf(oc.asignada,1)+'<span class="u">ha</span></div>'+
+        '<div class="avance"><i style="width:'+(oc.total?oc.asignada/oc.total*100:0).toFixed(1)+'%"></i></div>'+
+        '<div class="nota">En '+esc(c.nombre)+'</div></div>'+
+      '<div><div class="eyebrow">Libre para trabajar</div><div class="v">'+nf(oc.libre,1)+'<span class="u">ha</span></div>'+
+        '<div class="nota">'+(oc.libre>0.05?"Todavía sin planificar":"Toda la superficie está asignada")+'</div></div>'+
+    '</div>' : '')+
   E.establecimientos.map(function(e){
     var ls=E.lotes.filter(function(l){return l.establecimientoId===e.id;});
     var ha=ls.reduce(function(a,l){return a+l.ha;},0);
@@ -1704,8 +2050,12 @@ function vistaLotes(){
       '<th class="col-opcional">Ambientes</th><th>Cultivo'+(campActiva?' en '+esc(campania(campActiva).nombre):'')+'</th><th class="der">Acciones</th></tr></thead><tbody>'+
       ls.map(function(l){
         var cs=E.cultivoLotes.filter(function(x){return x.loteId===l.id&&x.campaniaId===campActiva;});
-        var cu=cs.length?cs.map(function(x){return '<i class="punto" style="background:'+CULTIVOS[x.cultivo].color+'"></i>'+esc(CULTIVOS[x.cultivo].nom);}).join("<br>")
-                        :'<span class="lote-est">Sin asignar</span>';
+        var cu=cs.length?cs.sort(function(a,b){return a.orden-b.orden;}).map(function(x){
+                          return '<i class="punto" style="background:'+CULTIVOS[x.cultivo].color+'"></i>'+esc(CULTIVOS[x.cultivo].nom)+
+                                 ' <span class="lote-est">'+x.orden+'º · '+
+                                 (x.haSembrada>0?nf(x.haSembrada,1)+' ha sembradas':'sin sembrar')+'</span>';
+                        }).join("<br>")
+                        :'<span class="lote-est">Libre: '+nf(l.ha,1)+' ha sin asignar</span>';
         var am=l.ambientes.length?l.ambientes.map(function(a){return esc(a.nombre)+" "+nf(a.ha,1);}).join(" · ")
                                  :'<span class="lote-est">Sin subdividir</span>';
         return '<tr><td class="lote-nom">'+esc(l.nombre)+'</td><td class="num">'+nf(l.ha,1)+' ha</td>'+
@@ -1764,7 +2114,7 @@ function vistaOrdenes(){
     '<th class="col-opcional">Insumo</th><th class="num">ha</th><th class="col-opcional">Quién</th>'+
     '<th>Estado</th><th class="der">Acciones</th></tr></thead><tbody>'+
     os.map(function(o){
-      var i=o.insumoId?insumo(o.insumoId):null, acc="";
+      var mez=insumosDeOrden(o.id), acc="";
       if(o.estado==="pendiente") acc+='<button class="btn mini" data-a="avanzarOrden" data-arg="'+o.id+'">Iniciar</button>';
       if(o.estado==="en_curso")  acc+='<button class="btn mini" data-a="completarOrden" data-arg="'+o.id+'">Completar</button>';
       acc+='<button class="btn sec mini" data-a="nuevaOrden" data-arg="'+o.id+'">Editar</button>'+
@@ -1772,7 +2122,10 @@ function vistaOrdenes(){
       return '<tr><td class="num">'+fecha(o.estado==="completada"?o.fechaCierre:o.fechaPlan)+'</td>'+
         '<td style="font-weight:600">'+esc(o.tipo)+(o.detalle?'<br><span class="lote-est" style="font-weight:400">'+esc(o.detalle.slice(0,58))+(o.detalle.length>58?"…":"")+'</span>':'')+'</td>'+
         '<td>'+esc(nombreLote(o.loteId))+'<br><span class="lote-est">'+esc(nombreEstab(o.loteId))+'</span></td>'+
-        '<td class="col-opcional" style="font-size:13px">'+(i?esc(i.nombre)+'<br><span class="lote-est">'+esc(o.dosis||"")+'</span>':'—')+'</td>'+
+        '<td class="col-opcional" style="font-size:13px">'+(mez.length?mez.map(function(x){
+            var ins=insumo(x.insumoId);
+            return ins?esc(ins.nombre)+' <span class="lote-est">'+nf(x.dosisHa,3)+' '+esc(ins.unidad)+'/ha</span>':'';
+          }).join("<br>"):'—')+'</td>'+
         '<td class="num">'+nf(o.superficie,1)+'</td>'+
         '<td class="col-opcional" style="font-size:13px">'+esc(o.responsable)+'</td>'+
         '<td><span class="chip '+o.estado+'">'+esc(o.estado.replace("_"," "))+'</span></td>'+
@@ -1783,19 +2136,75 @@ function vistaOrdenes(){
     '<button class="btn" data-a="nuevaOrden">+ Nuevo trabajo</button></p></div>');
 }
 function vistaInsumos(){
-  return '<div class="cabecera"><div><h1>Insumos</h1><div class="sub">Catálogo y stock. Los trabajos completados descuentan solos.</div></div>'+
-    '<div class="cabecera-acc"><button class="btn" data-a="nuevoInsumo">+ Nuevo insumo</button></div></div>'+
-  '<div class="bloque"><div class="bloque-cab"><h2>Catálogo y existencias</h2>'+
-    '<div class="aclara">Valorizado en '+nf(E.insumos.reduce(function(a,i){return a+i.stock*i.precio;},0))+' USD</div></div><div class="scroll-x">'+
-    '<table class="tabla"><thead><tr><th>Insumo</th><th>Tipo</th><th class="num">Precio USD</th>'+
-    '<th class="num">Stock</th><th class="num col-opcional">Valor USD</th><th class="der">Acciones</th></tr></thead><tbody>'+
+  var valor=E.insumos.reduce(function(a,i){ return a+stockDe(i.id)*num(i.precio); },0);
+  var faltantes=[];
+  E.insumos.forEach(function(i){
+    E.establecimientos.forEach(function(e){
+      var d=disponibleDe(i.id,e.id);
+      if(d<-0.001) faltantes.push({i:i,e:e,falta:-d});
+    });
+  });
+
+  var cab='<div class="cabecera"><div><h1>Insumos</h1>'+
+    '<div class="sub">El stock de cada campo es la suma de sus movimientos. Los trabajos completados descuentan solos.</div></div>'+
+    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoMovimiento">+ Movimiento</button>'+
+    '<button class="btn" data-a="nuevoInsumo">+ Nuevo insumo</button></div></div>';
+
+  if(!E.insumos.length) return cab+'<div class="bloque"><p class="vacio"><b>Todavía no cargaste insumos.</b>'+
+    'Cargá el catálogo y después dale stock con una compra, así queda el registro de qué entró y cuándo.<br><br>'+
+    '<button class="btn" data-a="nuevoInsumo">+ Nuevo insumo</button></p></div>';
+
+  var alerta=faltantes.length
+    ? '<div class="avisos"><div class="aviso-fila mal"><span class="aviso-ico">▲</span><span>'+
+      '<b>Falta stock para los trabajos ya programados</b>'+
+      faltantes.map(function(f){ return nf(f.falta,1)+" "+esc(f.i.unidad)+" de "+esc(f.i.nombre)+" en "+esc(f.e.nombre); }).join(" · ")+
+      '</span></div></div>' : '';
+
+  var tabla='<div class="bloque"><div class="bloque-cab"><h2>Catálogo y existencias</h2>'+
+    '<div class="aclara">Valorizado en '+nf(valor)+' USD</div></div><div class="scroll-x">'+
+    '<table class="tabla"><thead><tr><th>Insumo</th><th class="col-opcional">Tipo</th><th class="num">Precio USD</th>'+
+    '<th class="num">En existencia</th><th class="num">Comprometido</th><th class="num">Disponible</th>'+
+    '<th class="der">Acciones</th></tr></thead><tbody>'+
     E.insumos.map(function(i){
-      return '<tr><td class="lote-nom">'+esc(i.nombre)+'</td><td style="font-size:13.5px">'+esc(i.tipo)+'</td>'+
-        '<td class="num">'+nf(i.precio,2)+'</td><td class="num">'+nf(i.stock,1)+' <span class="lote-est">'+esc(i.unidad)+'</span></td>'+
-        '<td class="num col-opcional">'+nf(i.stock*i.precio)+'</td>'+
-        '<td class="der"><span class="acc"><button class="btn sec mini" data-a="moverStock" data-arg="'+i.id+'">Movimiento</button>'+
-        '<button class="btn peligro mini" data-a="borrarInsumo" data-arg="'+i.id+'">Eliminar</button></span></td></tr>';
-    }).join("")+'</tbody></table></div></div>';
+      var st=stockDe(i.id), res=reservadoDe(i.id), disp=st-res;
+      var porCampo=E.establecimientos.map(function(e){
+        var s=stockDe(i.id,e.id); return s>0.001?esc(e.nombre)+" "+nf(s,1):null;
+      }).filter(Boolean).join(" · ");
+      return '<tr><td><span class="lote-nom">'+esc(i.nombre)+'</span>'+
+          (porCampo?'<br><span class="lote-est">'+porCampo+'</span>':'')+'</td>'+
+        '<td class="col-opcional" style="font-size:13.5px">'+esc(i.tipo)+'</td>'+
+        '<td class="num">'+nf(i.precio,2)+'</td>'+
+        '<td class="num">'+nf(st,1)+' <span class="lote-est">'+esc(i.unidad)+'</span></td>'+
+        '<td class="num" style="color:'+(res>0?"var(--ojo)":"var(--tierra-3)")+'">'+(res>0?nf(res,1):"—")+'</td>'+
+        '<td class="num" style="font-weight:700;color:'+(disp<-0.001?"var(--alerta)":"var(--tierra)")+'">'+nf(disp,1)+'</td>'+
+        '<td class="der"><span class="acc">'+
+          '<button class="btn sec mini" data-a="nuevoMovimiento" data-arg="'+i.id+'">Movimiento</button>'+
+          '<button class="btn sec mini" data-a="nuevoInsumo" data-arg="'+i.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarInsumo" data-arg="'+i.id+'">×</button></span></td></tr>';
+    }).join("")+'</tbody></table></div>'+
+    '<p class="aviso bueno" style="margin:0 16px 16px">«Comprometido» es lo que ya tienen reservado los trabajos pendientes y en curso, '+
+    'aunque todavía no se haya aplicado. «Disponible» es lo que podés usar en un trabajo nuevo.</p></div>';
+
+  var movs=E.movimientos.slice().sort(function(a,b){ return (b.fecha||"").localeCompare(a.fecha||""); }).slice(0,60);
+  var libro='<div class="bloque"><div class="bloque-cab"><h2>Libro de movimientos</h2>'+
+    '<div class="aclara">'+E.movimientos.length+' registros'+(E.movimientos.length>60?" · se muestran los 60 más recientes":"")+'</div></div>'+
+    (movs.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th class="num">Fecha</th><th>Insumo</th>'+
+      '<th class="col-opcional">Campo</th><th>Concepto</th><th class="num">Cantidad</th></tr></thead><tbody>'+
+      movs.map(function(m){
+        var i=insumo(m.insumoId), e=estab(m.establecimientoId);
+        var entra=num(m.cantidad)>=0;
+        return '<tr><td class="num">'+fecha(m.fecha)+'</td>'+
+          '<td>'+esc(i?i.nombre:"—")+'</td>'+
+          '<td class="col-opcional" style="font-size:13px">'+esc(e?e.nombre:"—")+'</td>'+
+          '<td style="font-size:13px"><span style="font-weight:600">'+esc(m.tipo)+'</span>'+
+            (m.nota?'<br><span class="lote-est">'+esc(m.nota)+'</span>':'')+'</td>'+
+          '<td class="num" style="font-weight:700;color:'+(entra?"var(--ok)":"var(--alerta)")+'">'+
+            (entra?"+":"")+nf(m.cantidad,1)+' <span class="lote-est">'+esc(i?i.unidad:"")+'</span></td></tr>';
+      }).join("")+'</tbody></table></div>'
+     :'<p class="vacio"><b>Sin movimientos todavía.</b>Cargá una compra para darle stock a un insumo.<br><br>'+
+      '<button class="btn" data-a="nuevoMovimiento">+ Movimiento</button></p>')+'</div>';
+
+  return cab+alerta+tabla+libro;
 }
 function vistaClima(){
   var c=campania(campActiva);
