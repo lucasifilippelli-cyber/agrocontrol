@@ -577,6 +577,11 @@ var sb={
   },
   borrar:function(tabla, id){
     return pedir("/rest/v1/"+tabla+"?id=eq."+id,{method:"DELETE",headers:encabezados()});
+  },
+  actualizar:function(tabla, id, campos){
+    return pedir("/rest/v1/"+tabla+"?id=eq."+id,{method:"PATCH",
+      headers:Object.assign(encabezados(true),{Prefer:"return=minimal"}),
+      body:JSON.stringify(campos)});
   }
 };
 
@@ -816,10 +821,12 @@ var TABLAS = {
   establecimientos:"establecimientos", lotes:"lotes", campanias:"campanias",
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
-  monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos"
+  monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
+  telegramCuentas:"telegram_cuentas"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
-           ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[]};
+           ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
+           telegramCuentas:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -856,6 +863,7 @@ function cargar(){
       E={};
       claves.forEach(function(k,i){ E[k]=(res[i]||[]).map(aCamello); });
       perfil=((res[claves.length]||[])[0])||{nombre:"",empresa:""};
+      if(!E.telegramCuentas) E.telegramCuentas=[];
       normalizar(); guardarCache(); cargandoDatos=false;
     })
     .catch(function(err){
@@ -1983,6 +1991,29 @@ A.recargarClima=function(){
 A.abrirLote=function(id){ loteAbierto=id; vistaActual="lote"; pintar(); window.scrollTo(0,0); };
 A.volver=function(){ vistaActual="campania"; pintar(); window.scrollTo(0,0); };
 A.irA=function(v){ vistaActual=v; pintar(); window.scrollTo(0,0); };
+A.conectarTelegram=function(){
+  var codigo="", abc="ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  for(var i=0;i<6;i++) codigo+=abc[Math.floor(Math.random()*abc.length)];
+  var expira=new Date(Date.now()+30*60000).toISOString();
+  sb.actualizar("perfiles", sesion.user.id, {codigo_telegram:codigo, codigo_expira:expira})
+    .then(function(){
+      abrirForm({titulo:"Conectar Telegram", ok:"Listo",
+        nota:"Abrí el bot en Telegram y mandale este mensaje tal cual:<br><br>"+
+             '<b style="font-size:19px;font-family:var(--mono);letter-spacing:.06em">vincular '+codigo+'</b>'+
+             "<br><br>El código sirve por media hora y una sola vez. Después vas a poder cargar lluvias y "+
+             "observaciones por chat, sin abrir la app.",
+        campos:[], guardar:function(){ cargar().then(pintar); }});
+    })
+    .catch(function(err){ avisar("No pude generar el código: "+err.message); });
+};
+A.desvincularTelegram=function(id){
+  var t=E.telegramCuentas.filter(function(x){return x.id===id;})[0];
+  confirmar("Desconectar Telegram",
+    "El chat de "+esc(t.nombre||"Telegram")+" deja de poder cargar datos en tu cuenta.",function(){
+      E.telegramCuentas=E.telegramCuentas.filter(function(x){return x.id!==id;});
+      marcarBaja("telegramCuentas",id); avisar("Chat desconectado.");
+    });
+};
 A.cargarEjemplo=function(){
   if(E.establecimientos.length){
     avisar("Ya tenés campos cargados. Los de ejemplo se suman a los tuyos.");
@@ -2196,6 +2227,7 @@ function vistaHoy(){
     (av.length?'<div class="avisos">'+av.join("")+'</div>':'')+
     '<p class="titular">'+frameResumen(D)+'</p>'+
     grilla+trabajos+
+    bloqueTelegram()+
     '<div class="pie"><span>Clima de Open-Meteo. Los umbrales de cada semáforo se pueden ajustar a tu criterio.</span>'+
     '<button class="btn sec mini" data-a="cargarEjemplo">Cargar datos de ejemplo</button></div>';
 }
@@ -2821,6 +2853,22 @@ function pintarPortada(){
       pintar();
     }).then(function(){ enviandoPortada=false; });
   });
+}
+
+function bloqueTelegram(){
+  var ch=E.telegramCuentas||[];
+  return '<div class="bloque"><div class="bloque-cab"><h2>Cargar por Telegram</h2>'+
+    '<div class="aclara">'+(ch.length?"Conectado":"Sin conectar")+'</div></div>'+
+    (ch.length
+      ? '<div class="scroll-x"><table class="tabla"><tbody>'+ch.map(function(t){
+          return '<tr><td><span class="lote-nom">'+esc(t.nombre||"Chat de Telegram")+'</span><br>'+
+            '<span class="lote-est">Puede cargar lluvias y observaciones en tu cuenta</span></td>'+
+            '<td class="der"><button class="btn peligro mini" data-a="desvincularTelegram" data-arg="'+t.id+'">Desconectar</button></td></tr>';
+        }).join("")+'</tbody></table></div>'
+      : '<p class="vacio">Mandale un mensaje al bot y se carga solo: <b>«llovieron 25 mm»</b> o '+
+        '<b>«nota Lote 7: hay roya»</b>. Sirve para no tener que abrir la app parado en el lote.<br><br>'+
+        '<button class="btn" data-a="conectarTelegram">Conectar Telegram</button></p>')+
+  '</div>';
 }
 
 function arrancarApp(){
