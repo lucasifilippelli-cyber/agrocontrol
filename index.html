@@ -122,6 +122,10 @@
   --c-trigo:#B4762B;  --c-cebada:#D08A4A; --c-girasol:#F0C93A; --c-sorgo:#9C4A3C;
   --c-alfalfa:#4E9265; --c-vicia:#7C6BA8;
   --lima:#C9F24D;
+  /* Serie categórica para gráficos: validada para daltonismo y contraste.
+     El orden es fijo: una operación no cambia de color si cambia el ranking. */
+  --cat-1:#1F9A57; --cat-2:#2C6FA6; --cat-3:#E0A020; --cat-4:#8552C4;
+  --gr-costo:#17532F;
   --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
   --display:"Space Grotesk","IBM Plex Sans",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -145,6 +149,8 @@
   --c-trigo:#D89B57;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
   --c-alfalfa:#7FC5A0; --c-vicia:#A192CC;
   --lima:#C9F24D;
+  --cat-1:#2E9C63; --cat-2:#5B9BD0; --cat-3:#B8862C; --cat-4:#9A72D4;
+  --gr-costo:#4E9265;
 }}
 :root[data-theme="dark"]{
   --horizonte:#0A1D12; --panel:#0F2A1B; --panel-2:#123322;
@@ -163,6 +169,8 @@
   --c-trigo:#D89B57;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
   --c-alfalfa:#7FC5A0; --c-vicia:#A192CC;
   --lima:#C9F24D;
+  --cat-1:#2E9C63; --cat-2:#5B9BD0; --cat-3:#B8862C; --cat-4:#9A72D4;
+  --gr-costo:#4E9265;
 }
 :root[data-theme="light"]{
   --horizonte:#EFF2EA; --panel:#FFFFFF; --panel-2:#F4F7F0;
@@ -181,6 +189,10 @@
   --c-trigo:#B4762B;  --c-cebada:#D08A4A; --c-girasol:#F0C93A; --c-sorgo:#9C4A3C;
   --c-alfalfa:#4E9265; --c-vicia:#7C6BA8;
   --lima:#C9F24D;
+  /* Serie categórica para gráficos: validada para daltonismo y contraste.
+     El orden es fijo: una operación no cambia de color si cambia el ranking. */
+  --cat-1:#1F9A57; --cat-2:#2C6FA6; --cat-3:#E0A020; --cat-4:#8552C4;
+  --gr-costo:#17532F;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -469,6 +481,43 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .cuenta button:hover{color:var(--tope-fg);border-color:var(--tope-fg)}
 @media (max-width:720px){ .cuenta-nombre{display:none} }
 
+/* ---------- menú principal ---------- */
+.modulos{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:14px;margin-bottom:24px}
+.modulo{display:flex;flex-direction:column;gap:11px;padding:17px;background:var(--panel);border:1px solid var(--linea);
+  border-radius:10px;text-align:left;cursor:pointer;font-family:var(--sans);color:inherit;transition:border-color .12s,transform .12s}
+.modulo:hover{border-color:var(--tierra);transform:translateY(-2px)}
+.modulo:focus-visible{outline:2px solid var(--lluvia);outline-offset:2px}
+.modulo-ico{width:44px;height:44px;border-radius:11px;background:var(--lima);display:grid;place-items:center;flex:0 0 44px}
+.modulo-ico svg{width:25px;height:25px;display:block}
+.modulo-nom{font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:-.01em}
+.modulo-dice{font-size:12.5px;color:var(--tierra-2);line-height:1.4;flex:1}
+.modulo-dato{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;color:var(--tierra);
+  border-top:1px solid var(--linea-suave);padding-top:9px}
+.modulo-dato span{color:var(--tierra-3);font-family:var(--sans);font-weight:400}
+
+/* ---------- gráficos ---------- */
+.graficos{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:22px;margin-bottom:22px}
+.gr-caja{background:var(--panel);border:1px solid var(--linea);border-radius:6px;overflow:hidden}
+.gr-cab{padding:13px 16px;border-bottom:1px solid var(--linea)}
+.gr-cab h3{font-family:var(--display);font-size:14px;font-weight:600}
+.gr-cab p{font-size:12px;color:var(--tierra-2);margin-top:2px}
+.gr-cuerpo{padding:16px}
+.gr-cuerpo svg{display:block;width:100%;height:auto;overflow:visible}
+.gr-eje{stroke:var(--linea);stroke-width:1}
+.gr-rot{font-family:var(--sans);font-size:11.5px;fill:var(--tierra-2)}
+.gr-val{font-family:var(--mono);font-size:11.5px;font-weight:600;fill:var(--tierra)}
+.gr-val-inv{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--panel)}
+.gr-marca{cursor:default}
+.gr-marca:hover{opacity:.82}
+.gr-leyenda{display:flex;flex-wrap:wrap;gap:7px 16px;padding:0 16px 15px;font-size:12px;color:var(--tierra-2)}
+.gr-leyenda span{display:flex;align-items:center;gap:6px}
+.gr-leyenda i{width:11px;height:11px;border-radius:2px;flex:0 0 11px}
+.gr-pie{padding:0 16px 15px;font-size:12px;color:var(--tierra-3);line-height:1.45}
+.globo{position:fixed;z-index:90;pointer-events:none;background:var(--tope-bg);color:var(--tope-fg);font-family:var(--sans);
+  font-size:12.5px;line-height:1.45;padding:8px 11px;border-radius:5px;box-shadow:0 4px 16px rgba(12,43,26,.28);opacity:0;transition:opacity .1s;max-width:250px}
+.globo.ver{opacity:1}
+.globo b{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--tope-bg);color:var(--tope-fg);font-size:14px;font-weight:500;padding:11px 20px;border-radius:3px;z-index:80;box-shadow:0 4px 20px rgba(20,16,12,.3);opacity:0;pointer-events:none;transition:opacity .18s}
 .toast.ver{opacity:1}
 .pie{margin-top:26px;padding-top:15px;border-top:1px solid var(--linea);font-size:12.5px;color:var(--tierra-3);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
@@ -546,8 +595,10 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
 
 <div class="marco">
   <nav class="nav" id="nav">
+    <a href="#" data-vista="inicio" class="activo">Menú principal</a>
+    <hr>
     <div class="nav-titulo eyebrow">Día a día</div>
-    <a href="#" data-vista="hoy" class="activo">Hoy y esta semana</a>
+    <a href="#" data-vista="hoy">Hoy y esta semana</a>
     <a href="#" data-vista="ordenes">Trabajos <span class="n" data-n="ordenes"></span></a>
     <hr>
     <div class="nav-titulo eyebrow">La campaña</div>
@@ -636,7 +687,7 @@ var CLAVE_CACHE = "agrocontrol.cache.v1",
     CLAVE_SESION = "agrocontrol.sesion.v1",
     CLAVE_CLIMA = "agrocontrol.clima.v1";
 
-var E = null, campActiva = null, vistaActual = "hoy", loteAbierto = null;
+var E = null, campActiva = null, vistaActual = "inicio", loteAbierto = null;
 var estabClima = null, diaSel = 0;
 var sesion = null, perfil = null, cargandoDatos = false;
 
@@ -967,12 +1018,12 @@ function normalizar(){
   }
 }
 function guardarCache(){
-  try{ localStorage.setItem(CLAVE_CACHE,JSON.stringify({campActiva:campActiva,E:E})); }catch(e){}
+  try{ localStorage.setItem(CLAVE_CACHE,JSON.stringify({campActiva:campActiva,E:E,perfil:perfil})); }catch(e){}
 }
 function leerCache(){
   try{
     var c=JSON.parse(localStorage.getItem(CLAVE_CACHE)||"null");
-    if(c&&c.E){ E=c.E; campActiva=c.campActiva; normalizar(); return true; }
+    if(c&&c.E){ E=c.E; campActiva=c.campActiva; if(c.perfil) perfil=c.perfil; normalizar(); return true; }
   }catch(e){}
   return false;
 }
@@ -2634,6 +2685,245 @@ function vistaInsumos(){
 
   return cab+alerta+tabla+libro;
 }
+/* ============================================================
+   MENÚ PRINCIPAL
+   Íconos dibujados con el mismo trazo que el logo: figuras sólidas
+   en verde sobre el cuadrado lima.
+   ============================================================ */
+var V="#0C2B1A";
+function svgIco(cuerpo){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="'+V+'" stroke-width="1.8" '+
+         'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+cuerpo+'</svg>';
+}
+var ICONOS={
+  hoy:      svgIco('<circle cx="9" cy="8" r="3.2"/><path d="M9 2.2v1.4M9 12.4v1.4M3.2 8h1.4M13.4 8h1.4M4.9 3.9l1 1M12.1 11.1l1 1M13.1 3.9l-1 1M5.9 11.1l-1 1"/><path d="M8 20h9.5a3 3 0 0 0 .3-6A4.6 4.6 0 0 0 9 14.6 2.8 2.8 0 0 0 8 20z" fill="'+V+'" stroke="none"/>'),
+  ordenes:  svgIco('<rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8.5 8.5l1.6 1.6 3.4-3.4M8.5 15l1.6 1.6 3.4-3.4"/>'),
+  campania: svgIco('<path d="M4 20h16"/><rect x="5.5" y="11" width="3.2" height="7" rx="1" fill="'+V+'" stroke="none"/><rect x="10.4" y="6" width="3.2" height="12" rx="1" fill="'+V+'" stroke="none"/><rect x="15.3" y="14" width="3.2" height="4" rx="1" fill="'+V+'" stroke="none"/>'),
+  cultivos: svgIco('<path d="M12 21V8"/><ellipse cx="7.8" cy="9.2" rx="4" ry="2.9" transform="rotate(-22 7.8 9.2)" fill="'+V+'" stroke="none"/><ellipse cx="16.2" cy="13" rx="4" ry="2.9" transform="rotate(22 16.2 13)" fill="'+V+'" stroke="none"/><path d="M4 21h16"/>'),
+  lotes:    svgIco('<rect x="3" y="4" width="8" height="7" rx="1.4"/><rect x="13" y="4" width="8" height="7" rx="1.4"/><rect x="3" y="13" width="8" height="7" rx="1.4"/><rect x="13" y="13" width="8" height="7" rx="1.4" fill="'+V+'" stroke="none"/>'),
+  finanzas: svgIco('<path d="M4 17.5l5-5 3.5 3.5L20 8"/><path d="M15.5 8H20v4.5"/><path d="M4 21h16"/>'),
+  insumos:  svgIco('<path d="M9 3h6v3H9z" fill="'+V+'" stroke="none"/><path d="M8 6h8l1.6 3.4a4 4 0 0 1 .4 1.7V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-7.9c0-.6.1-1.2.4-1.7z"/><path d="M7 14h10"/>'),
+  clima:    svgIco('<path d="M12 3.5s5.2 6 5.2 9.6A5.2 5.2 0 0 1 12 18.3a5.2 5.2 0 0 1-5.2-5.2C6.8 9.5 12 3.5 12 3.5z" fill="'+V+'" stroke="none"/><path d="M4 21h16"/>'),
+  monitoreo:svgIco('<circle cx="10.5" cy="10.5" r="6.2"/><path d="M15.2 15.2L21 21"/><path d="M8 10.5h5"/>')
+};
+
+/* ============================================================
+   GRÁFICOS
+   SVG dibujado a mano, sin librerías: la app sigue siendo un
+   archivo que abre sin señal. Marcas finas, grilla apenas
+   visible, y el valor escrito al lado en vez de sobre la marca.
+   ============================================================ */
+function gEsc(s){ return esc(s); }
+/* El dato para el globo viaja en el propio nodo. */
+function gDato(t){ return ' data-globo="'+esc(t)+'"'; }
+
+function cajaGrafico(titulo, bajada, cuerpo, leyenda, pie){
+  return '<div class="gr-caja"><div class="gr-cab"><h3>'+gEsc(titulo)+'</h3>'+
+    (bajada?'<p>'+gEsc(bajada)+'</p>':'')+'</div>'+
+    '<div class="gr-cuerpo">'+cuerpo+'</div>'+
+    (leyenda?'<div class="gr-leyenda">'+leyenda+'</div>':'')+
+    (pie?'<div class="gr-pie">'+pie+'</div>':'')+'</div>';
+}
+
+/* ---------- 1 · de dónde sale el resultado ----------
+   Cascada: el ingreso, lo que se le resta, y lo que queda. */
+function grCascada(ec){
+  var pasos=[
+    {n:"Ingresos", v:ec.ingresos, c:"var(--ok)"},
+    {n:"Costos",   v:-ec.costos,  c:"var(--alerta)"},
+    {n:"Resultado",v:ec.resultado,c:ec.resultado>=0?"var(--ok)":"var(--alerta)", total:true}
+  ];
+  var tope=Math.max(ec.ingresos, ec.costos, Math.abs(ec.resultado))*1.08||1;
+  var A=460, H=190, izq=8, der=8, base=H-26, alto=base-14;
+  var ancho=(A-izq-der)/pasos.length, barra=Math.min(64, ancho*0.5);
+  var acum=0, sv='<svg viewBox="0 0 '+A+' '+H+'" role="img" aria-label="Ingresos, costos y resultado">';
+
+  /* grilla: sólo la línea de base, que es la única referencia que importa */
+  sv+='<line x1="0" y1="'+base+'" x2="'+A+'" y2="'+base+'" class="gr-eje"/>';
+
+  pasos.forEach(function(p,i){
+    var cx=izq+ancho*i+ancho/2, x=cx-barra/2;
+    var desde=p.total?0:acum, hasta=p.total?p.v:acum+p.v;
+    var y0=base-(Math.max(desde,hasta)/tope)*alto;
+    var y1=base-(Math.min(desde,hasta)/tope)*alto;
+    var h=Math.max(2,y1-y0);
+    sv+='<rect class="gr-marca" x="'+x.toFixed(1)+'" y="'+y0.toFixed(1)+'" width="'+barra+'" height="'+h.toFixed(1)+
+        '" rx="4" fill="'+p.c+'"'+gDato(p.n+"|"+nf(Math.abs(p.v))+" USD")+'/>';
+    sv+='<text class="gr-val" x="'+cx+'" y="'+(y0-7).toFixed(1)+'" text-anchor="middle">'+
+        (p.v<0?"−":"")+nf(Math.abs(p.v))+'</text>';
+    sv+='<text class="gr-rot" x="'+cx+'" y="'+(base+16)+'" text-anchor="middle">'+gEsc(p.n)+'</text>';
+    if(!p.total) acum=hasta;
+    /* el hilo que une un paso con el siguiente */
+    if(i<pasos.length-1){
+      var yl=base-(acum/tope)*alto;
+      sv+='<line x1="'+(x+barra)+'" y1="'+yl.toFixed(1)+'" x2="'+(izq+ancho*(i+1)+ancho/2-barra/2)+'" y2="'+yl.toFixed(1)+
+          '" stroke="var(--linea-fuerte)" stroke-width="1"/>';
+    }
+  });
+  sv+='</svg>';
+  return cajaGrafico("De dónde sale el resultado",
+    "Todo en dólares, al cambio del día de cada operación", sv, "",
+    "Los costos incluyen los insumos que aplicaron los trabajos completados, más los gastos cargados a mano.");
+}
+
+/* ---------- 2 · en qué se fue la plata ----------
+   Una sola serie: un solo color. El orden ya cuenta la historia. */
+function grCostos(ec, gastos){
+  var filas=[{n:"Insumos", v:ec.porLote.reduce(function(a,x){return a+x.insumos;},0)}];
+  var porCat={};
+  gastos.forEach(function(g){ porCat[g.categoria]=(porCat[g.categoria]||0)+importeGasto(g); });
+  Object.keys(porCat).forEach(function(k){ filas.push({n:k, v:porCat[k]}); });
+  filas=filas.filter(function(f){return f.v>0.01;}).sort(function(a,b){return b.v-a.v;});
+  if(!filas.length) return "";
+
+  var tope=filas[0].v||1, total=filas.reduce(function(a,f){return a+f.v;},0);
+  var A=460, fila=26, H=filas.length*fila+8, rot=132, pista=A-rot-70;
+  var sv='<svg viewBox="0 0 '+A+' '+H+'" role="img" aria-label="Costos por categoría">';
+  filas.forEach(function(f,i){
+    var y=i*fila+4, w=Math.max(2,(f.v/tope)*pista);
+    sv+='<text class="gr-rot" x="'+(rot-9)+'" y="'+(y+13)+'" text-anchor="end">'+gEsc(f.n)+'</text>';
+    sv+='<rect class="gr-marca" x="'+rot+'" y="'+y+'" width="'+w.toFixed(1)+'" height="15" rx="4" fill="var(--gr-costo)"'+
+        gDato(f.n+"|"+nf(f.v)+" USD · "+nf(f.v/total*100,1)+" % del costo")+'/>';
+    sv+='<text class="gr-val" x="'+(rot+w+8).toFixed(1)+'" y="'+(y+12)+'">'+nf(f.v)+'</text>';
+  });
+  sv+='</svg>';
+  return cajaGrafico("Composición de los costos", nf(total)+" USD en total", sv, "",
+    "Los insumos no se cargan a mano: salen de los movimientos de stock de cada trabajo completado.");
+}
+
+/* ---------- 3 · cómo se vendió ----------
+   Cuatro identidades: color fijo por tipo, con su nombre al lado. */
+function grOperaciones(ventas){
+  var COL={disponible:"var(--cat-1)", forward:"var(--cat-2)", futuro:"var(--cat-3)", canje:"var(--cat-4)"};
+  var por={}, total=0;
+  ventas.forEach(function(v){
+    var k=v.tipoOperacion||"disponible";
+    if(!por[k]) por[k]={tn:0,usd:0};
+    por[k].tn+=num(v.toneladas); por[k].usd+=importeVenta(v); total+=num(v.toneladas);
+  });
+  var claves=Object.keys(TIPOS_OPERACION).filter(function(k){return por[k];});
+  if(!claves.length||total<=0) return "";
+
+  var A=460, H=64, x=0;
+  var sv='<svg viewBox="0 0 '+A+' '+H+'" role="img" aria-label="Toneladas por tipo de operación">';
+  claves.forEach(function(k){
+    var w=(por[k].tn/total)*A;
+    var wv=Math.max(2, w-2);   /* 2 px de aire entre tramos */
+    sv+='<rect class="gr-marca" x="'+x.toFixed(1)+'" y="0" width="'+wv.toFixed(1)+'" height="26" rx="4" fill="'+COL[k]+'"'+
+        gDato(TIPOS_OPERACION[k].nom+"|"+nf(por[k].tn,1)+" t · "+nf(por[k].usd)+" USD")+'/>';
+    if(w>62){
+      sv+='<text class="gr-val" x="'+(x+wv/2).toFixed(1)+'" y="43" text-anchor="middle">'+nf(por[k].tn,0)+' t</text>';
+      sv+='<text class="gr-rot" x="'+(x+wv/2).toFixed(1)+'" y="57" text-anchor="middle">'+
+          nf(por[k].tn/total*100,0)+' %</text>';
+    }
+    x+=w;
+  });
+  sv+='</svg>';
+  var leyenda=claves.map(function(k){
+    return '<span><i style="background:'+COL[k]+'"></i>'+gEsc(TIPOS_OPERACION[k].nom)+
+           ' <b class="mono">'+nf(por[k].tn,1)+' t</b></span>';
+  }).join("");
+  return cajaGrafico("Cómo se vendió", nf(total,1)+" toneladas en "+ventas.length+" operaciones",
+    sv, leyenda,
+    "El forward cierra precio antes de la entrega; el canje paga insumos con grano.");
+}
+
+/* ---------- 4 · qué dejó cada lote ----------
+   Polaridad: dos colores opuestos y el cero como referencia. */
+function grLotes(ec){
+  var filas=ec.porLote.filter(function(x){return x.ingreso>0.01||x.costo>0.01;})
+                      .sort(function(a,b){return b.porHa-a.porHa;}).slice(0,12);
+  if(!filas.length) return "";
+  var tope=Math.max.apply(null,filas.map(function(x){return Math.abs(x.porHa);}))*1.1||1;
+  /* Si ningún lote perdió plata, el cero va contra la izquierda: partir la caja
+     al medio para un lado vacío desperdicia la mitad del ancho. */
+  var hayNeg=filas.some(function(x){return x.porHa<0;});
+  var A=460, fila=24, H=filas.length*fila+18, rot=128, util=A-rot-56;
+  var medio=hayNeg?rot+util/2:rot, semi=hayNeg?util/2:util;
+  var sv='<svg viewBox="0 0 '+A+' '+H+'" role="img" aria-label="Resultado por hectárea de cada lote">';
+  sv+='<line x1="'+medio+'" y1="0" x2="'+medio+'" y2="'+(H-16)+'" class="gr-eje"/>';
+  filas.forEach(function(x,i){
+    var y=i*fila+4, w=Math.max(2,(Math.abs(x.porHa)/tope)*semi), pos=x.porHa>=0;
+    var bx=pos?medio+1:medio-w-1;
+    sv+='<text class="gr-rot" x="'+(rot-9)+'" y="'+(y+12)+'" text-anchor="end">'+
+        gEsc(nombreLote(x.cl.loteId).replace(/^Lote\s*/,"L "))+'</text>';
+    sv+='<rect class="gr-marca" x="'+bx.toFixed(1)+'" y="'+y+'" width="'+w.toFixed(1)+'" height="14" rx="4" fill="'+
+        (pos?"var(--ok)":"var(--alerta)")+'"'+
+        gDato(nombreLote(x.cl.loteId)+" · "+CULTIVOS[x.cl.cultivo].nom+"|"+
+              (pos?"":"−")+nf(Math.abs(x.porHa))+" USD/ha sobre "+nf(x.ha,1)+" ha")+'/>';
+    sv+='<text class="gr-val" x="'+(pos?(bx+w+7):(bx-7)).toFixed(1)+'" y="'+(y+11)+'" text-anchor="'+
+        (pos?"start":"end")+'">'+(pos?"":"−")+nf(Math.abs(x.porHa))+'</text>';
+  });
+  sv+='<text class="gr-rot" x="'+medio+'" y="'+(H-3)+'" text-anchor="middle">USD por hectárea</text></svg>';
+  return cajaGrafico("Qué dejó cada lote", "Ordenados de mejor a peor"+(ec.porLote.length>12?", los 12 primeros":""),
+    sv,
+    (filas.some(function(x){return x.porHa<0;})
+      ? '<span><i style="background:var(--ok)"></i>Dejó plata</span>'+
+        '<span><i style="background:var(--alerta)"></i>Perdió</span>' : ''),
+    "El ingreso de cada lote es su parte de lo vendido de ese cultivo, según cuántos kilos puso.");
+}
+
+function tableroFinanzas(ec, ventas, gastos){
+  var g=[grCascada(ec), grOperaciones(ventas), grCostos(ec,gastos), grLotes(ec)].filter(Boolean);
+  if(!g.length) return "";
+  return '<div class="graficos">'+g.join("")+'</div>';
+}
+
+function vistaInicio(){
+  var c=campActiva?campania(campActiva):null;
+  var r=campActiva?resumenCampania(campActiva):null;
+  var ec=campActiva?economiaCampania(campActiva):null;
+  var abiertos=E.ordenes.filter(function(o){return o.campaniaId===campActiva&&o.estado!=="completada";}).length;
+  var oc=campActiva?ocupacionPadron(campActiva):null;
+  var lluvia=c?c.lluvia.reduce(function(a,b){return a+num(b);},0):0;
+  var faltan=0;
+  E.insumos.forEach(function(i){ E.establecimientos.forEach(function(e){ if(disponibleDe(i.id,e.id)<-0.001) faltan++; }); });
+  var obs=E.monitoreo.filter(function(o){return o.campaniaId===campActiva;}).length;
+
+  var mods=[
+    {v:"hoy", ico:"hoy", nom:"Hoy y esta semana",
+     dice:"El pronóstico traducido a decisiones: qué se puede sembrar, pulverizar y cosechar cada día.",
+     dato:E.establecimientos.length?"Pronóstico de "+esc(E.establecimientos.length)+" campo"+(E.establecimientos.length>1?"s":""):"Cargá un establecimiento"},
+    {v:"ordenes", ico:"ordenes", nom:"Trabajos",
+     dice:"Lo que hay que hacer en el campo. Al completarlos avanza el lote y baja el stock.",
+     dato:abiertos+" <span>abierto"+(abiertos===1?"":"s")+"</span>"},
+    {v:"campania", ico:"campania", nom:"Resumen",
+     dice:"Balance hídrico, ventanas críticas y rendimiento por cultivo de la campaña.",
+     dato:r?nf(r.haSem)+" <span>ha sembradas</span>":"Sin campaña"},
+    {v:"cultivos", ico:"cultivos", nom:"Siembra y cosecha",
+     dice:"Qué se planta en cada lote y cómo avanza, hasta las cartas de porte.",
+     dato:r?r.lotes+" <span>cultivos</span>":"Sin campaña"},
+    {v:"lotes", ico:"lotes", nom:"Lotes",
+     dice:"El padrón con su superficie, sus ambientes y qué tiene asignado.",
+     dato:oc?nf(oc.libre,1)+" <span>ha libres de "+nf(oc.total,1)+"</span>":E.lotes.length+" <span>lotes</span>"},
+    {v:"finanzas", ico:"finanzas", nom:"Finanzas",
+     dice:"Ventas de grano, gastos y resultado por lote, todo llevado a dólares.",
+     dato:ec&&Math.abs(ec.resultado)>0.01
+          ?'<span style="color:'+(ec.resultado>=0?"var(--ok)":"var(--alerta)")+'">'+(ec.resultado>=0?"":"−")+nf(Math.abs(ec.porHa))+' USD/ha</span>'
+          :"Sin movimientos"},
+    {v:"insumos", ico:"insumos", nom:"Insumos",
+     dice:"Stock por campo derivado de sus movimientos, con lo comprometido por los trabajos.",
+     dato:faltan?'<span style="color:var(--alerta)">'+faltan+" faltante"+(faltan===1?"":"s")+"</span>":E.insumos.length+" <span>en catálogo</span>"},
+    {v:"clima", ico:"clima", nom:"Lluvias",
+     dice:"La lluvia mensual de la campaña, automática y corregible con tu pluviómetro.",
+     dato:lluvia?nf(lluvia)+" <span>mm en la campaña</span>":"Sin registros"},
+    {v:"monitoreo", ico:"monitoreo", nom:"Monitoreo",
+     dice:"Lo que ves en el lote: plagas, enfermedades, malezas y daños.",
+     dato:obs+" <span>observacion"+(obs===1?"":"es")+"</span>"}
+  ];
+
+  return '<div class="cabecera"><div><h1>AGROCONTROL</h1>'+
+    '<div class="sub">'+(c?"Campaña "+esc(c.nombre)+" · ":"")+
+      (perfil&&perfil.nombre?"Hola, "+esc(perfil.nombre.split(" ")[0]):"")+'</div></div></div>'+
+  '<div class="modulos">'+mods.map(function(m){
+    return '<button type="button" class="modulo" data-a="irA" data-arg="'+m.v+'">'+
+      '<span class="modulo-ico">'+ICONOS[m.ico]+'</span>'+
+      '<span class="modulo-nom">'+esc(m.nom)+'</span>'+
+      '<span class="modulo-dice">'+esc(m.dice)+'</span>'+
+      '<span class="modulo-dato">'+m.dato+'</span></button>';
+  }).join("")+'</div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
   var cab='<div class="cabecera"><div><h1>Finanzas</h1>'+
@@ -2765,7 +3055,7 @@ function vistaFinanzas(){
           '<button class="btn peligro mini" data-a="borrarGasto" data-arg="'+g.id+'">×</button></span></td></tr>';
       }).join("")+'</tbody></table></div>':'')+'</div>';
 
-  return cab+ficha+bloqueGranos+bloqueLotes+bloqueVentas+bloqueGastos;
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloqueGastos;
 }
 
 function vistaClima(){
@@ -2885,7 +3175,7 @@ function vistaLote(){
 /* ============================================================
    11 · PINTADO Y EVENTOS
    ============================================================ */
-var VISTAS={hoy:vistaHoy,campania:vistaCampania,lotes:vistaLotes,cultivos:vistaCultivos,
+var VISTAS={inicio:vistaInicio,hoy:vistaHoy,campania:vistaCampania,lotes:vistaLotes,cultivos:vistaCultivos,
             ordenes:vistaOrdenes,insumos:vistaInsumos,clima:vistaClima,monitoreo:vistaMonitoreo,
             finanzas:vistaFinanzas,lote:vistaLote};
 /* Estas vistas no existen sin una campaña abierta. */
@@ -2997,7 +3287,7 @@ function bloqueTelegram(){
 }
 
 function arrancarApp(){
-  vistaActual="hoy";
+  vistaActual="inicio";
   pintar();
   traerPronostico().then(pintar);
   traerLluviaCampania().then(pintar);
@@ -3027,7 +3317,7 @@ function pintar(){
   document.querySelectorAll("#nav a").forEach(function(a){ a.classList.toggle("activo",a.getAttribute("data-vista")===na); });
   var v=vistaActual;
   if(!campActiva && NECESITAN_CAMPANIA[v]) $("lienzo").innerHTML=vistaPrimerosPasos();
-  else if(v==="hoy" && !E.establecimientos.length) $("lienzo").innerHTML=vistaPrimerosPasos();
+  else if((v==="hoy"||v==="inicio") && !E.establecimientos.length) $("lienzo").innerHTML=vistaPrimerosPasos();
   else $("lienzo").innerHTML=(VISTAS[v]||vistaHoy)();
   var se=$("sel-estab");
   if(se) se.addEventListener("change",function(){ A.verEstab(this.value); });
@@ -3055,6 +3345,23 @@ document.addEventListener("keydown",function(ev){
 });
 
 /* ---------- arranque ---------- */
+/* Globo del gráfico: una sola caja que sigue al puntero. */
+var globo=document.createElement("div"); globo.className="globo"; document.body.appendChild(globo);
+document.addEventListener("mouseover",function(ev){
+  var m=ev.target.closest&&ev.target.closest("[data-globo]");
+  if(!m){ globo.classList.remove("ver"); return; }
+  var p=m.getAttribute("data-globo").split("|");
+  globo.innerHTML=esc(p[0])+(p[1]?"<br><b>"+esc(p[1])+"</b>":"");
+  globo.classList.add("ver");
+});
+document.addEventListener("mousemove",function(ev){
+  if(!globo.classList.contains("ver")) return;
+  var x=ev.clientX+14, y=ev.clientY+16;
+  if(x+globo.offsetWidth>window.innerWidth-8) x=ev.clientX-globo.offsetWidth-14;
+  if(y+globo.offsetHeight>window.innerHeight-8) y=ev.clientY-globo.offsetHeight-14;
+  globo.style.left=x+"px"; globo.style.top=y+"px";
+});
+
 leerSesion();
 if(!sesion){
   pintar();
@@ -3062,8 +3369,17 @@ if(!sesion){
   /* La sesión guardada casi siempre está vencida: se renueva antes de pedir nada. */
   leerCache();
   pintar();
+  var guardada=sesion;
   auth.renovar()
-    .then(function(r){ guardarSesion(conVencimiento(r)); return cargar(); })
+    .then(function(r){ guardarSesion(conVencimiento(r)); })
+    .catch(function(){
+      /* El token de refresco se consume al usarlo: con dos pestañas abiertas o
+         dos recargas seguidas, una pierde. Si el acceso todavía no venció,
+         seguimos con él en vez de echar al usuario. */
+      if(guardada && guardada.vence_en && guardada.vence_en > Date.now()){ sesion=guardada; return; }
+      throw new Error("sesión vencida");
+    })
+    .then(function(){ return cargar(); })
     .then(arrancarApp)
     .catch(function(){
       guardarSesion(null); perfil=null;
