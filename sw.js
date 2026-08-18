@@ -1,9 +1,9 @@
 /* AGROCONTROL · service worker
    La app queda guardada en el teléfono. El clima siempre se pide a la red:
    nunca se sirve un pronóstico viejo desde la caché. */
-var CACHE = "agrocontrol-v2";
+var CACHE = "agrocontrol-v3";
 var SHELL = [
-  "./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png",
+  "./", "./index.html", "./manifest.webmanifest", "./icon-192-v2.png", "./icon-512-v2.png",
   "./fuentes/IBMPlexMono-400-latin.woff2",
   "./fuentes/IBMPlexMono-500-latin.woff2",
   "./fuentes/IBMPlexMono-600-latin.woff2",
