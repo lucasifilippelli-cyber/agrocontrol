@@ -416,13 +416,15 @@ body{background:var(--horizonte);color:var(--tierra);font-family:var(--sans);fon
 /* ---------- diálogo ---------- */
 dialog{border:0;padding:0;background:transparent;max-width:none;max-height:none}
 dialog::backdrop{background:rgba(20,16,12,.6)}
-.modal{background:var(--panel);border:1px solid var(--tierra);border-radius:4px;width:min(640px,calc(100vw - 28px));max-height:calc(100vh - 56px);display:flex;flex-direction:column}
-.modal-cab{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid var(--tierra);background:var(--panel-2)}
+.modal{background:var(--panel);border:1px solid var(--tierra);border-radius:4px;width:min(640px,calc(100vw - 28px));max-height:calc(100vh - 56px);display:flex;flex-direction:column;overflow:hidden}
+/* el form es un eslabon de la cadena flex: sin esto no se achica y el cuerpo nunca scrollea */
+.modal>form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.modal-cab{display:flex;align-items:center;gap:12px;padding:14px 17px;border-bottom:1px solid var(--tierra);background:var(--panel-2);flex:0 0 auto}
 .modal-cab h3{font-size:15.5px;font-weight:800}
 .modal-cab button{margin-left:auto;background:none;border:0;font-size:22px;line-height:1;cursor:pointer;color:var(--tierra-2);padding:0 4px}
 .modal-cab button:hover{color:var(--tierra)}
-.modal-cuerpo{padding:17px;overflow:auto}
-.modal-pie{display:flex;gap:8px;justify-content:flex-end;padding:13px 17px;border-top:1px solid var(--linea);background:var(--panel-2)}
+.modal-cuerpo{padding:17px;overflow:auto;flex:1 1 auto;min-height:0}
+.modal-pie{display:flex;gap:8px;justify-content:flex-end;padding:13px 17px;border-top:1px solid var(--linea);background:var(--panel-2);flex:0 0 auto}
 .campos{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .campo{display:flex;flex-direction:column;gap:5px}
 .campo.ancho{grid-column:1/-1}
