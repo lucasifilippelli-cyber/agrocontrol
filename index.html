@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#221B14">
+<meta name="theme-color" content="#0C2B1A">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="AGROCONTROL">
@@ -13,81 +13,174 @@
 <link rel="icon" href="icon-192.png">
 <title>AGROCONTROL</title>
 <style>
+/* Tipografías alojadas acá y no en Google: la app tiene que abrir sin señal,
+   y en el lote cada conexión externa es una que puede fallar.
+   Sólo el subconjunto latino, que es el que necesita el castellano. */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fuentes/IBMPlexMono-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fuentes/IBMPlexMono-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(fuentes/IBMPlexMono-600-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(fuentes/IBMPlexSans-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(fuentes/IBMPlexSans-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(fuentes/IBMPlexSans-600-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(fuentes/IBMPlexSans-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fuentes/SpaceGrotesk-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(fuentes/SpaceGrotesk-600-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(fuentes/SpaceGrotesk-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* ============================================================
    AGROCONTROL
    El color codifica cultivo y estado. Nunca decora.
    ============================================================ */
 :root{
-  --horizonte:#E9EBE4; --panel:#FCFCF9; --panel-2:#F3F4EE;
-  --hover:#F0F1EA; --nav-hover:#EAEBE3; --pastilla:#E2E4DA;
-  --tierra:#221B14; --tierra-2:#5F5648; --tierra-3:#8B8375;
-  --linea:#D2D6C9; --linea-suave:#EDEFE7; --linea-fuerte:#B6BCA9;
+  --horizonte:#EFF2EA; --panel:#FFFFFF; --panel-2:#F4F7F0;
+  --hover:#EDF2E7; --nav-hover:#17452B; --pastilla:#E7EFE2;
+  --tierra:#0C2B1A; --tierra-2:#4A5E4F; --tierra-3:#7A8C7C;
+  --linea:#DDE4D6; --linea-suave:#F0F3EC; --linea-fuerte:#C4D0BE;
   --campo-bg:#FFFFFF;
-  --tope-bg:#221B14; --tope-fg:#EFEEE7; --tope-tenue:#9C9382;
-  --tope-campo:#332A20; --tope-borde:#4A3F31;
-  --btn-bg:#221B14; --btn-fg:#EFEEE7; --btn-hover:#382C21;
-  --lluvia:#35618E; --lluvia-suave:#DCE7F1;
-  --alerta:#A83A2C; --alerta-bg:#FBF3F1;
-  --ok:#3F6B34; --ok-bg:#EEF4EA;
-  --ojo:#B57A16; --ojo-bg:#FBF4E6;
-  --c-maiz-t:#C4890F; --c-maiz-d:#E3B865; --c-soja-1:#43701F; --c-soja-2:#86A85C;
-  --c-trigo:#A65A22;  --c-cebada:#D08A4A; --c-girasol:#EFC93D; --c-sorgo:#8E3A34;
-  --c-alfalfa:#5B7F6B; --c-vicia:#7C6BA8;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
-  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --tope-bg:#0C2B1A; --tope-fg:#EAF2E8; --tope-tenue:#7FA38C;
+  --tope-campo:#123D26; --tope-borde:#1D5C38;
+  --btn-bg:#0C2B1A; --btn-fg:#EAF2E8; --btn-hover:#17532F;
+  --lluvia:#2C6FA6; --lluvia-suave:#E7F0F8;
+  --alerta:#C2452F; --alerta-bg:#FBEDEA;
+  --ok:#1F9A57; --ok-bg:#E7F3E9;
+  --ojo:#E0A020; --ojo-bg:#FAF1E2;
+  --c-maiz-t:#E0A020; --c-maiz-d:#F0C93A; --c-soja-1:#1F9A57; --c-soja-2:#6FBF8B;
+  --c-trigo:#B4762B;  --c-cebada:#D08A4A; --c-girasol:#F0C93A; --c-sorgo:#9C4A3C;
+  --c-alfalfa:#4E9265; --c-vicia:#7C6BA8;
+  --lima:#C9F24D;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --display:"Space Grotesk","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --nav-w:200px; --tope-h:54px;
   color-scheme:light dark;
 }
 @media (prefers-color-scheme:dark){:root{
-  --horizonte:#14110D; --panel:#1D1913; --panel-2:#252019;
-  --hover:#2B251D; --nav-hover:#2B251D; --pastilla:#332C22;
-  --tierra:#EDE9E0; --tierra-2:#ADA492; --tierra-3:#8A8172;
-  --linea:#332C23; --linea-suave:#241F19; --linea-fuerte:#4A4133;
-  --campo-bg:#14110D;
-  --tope-bg:#0F0C09; --tope-fg:#EDE9E0; --tope-tenue:#8A8172;
-  --tope-campo:#241F18; --tope-borde:#3A3228;
-  --btn-bg:#4A3F30; --btn-fg:#F2EEE5; --btn-hover:#5C4F3C;
-  --lluvia:#6FA0D0; --lluvia-suave:#1B2733;
-  --alerta:#E0705E; --alerta-bg:#2B1B17;
-  --ok:#86B471; --ok-bg:#1A2416;
-  --ojo:#DDA943; --ojo-bg:#2B2313;
-  --c-maiz-t:#E0A526; --c-maiz-d:#EFCB84; --c-soja-1:#6FA342; --c-soja-2:#9DC078;
-  --c-trigo:#D07C42;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
-  --c-alfalfa:#7FA890; --c-vicia:#A192CC;
+  --horizonte:#0A1D12; --panel:#0F2A1B; --panel-2:#123322;
+  --hover:#17452B; --nav-hover:#17452B; --pastilla:#17452B;
+  --tierra:#E6F0E6; --tierra-2:#A9C4B3; --tierra-3:#7FA38C;
+  --linea:#1D4830; --linea-suave:#153524; --linea-fuerte:#2C6144;
+  --campo-bg:#0A1D12;
+  --tope-bg:#071409; --tope-fg:#EAF2E8; --tope-tenue:#7FA38C;
+  --tope-campo:#123D26; --tope-borde:#1D5C38;
+  --btn-bg:#1F9A57; --btn-fg:#04180E; --btn-hover:#2CB468;
+  --lluvia:#6FA9DC; --lluvia-suave:#12283A;
+  --alerta:#E87762; --alerta-bg:#2E1714;
+  --ok:#5FCB8C; --ok-bg:#12301F;
+  --ojo:#EFC152; --ojo-bg:#2E2513;
+  --c-maiz-t:#EFC152; --c-maiz-d:#F5DA8A; --c-soja-1:#5FCB8C; --c-soja-2:#8FDCAF;
+  --c-trigo:#D89B57;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
+  --c-alfalfa:#7FC5A0; --c-vicia:#A192CC;
+  --lima:#C9F24D;
 }}
 :root[data-theme="dark"]{
-  --horizonte:#14110D; --panel:#1D1913; --panel-2:#252019;
-  --hover:#2B251D; --nav-hover:#2B251D; --pastilla:#332C22;
-  --tierra:#EDE9E0; --tierra-2:#ADA492; --tierra-3:#8A8172;
-  --linea:#332C23; --linea-suave:#241F19; --linea-fuerte:#4A4133;
-  --campo-bg:#14110D;
-  --tope-bg:#0F0C09; --tope-fg:#EDE9E0; --tope-tenue:#8A8172;
-  --tope-campo:#241F18; --tope-borde:#3A3228;
-  --btn-bg:#4A3F30; --btn-fg:#F2EEE5; --btn-hover:#5C4F3C;
-  --lluvia:#6FA0D0; --lluvia-suave:#1B2733;
-  --alerta:#E0705E; --alerta-bg:#2B1B17;
-  --ok:#86B471; --ok-bg:#1A2416;
-  --ojo:#DDA943; --ojo-bg:#2B2313;
-  --c-maiz-t:#E0A526; --c-maiz-d:#EFCB84; --c-soja-1:#6FA342; --c-soja-2:#9DC078;
-  --c-trigo:#D07C42;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
-  --c-alfalfa:#7FA890; --c-vicia:#A192CC;
+  --horizonte:#0A1D12; --panel:#0F2A1B; --panel-2:#123322;
+  --hover:#17452B; --nav-hover:#17452B; --pastilla:#17452B;
+  --tierra:#E6F0E6; --tierra-2:#A9C4B3; --tierra-3:#7FA38C;
+  --linea:#1D4830; --linea-suave:#153524; --linea-fuerte:#2C6144;
+  --campo-bg:#0A1D12;
+  --tope-bg:#071409; --tope-fg:#EAF2E8; --tope-tenue:#7FA38C;
+  --tope-campo:#123D26; --tope-borde:#1D5C38;
+  --btn-bg:#1F9A57; --btn-fg:#04180E; --btn-hover:#2CB468;
+  --lluvia:#6FA9DC; --lluvia-suave:#12283A;
+  --alerta:#E87762; --alerta-bg:#2E1714;
+  --ok:#5FCB8C; --ok-bg:#12301F;
+  --ojo:#EFC152; --ojo-bg:#2E2513;
+  --c-maiz-t:#EFC152; --c-maiz-d:#F5DA8A; --c-soja-1:#5FCB8C; --c-soja-2:#8FDCAF;
+  --c-trigo:#D89B57;  --c-cebada:#E5A468; --c-girasol:#F2D65C; --c-sorgo:#C4665E;
+  --c-alfalfa:#7FC5A0; --c-vicia:#A192CC;
+  --lima:#C9F24D;
 }
 :root[data-theme="light"]{
-  --horizonte:#E9EBE4; --panel:#FCFCF9; --panel-2:#F3F4EE;
-  --hover:#F0F1EA; --nav-hover:#EAEBE3; --pastilla:#E2E4DA;
-  --tierra:#221B14; --tierra-2:#5F5648; --tierra-3:#8B8375;
-  --linea:#D2D6C9; --linea-suave:#EDEFE7; --linea-fuerte:#B6BCA9;
+  --horizonte:#EFF2EA; --panel:#FFFFFF; --panel-2:#F4F7F0;
+  --hover:#EDF2E7; --nav-hover:#17452B; --pastilla:#E7EFE2;
+  --tierra:#0C2B1A; --tierra-2:#4A5E4F; --tierra-3:#7A8C7C;
+  --linea:#DDE4D6; --linea-suave:#F0F3EC; --linea-fuerte:#C4D0BE;
   --campo-bg:#FFFFFF;
-  --tope-bg:#221B14; --tope-fg:#EFEEE7; --tope-tenue:#9C9382;
-  --tope-campo:#332A20; --tope-borde:#4A3F31;
-  --btn-bg:#221B14; --btn-fg:#EFEEE7; --btn-hover:#382C21;
-  --lluvia:#35618E; --lluvia-suave:#DCE7F1;
-  --alerta:#A83A2C; --alerta-bg:#FBF3F1;
-  --ok:#3F6B34; --ok-bg:#EEF4EA;
-  --ojo:#B57A16; --ojo-bg:#FBF4E6;
-  --c-maiz-t:#C4890F; --c-maiz-d:#E3B865; --c-soja-1:#43701F; --c-soja-2:#86A85C;
-  --c-trigo:#A65A22;  --c-cebada:#D08A4A; --c-girasol:#EFC93D; --c-sorgo:#8E3A34;
-  --c-alfalfa:#5B7F6B; --c-vicia:#7C6BA8;
+  --tope-bg:#0C2B1A; --tope-fg:#EAF2E8; --tope-tenue:#7FA38C;
+  --tope-campo:#123D26; --tope-borde:#1D5C38;
+  --btn-bg:#0C2B1A; --btn-fg:#EAF2E8; --btn-hover:#17532F;
+  --lluvia:#2C6FA6; --lluvia-suave:#E7F0F8;
+  --alerta:#C2452F; --alerta-bg:#FBEDEA;
+  --ok:#1F9A57; --ok-bg:#E7F3E9;
+  --ojo:#E0A020; --ojo-bg:#FAF1E2;
+  --c-maiz-t:#E0A020; --c-maiz-d:#F0C93A; --c-soja-1:#1F9A57; --c-soja-2:#6FBF8B;
+  --c-trigo:#B4762B;  --c-cebada:#D08A4A; --c-girasol:#F0C93A; --c-sorgo:#9C4A3C;
+  --c-alfalfa:#4E9265; --c-vicia:#7C6BA8;
+  --lima:#C9F24D;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -399,6 +492,38 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
   .hidro-mm{display:none}
   .col-opcional{display:none}
 }
+
+/* ============================================================
+   IDENTIDAD 2026 · verde vivo + lima tecnológico
+   Bloque agregado al final: pisa lo anterior sin tocar el resto.
+   ============================================================ */
+.marca{display:flex;align-items:center;gap:9px;font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:-.02em}
+.marca-ico{display:flex;flex:none}
+.marca span{color:var(--lima)}
+.portada .marca span,.portada-caja .marca span{color:var(--ok)}
+.cabecera h1,.detalle-dia h3,.bloque-cab h2,.portada-caja h1{font-family:var(--display);letter-spacing:-.025em}
+.nav{background:#0F3320;border-right:0;padding:14px 0}
+.nav-titulo{color:#6E9179}
+.nav hr{border-top-color:#1D5C38;margin:12px 18px}
+.nav a{color:#A9C4B3;border-left:0;margin:2px 10px;padding:9px 11px;border-radius:9px}
+.nav a:hover{background:#17452B;color:#EAF2E8}
+.nav a.activo{background:#1B6238;color:#fff;border-left:0}
+.nav a .n{background:#123D26;color:#8FB39C}
+.nav a.activo .n{background:var(--lima);color:#0C2B1A}
+.bloque,.ficha>div,.portada-panel{border-radius:14px}
+.titular,.aviso-fila,.detalle-dia{border-radius:12px}
+.titular{border-left-color:var(--ok)}
+.btn{border-radius:9px}
+.chip{border-radius:6px}
+.tope-der select,.tope-der input{border-radius:8px}
+.cabecera{border-bottom-color:var(--tierra)}
+.sem{border-radius:8px}
+.tope{border-bottom:1px solid #17532F}
+@media (max-width:900px){
+  .nav{background:#0F3320}
+  .nav a{margin:0;border-radius:0}
+  .nav a.activo{background:#1B6238;border-bottom-color:var(--lima)}
+}
 </style>
 </head>
 <body>
@@ -407,7 +532,7 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 
 <div id="app" class="oculto">
 <header class="tope">
-  <div class="marca">AGRO<span>CONTROL</span></div>
+  <div class="marca"><span class="marca-ico" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 34 34"><rect width="34" height="34" rx="11" fill="#C9F24D"/><rect y="27" width="34" height="7" fill="#0C2B1A"/><rect x="16" y="7" width="2" height="21" rx="1" fill="#0C2B1A"/><ellipse cx="11.5" cy="11" rx="5.5" ry="4" fill="#0C2B1A" transform="rotate(-20 11.5 11)"/><ellipse cx="22.5" cy="17" rx="5.5" ry="4" fill="#0C2B1A" transform="rotate(20 22.5 17)"/><rect x="7" y="15" width="2" height="13" rx="1" fill="#0C2B1A" opacity=".55"/><ellipse cx="4.5" cy="16.5" rx="4" ry="3" fill="#0C2B1A" opacity=".55" transform="rotate(-20 4.5 16.5)"/><rect x="25" y="15" width="2" height="13" rx="1" fill="#0C2B1A" opacity=".55"/><ellipse cx="29.5" cy="16.5" rx="4" ry="3" fill="#0C2B1A" opacity=".55" transform="rotate(20 29.5 16.5)"/></svg></span>AGRO<span>CONTROL</span></div>
   <div class="tope-der">
     <label for="sel-camp">Campaña</label>
     <select id="sel-camp"></select>
@@ -2801,7 +2926,7 @@ function pintarPortada(){
   var crear=modoPortada==="crear";
   $("portada").innerHTML=
     '<div class="portada-caja">'+
-      '<div class="marca">AGRO<span>CONTROL</span></div>'+
+      '<div class="marca"><span class="marca-ico" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 34 34"><rect width="34" height="34" rx="11" fill="#C9F24D"/><rect y="27" width="34" height="7" fill="#0C2B1A"/><rect x="16" y="7" width="2" height="21" rx="1" fill="#0C2B1A"/><ellipse cx="11.5" cy="11" rx="5.5" ry="4" fill="#0C2B1A" transform="rotate(-20 11.5 11)"/><ellipse cx="22.5" cy="17" rx="5.5" ry="4" fill="#0C2B1A" transform="rotate(20 22.5 17)"/><rect x="7" y="15" width="2" height="13" rx="1" fill="#0C2B1A" opacity=".55"/><ellipse cx="4.5" cy="16.5" rx="4" ry="3" fill="#0C2B1A" opacity=".55" transform="rotate(-20 4.5 16.5)"/><rect x="25" y="15" width="2" height="13" rx="1" fill="#0C2B1A" opacity=".55"/><ellipse cx="29.5" cy="16.5" rx="4" ry="3" fill="#0C2B1A" opacity=".55" transform="rotate(20 29.5 16.5)"/></svg></span>AGRO<span>CONTROL</span></div>'+
       '<p class="bajada">Siembra, cosecha, insumos y clima por lote. Lo que cargues queda en tu cuenta y lo ves desde cualquier dispositivo.</p>'+
       '<div class="portada-panel">'+
         '<h2>'+(crear?"Crear tu cuenta":"Entrar")+'</h2>'+
