@@ -929,12 +929,20 @@ var CV_LLUVIA_NORMAL = 0.35;
    por CV_LLUVIA_NORMAL si no. */
 function percentilesDeVentana(historiaLarga, ventana, desdeCampaniaISO){
   var historico = totalesPorAnio(historiaLarga, ventana);
-  if(historico.length) return percentilesVentana(historico);
+  if(historico.length){
+    var real = percentilesVentana(historico);
+    real.normal = false;
+    return real;
+  }
   var normal = totalNormalVentana(ventana, desdeCampaniaISO);
   return {
     p20: Math.round(normal * (1 - 0.84 * CV_LLUVIA_NORMAL) * 10) / 10,  /* mismo redondeo a 1 decimal que la rama real */
     p50: normal,
-    p80: Math.round(normal * (1 + 0.84 * CV_LLUVIA_NORMAL) * 10) / 10
+    p80: Math.round(normal * (1 + 0.84 * CV_LLUVIA_NORMAL) * 10) / 10,
+    /* Fix round 1, I1: quien llame tiene que poder distinguir un rango sacado
+       de los 20 años del campo de uno sacado de la lluvia mensual típica. No
+       es "más ancho": es una estimación gruesa, y la pantalla lo dice. */
+    normal: true
   };
 }
 
@@ -992,11 +1000,12 @@ function escenariosVentana(o){
   var faltan = diasEntre(o.serie.desde, o.ventana.hasta) + 1 - o.serie.lluvia.length;
   if(faltan < 0) faltan = 0;
 
-  var pcts = [0, 0, 0], etoDias = [];
+  var pcts = [0, 0, 0], etoDias = [], respaldoNormal = false;
   if(faltan > 0){
     var primerFaltante = masDias(o.ventana.hasta, -(faltan - 1));
     var subventana = { desde: primerFaltante, hasta: o.ventana.hasta };
     var p = percentilesDeVentana(o.historiaLarga, subventana, o.desdeCampaniaISO);
+    respaldoNormal = !!p.normal;
     pcts = [p.p20, p.p50, p.p80];
     var etoRespaldo = promedioSerie(o.serie.eto.slice(-15));  /* últimos días reales, no la campaña entera */
     for(var i = 0; i < faltan; i++){
@@ -1033,7 +1042,12 @@ function escenariosVentana(o){
 
     ias.push(r.ia);
   }
-  return escenarios({ rBase: o.rBase, ky: o.ky, iaPeor: ias[0], iaMedio: ias[1], iaMejor: ias[2] });
+  var r = escenarios({ rBase: o.rBase, ky: o.ky, iaPeor: ias[0], iaMedio: ias[1], iaMejor: ias[2] });
+  /* Fix round 1, I1: es la única función que sabe la verdad sobre el respaldo.
+     Sin tramo pendiente no se estimó nada y no hay degradación que declarar,
+     aunque la historia del campo no se haya bajado nunca. */
+  r.normal = respaldoNormal;
+  return r;
 }
 
 /* Único dato del módulo que no entra solo: no hay fuente pública sin
@@ -1116,6 +1130,42 @@ function mesEntregaDe(cultivo, desdeCampaniaISO){
   return new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth() + n, 1)).toISOString().slice(0, 10);
 }
 
+/* perfil es el único objeto del modelo que NO pasa por aCamello: cargar() lo
+   asigna tal como lo devuelve PostgREST y toda la app lo lee en guión bajo
+   (codigo_telegram, codigo_expira). La columna de la migración 0007 se llama
+   rindes_base, así que leer perfil.rindesBase daba undefined SIEMPRE: el
+   override no llegaba nunca, la marca "criterio propio" era código muerto y
+   el consejo que la pantalla da cuando falta el ancla —"cargá el rinde que
+   esperás vos"— quedaba inoperante, sin un solo error visible. Mismo modo de
+   falla que el mes de entrega del forward: el dato existe y no aparece.
+   Este es el único lugar del archivo donde se escribe ese nombre. */
+function overridesDePerfil(perfilFila){
+  return (perfilFila && perfilFila.rindes_base) || {};
+}
+
+/* Arma el mapa que se graba en perfiles.rindes_base a partir de lo que
+   devuelve el formulario, para un establecimiento. Vacío es "sin criterio
+   propio" y BORRA la entrada —grabar 0 significaría "esperá cero kilos"—,
+   mientras que un 0 tipeado se respeta, que es el contrato que rindeAncla ya
+   tiene testeado. Es la misma distinción vacío-contra-cero que armarAmbiente
+   aplica a la napa, y vive acá por la misma razón: fuera del modelo ningún
+   test puede tocarla. */
+function armarOverrides(previo, establecimientoId, valores){
+  var todo = {}, k;
+  for(k in (previo || {})) if(Object.prototype.hasOwnProperty.call(previo, k)) todo[k] = previo[k];
+  var deEste = {}, hay = false;
+  for(k in (valores || {})) if(Object.prototype.hasOwnProperty.call(valores, k)){
+    var v = valores[k];
+    if(v === "" || v == null) continue;
+    var n = Number(v);
+    if(!isFinite(n)) continue;
+    deEste[k] = n; hay = true;
+  }
+  if(hay) todo[establecimientoId] = deEste;
+  else delete todo[establecimientoId];
+  return todo;
+}
+
 /* Los ambientes con los que corre el balance hídrico. Un lote sin ambientes
    corre entero como uno solo; un ambiente sin agua útil cargada cae al valor
    inicial que le toca por nombre. El aporte de napa es el parche declarado de
@@ -1194,12 +1244,18 @@ function filaSementera(o){
     ia:null, iaDias:0,
     iaDiasVentana:(ventana ? diasEntre(ventana.desde, ventana.hasta) + 1 : 0),
     mmSiembra:null, mmVentana:null, serieHasta:null,
-    napa:false, normal:!!(hist && hist.normal), falta:null
+    /* Sin historia bajada se asume degradado; si hay escenarios, abajo se
+       reemplaza por lo que escenariosVentana efectivamente hizo. */
+    napa:false, normal:(!hist || !!hist.normal), falta:null
   };
   amb.forEach(function(a){ if(a.napa != null && a.napa > 0) f.napa = true; });
 
-  if(ancla.kgHa == null) f.falta = "ancla";
-  else if(!ventana || ky == null || kc == null) f.falta = "cultivo";
+  /* El orden importa: un cultivo sin ventana crítica —alfalfa, vicia— tampoco
+     tiene rinde oficial, y si se chequea el ancla primero se le ofrece al
+     usuario un remedio que no lo arregla ("cargá tu rinde"), porque sin
+     ventana no hay cuenta que hacer ni con ancla propia. */
+  if(!ventana || ky == null || kc == null) f.falta = "cultivo";
+  else if(ancla.kgHa == null) f.falta = "ancla";
   else if(!serie) f.falta = "serie";
 
   if(serie){
@@ -1233,6 +1289,7 @@ function filaSementera(o){
     var e = escenariosVentana({ serie:serie, ventana:ventana, desdeCampaniaISO:c.desde,
       cau:cau, au0:au0, kc:kc, historiaLarga:hist, rBase:ancla.kgHa, ky:ky });
     a.kgHa = e;
+    if(e) f.normal = !!e.normal;
     if(!e) todos = false;
     else {
       acum.pesimista += e.pesimista * a.ha;
@@ -1305,8 +1362,9 @@ function sementeraDeCampania(o){
     } else g.sinDato++;
   });
 
-  var tn = 0, tnP = 0, tnO = 0, vendidas = 0, valor = 0, hayValor = false;
+  var tn = 0, tnP = 0, tnO = 0, hayTn = false, vendidas = 0, valor = 0, hayValor = false;
   var margen = 0, hayMargen = false, excedidos = 0, sinDato = 0;
+  var sinCalcular = 0, sinCalcularVendidos = 0;
   cultivos.forEach(function(g){
     var a = acum[g.cultivo];
     if(a.ha > 0){
@@ -1321,10 +1379,11 @@ function sementeraDeCampania(o){
     g.precio = g.mesEntrega ? forwardDe(o.forwards || [], g.cultivo, g.mesEntrega) : null;
     g.valor = (g.precio != null && g.tn) ? Math.round(g.precio * g.tn.esperada) : null;
 
-    if(g.tn){ tn += g.tn.esperada; tnP += g.tn.pesimista; tnO += g.tn.optimista; }
+    if(g.tn){ tn += g.tn.esperada; tnP += g.tn.pesimista; tnO += g.tn.optimista; hayTn = true; }
     vendidas += g.tnVendidas;
     if(g.valor != null){ valor += g.valor; hayValor = true; }
     if(g.comp){ margen += g.comp.margen; hayMargen = true; }
+    else { sinCalcular++; if(g.tnVendidas > 0) sinCalcularVendidos++; }
     if(g.comp && g.comp.excedido) excedidos++;
     sinDato += g.sinDato;
   });
@@ -1332,17 +1391,28 @@ function sementeraDeCampania(o){
 
   var ha = 0;
   filas.forEach(function(f){ ha += f.ha; });
-  /* El margen total es null —y no cero— cuando ningún cultivo se pudo
-     calcular: cero toneladas de margen es "no vendas ni un kilo más", que no
-     es lo mismo que "todavía no sé cuánto podés vender". */
+  /* Fix round 1, I3: `tn` es null cuando NINGÚN cultivo se pudo calcular, y no
+     cero. Cero toneladas esperadas es un resultado alcanzable de verdad —con
+     Ky 1,50 FAO-33 satura y devuelve 0 kg/ha con cualquier índice de agua por
+     debajo de 0,333, que es un año Niña en la Pampa Ondulada, justo cuando
+     este módulo importa—, y el estado más grave que el modelo sabe expresar no
+     puede salir disfrazado de ignorancia. Es el mismo criterio del margen, que
+     ya lo aplicaba; acá faltaba.
+
+     Fix round 1, I2: el margen total además se vuelve null cuando hay un
+     cultivo VENDIDO que no se pudo calcular. Sumar sólo los cultivos con
+     cuenta mientras `tnVendidas` los suma a todos dejaba "+120 t" en verde,
+     rotulado "contra el escenario pesimista", con un forward entero afuera de
+     la cuenta. Es el número que autoriza vender. */
   return { filas:filas, cultivos:cultivos,
            ha:Math.round(ha * 10) / 10,
-           tn:Math.round(tn * 10) / 10,
-           tnPesimista:Math.round(tnP * 10) / 10,
-           tnOptimista:Math.round(tnO * 10) / 10,
+           tn:(hayTn ? Math.round(tn * 10) / 10 : null),
+           tnPesimista:(hayTn ? Math.round(tnP * 10) / 10 : null),
+           tnOptimista:(hayTn ? Math.round(tnO * 10) / 10 : null),
            tnVendidas:Math.round(vendidas * 10) / 10,
            valor:(hayValor ? valor : null),
-           margen:(hayMargen ? Math.round(margen * 10) / 10 : null),
+           margen:((hayMargen && !sinCalcularVendidos) ? Math.round(margen * 10) / 10 : null),
+           sinCalcular:sinCalcular, sinCalcularVendidos:sinCalcularVendidos,
            excedidos:excedidos, sinDato:sinDato };
 }
 /* === modelo:fin === */
@@ -2848,6 +2918,63 @@ A.borrarGasto=function(id){
    gratuita de precios forward sin credenciales. Se carga a mano; si algún
    día hay acceso a MATBA-ROFEX, se automatiza sin tocar el resto (ver
    forwardDe en el modelo). */
+/* El rinde de referencia propio: lo único que corrige los dos límites
+   conocidos de la serie oficial —que trae un solo "maíz" sin separar
+   temprano de tardío, y que la mediana del partido mezcla campos bien
+   llevados con flojos—. Va por establecimiento porque el partido cambia, y
+   por cultivo porque el límite es distinto en cada uno.
+   Se graba en perfiles.rindes_base, que no está en TABLAS: como el código de
+   Telegram, se manda con sb.actualizar y no por la cola de guardar(). */
+A.rindesBase=function(estId){
+  var es=estab(estId); if(!es) return;
+  var cultivos=Object.keys(VENTANAS);
+  var previo=overridesDePerfil(perfil), mios=previo[estId]||{};
+  var vals={}; cultivos.forEach(function(k){ vals[k]=(mios[k]!=null?mios[k]:""); });
+
+  function panel(d){
+    return '<div class="panel-vivo"><h4>Con qué va a arrancar la cuenta</h4>'+
+      cultivos.map(function(k){
+        var of=rindeBase(k,es.localidad), crudo=d?d[k]:vals[k];
+        var propio=(crudo!==""&&crudo!=null&&isFinite(Number(crudo)));
+        var usa=propio?Number(crudo):of;
+        return '<div class="panel-fila"><span>'+esc(CULTIVOS[k].nom)+
+          '<small>'+(propio?"tu criterio":(of!=null?"oficial del partido":"todavía sin referencia"))+'</small></span>'+
+          '<b'+(propio?' style="color:var(--ojo)"':'')+'>'+(usa!=null?nf(usa)+" kg/ha":"—")+'</b></div>';
+      }).join("")+
+      '<p class="panel-aviso bien">Lo que dejes vacío usa el número oficial. Para volver al oficial, borrá el campo.</p></div>';
+  }
+
+  abrirForm({titulo:"Rindes de referencia · "+es.nombre,
+    ok:"Guardar rindes",
+    nota:"De acá arranca la cuenta: el rinde esperado por agua es este número castigado por el agua que "+
+         "faltó en la ventana crítica. El oficial es la mediana de los últimos 20 años del partido de <b>"+
+         esc(es.localidad)+"</b> y sirve como piso razonable, pero mezcla campos bien manejados con flojos, "+
+         "y trae un solo maíz para el temprano y el tardío. Si tu campo rinde otra cosa, ponelo acá y manda el tuyo.",
+    valores:vals,
+    campos:cultivos.map(function(k){
+      var of=rindeBase(k,es.localidad);
+      return {k:k, label:CULTIVOS[k].nom+" (kg/ha)", tipo:"number", paso:"10", min:"0",
+        ph:(of!=null?String(of):""),
+        hint:(of!=null?"Oficial del partido: "+nf(of)+" kg/ha. Vacío usa ese."
+                      :"Este partido no está en la serie oficial: sin tu número no hay rinde de referencia.")};
+    }),
+    panel:panel,
+    guardar:function(d){
+      var valores={}; cultivos.forEach(function(k){ valores[k]=d[k]; });
+      var nuevo=armarOverrides(previo, estId, valores);
+      if(!perfil) perfil={};
+      perfil.rindes_base=nuevo;
+      guardarCache();
+      var propios=(nuevo[estId]?Object.keys(nuevo[estId]).length:0);
+      sb.actualizar("perfiles", sesion.user.id, {rindes_base:nuevo})
+        .then(function(){
+          avisar(propios?"Guardé "+propios+" rinde"+(propios===1?"":"s")+" propio"+(propios===1?"":"s")+" de "+es.nombre+"."
+                        :"Todos los cultivos de "+es.nombre+" vuelven al rinde oficial.");
+        })
+        .catch(function(err){ avisar("No pude guardar los rindes: "+err.message); });
+    }});
+};
+
 A.nuevoPrecioForward=function(id){
   var P=id?E.preciosForward.filter(function(x){return x.id===id;})[0]:null;
   abrirForm({titulo:P?"Editar precio forward":"Cargar precio forward",
@@ -3742,8 +3869,9 @@ function vistaInicio(){
           ?"Sin lotes sembrados"
           :(sem.excedidos
             ?'<span style="color:var(--alerta)">'+sem.excedidos+" comprometido"+(sem.excedidos===1?"":"s")+" de más</span>"
-            /* sin toneladas esperadas el modelo todavía no tiene con qué: no es cero */
-            :(sem.tn?nf(sem.tn,1)+" <span>t esperadas</span>":"Todavía sin calcular"))},
+            /* != null: sin toneladas esperadas el modelo todavía no tiene con
+               qué, pero cero toneladas esperadas es un resultado real. */
+            :(sem.tn!=null?nf(sem.tn,1)+" <span>t esperadas</span>":"Todavía sin calcular"))},
     {v:"insumos", ico:"insumos", nom:"Insumos",
      dice:"Stock por campo derivado de sus movimientos, con lo comprometido por los trabajos.",
      dato:faltan?'<span style="color:var(--alerta)">'+faltan+" faltante"+(faltan===1?"":"s")+"</span>":E.insumos.length+" <span>en catálogo</span>"},
@@ -3977,25 +4105,33 @@ function vistaMonitoreo(){
    No se piden al arrancar la app —son muchos datos y no hacen falta hasta
    que alguien abre esta pantalla—, así que se piden acá, una sola vez por
    sesión, y se vuelve a pintar cuando llegan. */
-var historiasPedidas = false;
+/* Se lleva la cuenta por establecimiento y no con una sola bandera de sesión:
+   un campo creado después de la primera visita al módulo también tiene que
+   pedir su historia, y con la bandera única no la pedía nunca. */
+var historiasPedidas = {};
 function asegurarHistorias(){
-  if(historiasPedidas) return;
-  historiasPedidas = true;
   var faltan = E.establecimientos.filter(function(es){
-    return !HISTORIA[es.id] && !historiaEnCache(es.id);
+    return !historiasPedidas[es.id] && !HISTORIA[es.id] && !historiaEnCache(es.id);
   });
   if(!faltan.length) return;
+  faltan.forEach(function(es){ historiasPedidas[es.id] = true; });
   Promise.all(faltan.map(function(es){ return traerHistoriaLarga(es); })).then(pintar);
 }
 
+/* Pide la historia acá y no en la vista: el número vivo del menú principal
+   también sale de esta cuenta, y hasta que alguien abriera el módulo salía
+   del respaldo NORMAL sin que nada lo dijera. Es idempotente y se cachea en
+   localStorage para siempre —la lluvia de hace diez años no cambia—, así que
+   son unos pocos pedidos una sola vez en la vida de la cuenta. */
 function sementeraActual(){
   var c = campania(campActiva); if(!c) return null;
+  asegurarHistorias();
   var vend = {}, vpc = ventasPorCultivo(campActiva);
   Object.keys(vpc).forEach(function(k){ vend[k] = vpc[k].tn; });
   return sementeraDeCampania({
     campania:c, cultivoLotes:E.cultivoLotes, lotes:E.lotes,
     establecimientos:E.establecimientos, series:E.climaSeries,
-    historias:HISTORIA, overrides:((perfil && perfil.rindesBase) || {}),
+    historias:HISTORIA, overrides:overridesDePerfil(perfil),
     vendidas:vend, forwards:(E.preciosForward || []) });
 }
 
@@ -4003,7 +4139,7 @@ function sementeraActual(){
    bien" tienen que verse distinto. */
 var SEM_FALTA = {
   ancla:  { t:"Todavía no sé cuánto puede rendir",
-            d:"El partido de este campo no está en la serie oficial del MAGyP. Cargá el rinde que esperás vos y el modelo arranca." },
+            d:"El partido de este campo no está en la serie oficial del MAGyP. Cargale abajo, en «Rindes de referencia», el rinde que esperás vos y el modelo arranca." },
   cultivo:{ t:"Este cultivo no entra en el modelo",
             d:"El rinde por agua sale de la ventana crítica, y sólo los ocho cultivos de grano la tienen codificada." },
   serie:  { t:"Todavía no bajó la lluvia diaria de este campo",
@@ -4141,8 +4277,41 @@ function semDetalleLote(f){
   return '<details class="sem-lote">'+resumen+cuerpo+'</details>';
 }
 
+/* La puerta de entrada al rinde de referencia propio. Va en la pantalla y no
+   escondido en una configuración: es el remedio que el módulo ofrece cuando
+   el partido no está en la serie oficial, y el que corrige la mediana que
+   mezcla campos bien llevados con flojos. Muestra el oficial al lado para que
+   se vea contra qué se está comparando. */
+function bloqueRindesBase(){
+  var ov = overridesDePerfil(perfil), cultivos = Object.keys(VENTANAS);
+  if(!E.establecimientos.length) return "";
+  return '<div class="bloque"><div class="bloque-cab"><h2>Rindes de referencia</h2>'+
+    '<div class="aclara">De acá arranca la cuenta, antes de castigarla por el agua que faltó</div></div>'+
+    '<div class="scroll-x"><table class="tabla"><thead><tr><th>Campo</th><th>Partido</th>'+
+    '<th class="col-opcional">De dónde sale</th><th class="der">Acciones</th></tr></thead><tbody>'+
+    E.establecimientos.map(function(es){
+      var mios = ov[es.id] || {}, propios = 0, sinOficial = 0;
+      cultivos.forEach(function(k){
+        if(mios[k] != null) propios++;
+        else if(rindeBase(k, es.localidad) == null) sinOficial++;
+      });
+      return '<tr><td><span class="lote-nom">'+esc(es.nombre)+'</span></td>'+
+        '<td>'+esc(PARTIDO_DE_LOCALIDAD[es.localidad] || es.localidad)+'</td>'+
+        '<td class="col-opcional">'+
+          (propios?'<span class="sem-marca propia">'+propios+' con tu criterio</span> ':'')+
+          (sinOficial
+            ?'<span class="sem-marca gruesa">'+sinOficial+' sin referencia</span>'
+            :(propios?'<span class="lote-est">el resto, oficial del partido</span>'
+                     :'<span class="lote-est">todos, la mediana oficial del partido</span>'))+
+        '</td>'+
+        '<td class="der"><span class="acc"><button class="btn sec mini" data-a="rindesBase" data-arg="'+es.id+'">Cargar el mío</button></span></td></tr>';
+    }).join("")+'</tbody></table></div>'+
+    '<p class="aviso bueno" style="margin:0 16px 16px">La serie oficial del MAGyP trae un solo «maíz» —no separa temprano de tardío— '+
+    'y su mediana mezcla campos bien manejados con flojos. Tu número pisa al oficial, queda marcado como <b>criterio propio</b> '+
+    'en toda la pantalla, y vacío vuelve al oficial.</p></div>';
+}
+
 function vistaSementera(){
-  asegurarHistorias();
   var c = campania(campActiva), s = sementeraActual();
   var cab = '<div class="cabecera"><div><h1>Sementera</h1>'+
     '<div class="sub">Rinde esperado <b>por agua</b> de lo que está en pie en '+esc(c.nombre)+'. '+
@@ -4154,15 +4323,20 @@ function vistaSementera(){
     return cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada sembrado en '+esc(c.nombre)+'.</b>'+
       'El módulo proyecta el rinde de los lotes ya sembrados: en cuanto registres una siembra con su fecha '+
       'y su superficie, acá vas a ver cuánto puede rendir cada uno y cuánto podés comprometer sin pasarte.'+
-      '<br><br><button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></p></div>';
+      '<br><br><button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></p></div>'+
+      bloqueRindesBase();
 
   var ficha = '<div class="ficha">'+
     '<div><div class="eyebrow">Superficie en pie</div><div class="v">'+nf(s.ha,1)+'<span class="u">ha</span></div>'+
       '<div class="nota">'+s.filas.length+' lote'+(s.filas.length===1?"":"s")+' sembrado'+(s.filas.length===1?"":"s")+'</div></div>'+
+    /* s.tn se pregunta por != null y no por verdadero: cero toneladas
+       esperadas es un resultado real —FAO-33 satura en 0— y no puede
+       mostrarse con la misma cara que "todavía no tengo con qué calcular". */
     '<div><div class="eyebrow">Producción esperada</div>'+
-      (s.tn?'<div class="v">'+nf(s.tn,1)+'<span class="u">t</span></div>'+
+      (s.tn!=null?'<div class="v">'+nf(s.tn,1)+'<span class="u">t</span></div>'+
         '<div class="nota">'+(s.tnPesimista===s.tnOptimista
-          ?'La ventana crítica ya pasó entera: los tres escenarios convergen'
+          ?(s.tn===0?'Cero: el agua de la ventana crítica no alcanza para ningún grano'
+                    :'La ventana crítica ya pasó entera: los tres escenarios convergen')
           :'Entre '+nf(s.tnPesimista,1)+' y '+nf(s.tnOptimista,1)+' t según cómo siga la lluvia')+'</div>'
        :'<div class="v">—</div><div class="nota">Todavía no hay nada que calcular</div>')+'</div>'+
     '<div><div class="eyebrow">Comprometido</div><div class="v">'+nf(s.tnVendidas,1)+'<span class="u">t</span></div>'+
@@ -4170,8 +4344,12 @@ function vistaSementera(){
     '<div><div class="eyebrow">Queda por comprometer</div>'+
       (s.margen!=null
         ?'<div class="v" style="color:'+(s.margen<0?"var(--alerta)":"var(--ok)")+'">'+(s.margen<0?"−":"")+nf(Math.abs(s.margen),1)+'<span class="u">t</span></div>'+
-          '<div class="nota">Contra el escenario pesimista, que es el límite prudente</div>'
-        :'<div class="v">—</div><div class="nota">Sin producción esperada no hay límite que valga</div>')+'</div>'+
+          '<div class="nota">Contra el escenario pesimista, que es el límite prudente'+
+          (s.sinCalcular?'. Excluye '+s.sinCalcular+' cultivo'+(s.sinCalcular===1?"":"s")+' sin calcular, que no tiene'+(s.sinCalcular===1?"":"n")+' nada vendido':'')+'</div>'
+        :'<div class="v">—</div><div class="nota">'+
+          (s.sinCalcularVendidos
+            ?'Hay '+s.sinCalcularVendidos+' cultivo'+(s.sinCalcularVendidos===1?"":"s")+' con forward vendido que el modelo todavía no puede calcular: cualquier margen sería falso'
+            :'Sin producción esperada no hay límite que valga')+'</div>')+'</div>'+
     (s.valor!=null?'<div><div class="eyebrow">Valor contra el forward</div><div class="v">'+nf(s.valor)+'<span class="u">USD</span></div>'+
       '<div class="nota">Producción esperada al precio que cargaste</div></div>':'')+
   '</div>';
@@ -4225,7 +4403,7 @@ function vistaSementera(){
     '<div class="aclara">Tocá un lote para ver su ficha y la cuenta del modelo abierta</div></div>'+
     '<div class="bloque-cuerpo">'+s.filas.map(semDetalleLote).join("")+'</div></div>';
 
-  return cab+ficha+alarma+aviso+tarjetas+lotes+
+  return cab+ficha+alarma+aviso+tarjetas+lotes+bloqueRindesBase()+
     '<p class="pie">El rinde esperado por agua responde sólo al balance hídrico: FAO-33 sobre la ventana crítica de cada cultivo, '+
     'con el rinde mediano del partido como referencia. No modela enfermedades, granizo, malezas, plagas, nitrógeno ni fecha de siembra fuera de la ventana óptima, '+
     'y tampoco el aporte de napa salvo el que cargues a mano por ambiente.</p>';

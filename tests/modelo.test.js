@@ -707,7 +707,11 @@ test("sin escenarios no hay compromiso: no dice que no te pasaste", function(){
   assert.strictEqual(g.kgHa, null);
   assert.strictEqual(g.tn, null);
   assert.strictEqual(g.comp, null);
-  assert.strictEqual(s.tn, 0);
+  /* I3: null, no cero. Cero toneladas esperadas es un rinde de verdad
+     —FAO-33 satura en 0 con Ky 1,50— y no puede compartir la cara con
+     "todavía no tengo con qué calcular". */
+  assert.strictEqual(s.tn, null);
+  assert.strictEqual(s.tnPesimista, null);
   assert.strictEqual(s.sinDato, 1);
 });
 
@@ -769,4 +773,195 @@ test("sin ningún cultivo calculable el margen total es null, no cero", function
     cultivoLotes:[CL], series:[], historias:{}, overrides:{},
     vendidas:{ soja_1:50 }, forwards:[] });
   assert.strictEqual(s.margen, null);
+});
+
+/* ============================================================
+   Task 9 · fix round 1
+   ============================================================ */
+
+/* --- C1: de dónde sale el override --- */
+
+test("el override sale de perfiles.rindes_base, que es la clave que devuelve PostgREST", function(){
+  /* JSON.stringify y no deepStrictEqual: los objetos que arma el modelo salen
+     de otro contexto de vm y no comparten Object.prototype. */
+  assert.strictEqual(JSON.stringify(M.overridesDePerfil({ rindes_base:{ e1:{ maiz_d:11000 } } })),
+                     JSON.stringify({ e1:{ maiz_d:11000 } }));
+});
+
+test("perfil no pasa por aCamello: en camello la clave no existe y no se lee", function(){
+  /* Fija el nombre real. La app trata perfil crudo en guión bajo en todos
+     lados (codigo_telegram, codigo_expira): leerlo en camello devolvía {}
+     siempre y el override no llegaba nunca. */
+  assert.strictEqual(JSON.stringify(M.overridesDePerfil({ rindesBase:{ e1:{ maiz_d:11000 } } })), "{}");
+  assert.strictEqual(JSON.stringify(M.overridesDePerfil(null)), "{}");
+  assert.strictEqual(JSON.stringify(M.overridesDePerfil({})), "{}");
+});
+
+/* --- C2: lo que graba el formulario --- */
+
+test("armarOverrides: vacío borra la entrada en vez de grabarla en 0", function(){
+  var r = M.armarOverrides({ e1:{ maiz_d:11000, soja_1:4200 } }, "e1", { maiz_d:"", soja_1:"4200" });
+  assert.strictEqual(JSON.stringify(r), JSON.stringify({ e1:{ soja_1:4200 } }));
+});
+
+test("armarOverrides: un 0 explícito se graba, porque es criterio y no ausencia", function(){
+  var r = M.armarOverrides({}, "e1", { maiz_d:"0" });
+  assert.strictEqual(r.e1.maiz_d, 0);
+});
+
+test("armarOverrides: no toca los overrides de los otros campos", function(){
+  var r = M.armarOverrides({ e2:{ trigo:5000 } }, "e1", { maiz_d:"9000" });
+  assert.strictEqual(JSON.stringify(r), JSON.stringify({ e2:{ trigo:5000 }, e1:{ maiz_d:9000 } }));
+});
+
+test("armarOverrides: si se vacían todos, el campo entero sale del mapa", function(){
+  var r = M.armarOverrides({ e1:{ maiz_d:11000 }, e2:{ trigo:5000 } }, "e1", { maiz_d:"" });
+  assert.strictEqual(JSON.stringify(r), JSON.stringify({ e2:{ trigo:5000 } }));
+});
+
+test("armarOverrides: basura no numérica no se graba", function(){
+  assert.strictEqual(JSON.stringify(M.armarOverrides({}, "e1", { maiz_d:"once mil" })), "{}");
+});
+
+/* --- I1: la degradación al respaldo NORMAL --- */
+
+test("escenariosVentana avisa cuando el tramo pendiente salió del respaldo NORMAL", function(){
+  var serie = serieHasta("2025-12-31", 3, 4);
+  var e = M.escenariosVentana({ serie:serie, ventana:M.ventanaCritica("soja_1","2025-07-01"),
+    desdeCampaniaISO:"2025-07-01", cau:160, au0:96, kc:1.15,
+    historiaLarga:null, rBase:3600, ky:1 });
+  assert.strictEqual(e.normal, true);
+});
+
+test("con la ventana cubierta entera no queda tramo estimado y normal es false", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var e = M.escenariosVentana({ serie:serie, ventana:M.ventanaCritica("soja_1","2025-07-01"),
+    desdeCampaniaISO:"2025-07-01", cau:160, au0:96, kc:1.15,
+    historiaLarga:null, rBase:3600, ky:1 });
+  assert.strictEqual(e.normal, false);
+});
+
+test("sin historia larga todavía bajada la fila se marca como estimación gruesa", function(){
+  /* El estado del primer pintado y el del campo creado después: hist es null,
+     no {normal:true}, y antes quedaba normal:false — un rango de respaldo
+     presentado como si saliera de los 20 años del campo. */
+  var f = fila({ serie: serieHasta("2025-12-31", 3, 4), historiaLarga:null });
+  assert.strictEqual(f.normal, true);
+});
+
+/* --- I2: el margen total y los cultivos que no se pueden calcular --- */
+
+test("un cultivo vendido que no se puede calcular deja el margen total en 'todavía no sé'", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var cebada = { id:"cl9", campaniaId:"c1", loteId:"lx", cultivo:"cebada",
+                 haSembrada:80, fechaSiembra:"2025-06-20" };
+  var lx = { id:"lx", establecimientoId:"e9", nombre:"Lote sin serie", ha:80, ambientes:[] };
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE, lx], establecimientos:[EST],
+    cultivoLotes:[CL, cebada], series:[serie], historias:{}, overrides:{},
+    vendidas:{ soja_1:50, cebada:200 }, forwards:[] });
+  assert.strictEqual(s.margen, null, "hay un cultivo vendido sin calcular: no hay margen que valga");
+  assert.strictEqual(s.sinCalcularVendidos, 1);
+});
+
+test("un cultivo sin calcular pero sin vender deja el margen, avisando a cuántos excluye", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var cebada = { id:"cl9", campaniaId:"c1", loteId:"lx", cultivo:"cebada",
+                 haSembrada:80, fechaSiembra:"2025-06-20" };
+  var lx = { id:"lx", establecimientoId:"e9", nombre:"Lote sin serie", ha:80, ambientes:[] };
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE, lx], establecimientos:[EST],
+    cultivoLotes:[CL, cebada], series:[serie], historias:{}, overrides:{},
+    vendidas:{ soja_1:50 }, forwards:[] });
+  assert.notStrictEqual(s.margen, null);
+  assert.strictEqual(s.sinCalcular, 1);
+  assert.strictEqual(s.sinCalcularVendidos, 0);
+});
+
+/* --- I3: cero real contra "no sé" --- */
+
+test("un rinde esperado de 0 kg/ha es un cero de verdad, no un 'todavía no sé'", function(){
+  /* Seca total sobre maíz: con Ky 1,50 FAO-33 satura y el modelo dice cero.
+     Es el estado más grave que sabe expresar y tiene que verse como cero. */
+  var seca = serieHasta("2026-03-31", 0, 8);
+  var maiz = { id:"cl8", campaniaId:"c1", loteId:"l1", cultivo:"maiz_t",
+               haSembrada:100, fechaSiembra:"2025-09-25" };
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[maiz], series:[seca], historias:{}, overrides:{},
+    vendidas:{}, forwards:[] });
+  assert.strictEqual(s.cultivos[0].kgHa.esperado, 0);
+  assert.strictEqual(s.tn, 0, "cero toneladas esperadas, no null");
+  assert.strictEqual(s.tnPesimista, 0);
+  assert.notStrictEqual(s.cultivos[0].comp, null, "con cero esperado igual hay límite: es cero");
+});
+
+/* --- I4: el mutante de la regla del compromiso --- */
+
+test("vendido entre el pesimista y el esperado ya es exceso, porque el límite es el piso", function(){
+  /* El único caso que separa compromiso(g.tn.pesimista) de
+     compromiso(g.tn.esperada): con la ventana crítica por delante el rango
+     está abierto y los dos números son distintos. */
+  var serie = serieHasta("2025-12-31", 3, 4);
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serie], historias:{}, overrides:{},
+    vendidas:{}, forwards:[] });
+  var g = s.cultivos[0];
+  assert.ok(g.tn.pesimista < g.tn.esperada, "el rango tiene que estar abierto para que el test sirva");
+  var entre = Math.round((g.tn.pesimista + g.tn.esperada) / 2 * 10) / 10;
+  var s2 = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serie], historias:{}, overrides:{},
+    vendidas:{ soja_1:entre }, forwards:[] });
+  assert.strictEqual(s2.cultivos[0].comp.excedido, true);
+  assert.strictEqual(s2.excedidos, 1);
+});
+
+/* --- I5: el día 1 del mes de entrega --- */
+
+test("el mes de entrega se normaliza al día 1 aunque la campaña arranque a mitad de mes", function(){
+  assert.strictEqual(M.mesEntregaDe("soja_1", "2025-07-15"), "2026-05-01");
+  assert.strictEqual(M.mesEntregaDe("maiz_d", "2025-07-31"), "2026-07-01");
+});
+
+/* --- I6: los dos caminos de "no sé" que faltaban, y la campaña mixta --- */
+
+test("una localidad fuera de la serie oficial no da rinde: falta el ancla", function(){
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4),
+                 establecimiento:{ id:"e9", nombre:"El Sauce", localidad:"Tandil" } });
+  assert.strictEqual(f.ancla.kgHa, null);
+  assert.strictEqual(f.falta, "ancla");
+  assert.strictEqual(f.kgHa, null);
+});
+
+test("la alfalfa no tiene ventana crítica: falta el cultivo y no tiene mes de entrega", function(){
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4),
+                 cl:{ id:"cla", campaniaId:"c1", loteId:"l1", cultivo:"alfalfa",
+                      haSembrada:50, fechaSiembra:"2025-09-01" } });
+  assert.strictEqual(f.falta, "cultivo");
+  assert.strictEqual(f.kgHa, null);
+  assert.strictEqual(M.mesEntregaDe("alfalfa", "2025-07-01"), null);
+  assert.strictEqual(M.mesEntregaDe("vicia", "2025-07-01"), null);
+});
+
+test("campaña mixta: el cultivo que se calcula suma y el que no se calcula no se disfraza", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var alfalfa = { id:"cla", campaniaId:"c1", loteId:"l1", cultivo:"alfalfa",
+                  haSembrada:50, fechaSiembra:"2025-09-01" };
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL, alfalfa], series:[serie], historias:{}, overrides:{},
+    vendidas:{}, forwards:[] });
+  var soja = s.cultivos.filter(function(g){ return g.cultivo==="soja_1"; })[0];
+  var alf  = s.cultivos.filter(function(g){ return g.cultivo==="alfalfa"; })[0];
+  assert.notStrictEqual(soja.tn, null);
+  assert.strictEqual(alf.tn, null);
+  assert.strictEqual(alf.comp, null);
+  assert.strictEqual(s.tn, soja.tn.esperada, "la alfalfa no suma cero: no suma");
+  assert.strictEqual(s.sinCalcular, 1);
+});
+
+/* --- la napa en 0: lo consideré y no aporta --- */
+
+test("napa en 0 no marca la fila: es 'lo consideré y no aporta', no un ajuste", function(){
+  var cero = { id:"l1", establecimientoId:"e1", nombre:"Lote 7", ha:100,
+    ambientes:[ { nombre:"Loma", ha:40, cau:140, napa:0 },
+                { nombre:"Bajo", ha:60, cau:180, napa:0 } ] };
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4), lote:cero });
+  assert.strictEqual(f.napa, false);
 });
