@@ -1072,3 +1072,84 @@ test("un cultivo cuyos lotes no se pudieron calcular tampoco arrastra la marca g
   assert.strictEqual(s.cultivos[0].kgHa, null);
   assert.strictEqual(s.cultivos[0].normal, false);
 });
+
+/* ============================================================
+   Task 10 · la descarga: una fila por cultivo-lote, tres salidas
+   filasSementera es la fuente única: aplana lo que ya calculó
+   filaSementera/sementeraDeCampania a columnas primitivas, sin
+   recalcular nada, para que CSV, JSON y la hoja imprimible no
+   puedan decir números distintos.
+   ============================================================ */
+
+test("filasSementera arma una fila por cultivo-lote con las columnas crudas del cálculo", function(){
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4) });
+  var filas = M.filasSementera([f]);
+  assert.strictEqual(filas.length, 1);
+  var r = filas[0];
+  assert.strictEqual(r.establecimiento, "La Constancia");
+  assert.strictEqual(r.lote, "Lote 7 — Aguada");
+  assert.strictEqual(r.cultivo, "soja_1");
+  assert.strictEqual(r.ha, 100);
+  assert.strictEqual(r.fechaSiembra, "2025-11-05");
+  assert.strictEqual(r.kgHaEsperado, f.kgHa.esperado);
+  assert.strictEqual(r.kgHaPesimista, f.kgHa.pesimista);
+  assert.strictEqual(r.kgHaOptimista, f.kgHa.optimista);
+  assert.strictEqual(r.tnEsperada, f.tn.esperada);
+  assert.strictEqual(r.anclaKgHa, f.ancla.kgHa);
+  assert.strictEqual(r.anclaPropio, false);
+});
+
+test("filasSementera no inventa números: un lote sin con qué calcularse queda en null, no en cero", function(){
+  var f = fila({}); /* sin serie: falta:"serie" */
+  var r = M.filasSementera([f])[0];
+  assert.strictEqual(r.kgHaEsperado, null);
+  assert.strictEqual(r.kgHaPesimista, null);
+  assert.strictEqual(r.tnEsperada, null);
+  assert.strictEqual(r.falta, "serie");
+});
+
+test("filasSementera sale del mismo cálculo que sementeraDeCampania: no hay una segunda cuenta", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serie], historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+  var filas = M.filasSementera(s.filas);
+  assert.strictEqual(filas[0].kgHaEsperado, s.filas[0].kgHa.esperado);
+  assert.strictEqual(filas[0].tnEsperada, s.filas[0].tn.esperada);
+});
+
+test("filasSementera marca criterio propio y napa cuando corresponde", function(){
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4), overrides:{ soja_1:4200 },
+                 lote:LOTE_CON_NAPA });
+  var r = M.filasSementera([f])[0];
+  assert.strictEqual(r.anclaPropio, true);
+  assert.strictEqual(r.napa, true);
+});
+
+test("el CSV entrecomilla lo que trae comas y duplica las comillas", function(){
+  var csv = M.aCSV([{ lote:'La Loma, norte', cultivo:'Soja 1ª', kgHa:3600 }]);
+  var lineas = csv.split("\n");
+  assert.strictEqual(lineas[0], 'lote,cultivo,kgHa');
+  assert.strictEqual(lineas[1], '"La Loma, norte",Soja 1ª,3600');
+});
+
+test("el CSV también entrecomilla y duplica las comillas sueltas", function(){
+  var csv = M.aCSV([{ lote:'Lote "El Bajo"', cultivo:'Trigo', kgHa:4000 }]);
+  var lineas = csv.split("\n");
+  assert.strictEqual(lineas[1], '"Lote ""El Bajo""",Trigo,4000');
+});
+
+test("aCSV sin filas devuelve string vacío, no un encabezado suelto", function(){
+  assert.strictEqual(M.aCSV([]), "");
+});
+
+test("el CSV y el JSON salen de las mismas filas", function(){
+  var filas = [{ lote:"L1", cultivo:"Soja 1ª", kgHa:3600 }];
+  assert.deepStrictEqual(JSON.parse(M.aJSON(filas)), filas);
+});
+
+test("aJSON conserva los null de filasSementera, no los convierte en 0", function(){
+  var f = fila({});
+  var filas = M.filasSementera([f]);
+  var vuelta = JSON.parse(M.aJSON(filas));
+  assert.strictEqual(vuelta[0].kgHaEsperado, null);
+});

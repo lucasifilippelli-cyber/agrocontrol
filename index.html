@@ -602,6 +602,33 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .sem-cuerpo{padding:16px}
 .sem-cuerpo .bloque{margin-bottom:14px}
 .sem-cuerpo .bloque:last-child{margin-bottom:0}
+/* ---------- descarga y hoja imprimible ---------- */
+.sem-descargas{display:flex;flex-wrap:wrap;gap:10px}
+.sem-descarga{flex:1 1 220px;border:1px solid var(--linea);border-radius:10px;padding:12px 14px;background:var(--panel-2)}
+.sem-descarga h4{margin:0 0 3px;font-size:13.5px}
+.sem-descarga p{margin:0 0 10px;font-size:12px;color:var(--tierra-3)}
+.hoja-impresion{display:none}
+@media print{
+  header.tope, .descargo, nav#nav, .pantalla{display:none!important}
+  body{background:#fff}
+  main.lienzo{padding:0;max-width:none}
+  .hoja-impresion{display:block!important;color:#000;font-family:var(--mono),Arial,sans-serif}
+  .hoja-impresion h1{font-size:19px;margin:0 0 4px}
+  .hoja-impresion h2{font-size:14px;margin:16px 0 6px;border-bottom:1px solid #000;padding-bottom:3px}
+  .hoja-impresion .hi-sub{font-size:11px;color:#333;margin-bottom:10px}
+  .hoja-impresion .hi-resumen{display:flex;flex-wrap:wrap;gap:16px;margin:8px 0 4px;border:1px solid #000;padding:8px 10px}
+  .hoja-impresion .hi-resumen div{min-width:150px}
+  .hoja-impresion .hi-resumen b{display:block;font-size:15px}
+  .hoja-impresion .hi-resumen span{font-size:10.5px;color:#333}
+  .hoja-impresion p{font-size:11.5px;line-height:1.45;margin:4px 0}
+  .hoja-impresion .hi-aviso{border:1px solid #000;padding:6px 8px;margin:8px 0;font-size:11px}
+  .hoja-impresion table{width:100%;border-collapse:collapse;font-size:10px;margin-top:6px}
+  .hoja-impresion th,.hoja-impresion td{border:1px solid #666;padding:3px 5px;text-align:left;vertical-align:top}
+  .hoja-impresion th{background:#eee!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .hoja-impresion tr{page-break-inside:avoid}
+  .hoja-impresion .hi-pie{margin-top:14px;font-size:10px;color:#333;border-top:1px solid #000;padding-top:6px}
+  @page{margin:14mm}
+}
 </style>
 </head>
 <body>
@@ -1448,6 +1475,60 @@ function sementeraDeCampania(o){
            sinCalcular:sinCalcular, sinCalcularVendidos:sinCalcularVendidos,
            excedidos:excedidos, sinDato:sinDato };
 }
+
+/* La fuente única de las tres descargas (hoja imprimible, CSV, JSON): aplana
+   lo que ya calculó filaSementera/sementeraDeCampania a columnas primitivas,
+   una fila por cultivo-lote, sin recalcular nada. Así los tres formatos no
+   pueden decir números distintos.
+   No lee CULTIVOS ni ningún otro nombre de afuera del bloque del modelo —el
+   cultivo queda en su código crudo ("soja_1"), no en el nombre para mostrar,
+   que resuelve la vista si hace falta.
+   Recibe `filas`, el array que ya devuelve sementeraDeCampania(...).filas. */
+function filasSementera(filas){
+  return (filas || []).map(function(f){
+    return {
+      establecimiento: f.establecimiento || "",
+      lote: f.lote || "",
+      cultivo: f.cultivo,
+      ha: f.ha,
+      fechaSiembra: f.fechaSiembra,
+      variedad: f.variedad || "",
+      densidad: f.densidad || "",
+      anclaKgHa: f.ancla ? f.ancla.kgHa : null,
+      anclaPropio: !!(f.ancla && f.ancla.propio),
+      mmSiembra: f.mmSiembra,
+      mmVentana: f.mmVentana,
+      iaDiasTranscurridos: f.iaDias,
+      iaDiasVentana: f.iaDiasVentana,
+      indiceAgua: f.ia,
+      kgHaPesimista: f.kgHa ? f.kgHa.pesimista : null,
+      kgHaEsperado:  f.kgHa ? f.kgHa.esperado  : null,
+      kgHaOptimista: f.kgHa ? f.kgHa.optimista : null,
+      tnPesimista: f.tn ? f.tn.pesimista : null,
+      tnEsperada:  f.tn ? f.tn.esperada  : null,
+      tnOptimista: f.tn ? f.tn.optimista : null,
+      napa: !!f.napa,
+      estimacionGruesa: !!f.normal,
+      falta: f.falta || null
+    };
+  });
+}
+
+/* Una fila por línea, entrecomillando lo que traiga coma, comilla o salto de
+   línea — los nombres de lote llevan comas ("La Loma, norte"). */
+function aCSV(filas){
+  if(!filas.length) return "";
+  var cols = Object.keys(filas[0]);
+  function celda(v){
+    var s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  return [cols.join(",")].concat(filas.map(function(f){
+    return cols.map(function(c){ return celda(f[c]); }).join(",");
+  })).join("\n");
+}
+
+function aJSON(filas){ return JSON.stringify(filas, null, 2); }
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -4432,6 +4513,164 @@ function bloqueRindesBase(){
     'en toda la pantalla, y vacío vuelve al oficial.</p></div>';
 }
 
+/* Dispara la descarga de un Blob armado en memoria. El navegador que muestra
+   la página puede bloquear las descargas que la propia página inicia — no es
+   un bug de acá, es una política del entorno de vista previa. */
+function descargarArchivo(nombre, contenido, tipo){
+  var blob = new Blob([contenido], { type:tipo });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = nombre; a.style.display = "none";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
+
+A.imprimirSementera = function(){ window.print(); };
+A.descargarSementera = function(formato){
+  var s = sementeraActual(); if(!s || !s.filas.length) return;
+  var filas = filasSementera(s.filas);
+  if(formato === "csv") descargarArchivo("sementera.csv", aCSV(filas), "text/csv;charset=utf-8");
+  else if(formato === "json") descargarArchivo("sementera.json", aJSON(filas), "application/json;charset=utf-8");
+};
+
+/* Los tres formatos, con el mismo cálculo abajo (filasSementera): no hay tres
+   verdades dando vueltas. Va arriba de todo, es lo que alguien busca primero
+   cuando ya revisó los números y quiere llevárselos. */
+function bloqueDescargas(){
+  return '<div class="bloque"><div class="bloque-cab"><h2>Bajar esta sementera</h2>'+
+    '<div class="aclara">Los tres salen del mismo cálculo</div></div>'+
+    '<div class="bloque-cuerpo sem-descargas">'+
+      '<div class="sem-descarga"><h4>Hoja imprimible</h4>'+
+        '<p>Para una persona: banco, socio, contador. Con el método a la vista.</p>'+
+        '<button class="btn sec" data-a="imprimirSementera" type="button">Imprimir / Guardar PDF</button></div>'+
+      '<div class="sem-descarga"><h4>CSV</h4><p>Para la planilla.</p>'+
+        '<button class="btn sec" data-a="descargarSementera" data-arg="csv" type="button">Descargar CSV</button></div>'+
+      '<div class="sem-descarga"><h4>JSON</h4><p>El puente si otro sistema lo necesita.</p>'+
+        '<button class="btn sec" data-a="descargarSementera" data-arg="json" type="button">Descargar JSON</button></div>'+
+    '</div></div>';
+}
+
+/* La hoja imprimible: @media print la muestra y esconde el resto de la
+   pantalla (ver CSS .hoja-impresion / .pantalla). No es un volcado de
+   números — alguien la va a mirar sin la app adelante, así que lleva el
+   método completo, qué es y qué no es cada número, y las marcas de
+   confianza. Arma sus filas con filasSementera(s.filas): el mismo cálculo
+   que el CSV, el JSON y la pantalla — no una cuarta verdad. */
+function hojaImprimible(s, c){
+  var filas = filasSementera(s.filas);
+  var cultivosConSaturacion = {};
+  s.filas.forEach(function(f){ if(f.iaCero > 0) cultivosConSaturacion[f.cultivo] = f.iaCero; });
+  var nombresSaturacion = Object.keys(cultivosConSaturacion).map(function(k){
+    return ((CULTIVOS[k] || {}).nom || k)+' (índice '+nf(cultivosConSaturacion[k],3)+')';
+  });
+
+  var propios = {}, conNapa = false, conGruesa = false;
+  s.filas.forEach(function(f){
+    if(f.ancla && f.ancla.propio) propios[f.cultivo] = true;
+    if(f.napa) conNapa = true;
+    if(f.kgHa && f.normal) conGruesa = true;
+  });
+  var nombresPropios = Object.keys(propios).map(function(k){ return (CULTIVOS[k] || {}).nom || k; });
+
+  var filasTabla = filas.map(function(r){
+    var marcas = [];
+    if(r.anclaPropio) marcas.push("criterio propio");
+    if(r.napa) marcas.push("con napa");
+    if(r.estimacionGruesa) marcas.push("estimación gruesa");
+    var rango;
+    if(r.kgHaEsperado == null) rango = (SEM_FALTA[r.falta] || SEM_FALTA.ventana).t;
+    else if(r.kgHaPesimista === r.kgHaOptimista) rango = nf(r.kgHaEsperado)+" kg/ha (ventana cumplida)";
+    else rango = nf(r.kgHaPesimista)+" – "+nf(r.kgHaEsperado)+" – "+nf(r.kgHaOptimista)+" kg/ha";
+    return '<tr>'+
+      '<td>'+esc(r.establecimiento)+'</td>'+
+      '<td>'+esc(r.lote)+'</td>'+
+      '<td>'+esc((CULTIVOS[r.cultivo] || {}).nom || r.cultivo)+'</td>'+
+      '<td>'+nf(r.ha,1)+'</td>'+
+      '<td>'+(r.anclaKgHa != null ? nf(r.anclaKgHa)+' kg/ha'+(r.anclaPropio?' (propio)':' (oficial)') : '—')+'</td>'+
+      '<td>'+(r.mmSiembra != null ? nf(r.mmSiembra,1)+' mm' : '—')+'</td>'+
+      '<td>'+(r.mmVentana != null ? nf(r.mmVentana,1)+' mm' : '—')+'</td>'+
+      '<td>'+(r.iaDiasVentana ? nf(r.iaDiasTranscurridos)+' de '+nf(r.iaDiasVentana)+' días' : '—')+'</td>'+
+      '<td>'+rango+'</td>'+
+      '<td>'+(r.tnEsperada != null ? nf(r.tnEsperada,1)+' t' : '—')+'</td>'+
+      '<td>'+(marcas.length ? marcas.join(", ") : '—')+'</td>'+
+    '</tr>';
+  }).join("");
+
+  var ahora = new Date();
+  var hh = (ahora.getHours()<10?"0":"")+ahora.getHours();
+  var mm2 = (ahora.getMinutes()<10?"0":"")+ahora.getMinutes();
+  var generado = fecha(ahora.toISOString().slice(0,10))+" "+hh+":"+mm2;
+
+  return '<div class="hoja-impresion">'+
+    '<h1>Sementera — '+esc(c.nombre)+'</h1>'+
+    '<div class="hi-sub">Generado el '+generado+' desde AGROCONTROL. '+
+      '<b>Rinde esperado por agua</b>, no un pronóstico de rinde: el modelo no contempla enfermedades, granizo, malezas, plagas ni nitrógeno.</div>'+
+
+    '<div class="hi-resumen">'+
+      '<div><b>'+nf(s.ha,1)+' ha</b><span>Superficie sembrada en pie, '+s.filas.length+' lote'+(s.filas.length===1?"":"s")+'</span></div>'+
+      '<div><b>'+(s.tn!=null?nf(s.tn,1)+' t':'—')+'</b><span>Producción esperada'+
+        (s.tn!=null && s.tnPesimista!==s.tnOptimista?' (entre '+nf(s.tnPesimista,1)+' y '+nf(s.tnOptimista,1)+' t)':'')+'</span></div>'+
+      '<div><b>'+nf(s.tnVendidas,1)+' t</b><span>Comprometido: vendido de esta campaña</span></div>'+
+      (s.valor!=null?'<div><b>'+nf(s.valor)+' USD</b><span>Valor contra el forward cargado</span></div>':'')+
+    '</div>'+
+
+    '<h2>Qué es este número</h2>'+
+    '<p>El módulo proyecta cuánto puede rendir cada lote a partir del balance hídrico: '+
+    'un <b>rinde esperado por agua</b>, no un pronóstico de rinde. El modelo <b>no contempla enfermedades, '+
+    'granizo, malezas, plagas ni nitrógeno</b>: responde únicamente a cuánta agua tuvo el cultivo en su '+
+    'ventana crítica contra cuánta necesitaba.</p>'+
+
+    '<h2>El método</h2>'+
+    '<p>Para cada cultivo, el punto de partida es un <b>rinde de referencia</b> (el «ancla»): la mediana '+
+    'oficial de los últimos 20 años del partido (Estimaciones Agrícolas, MAGyP), salvo que el productor haya '+
+    'cargado su propio criterio, que pisa al oficial y queda marcado como tal. Desde la fecha de siembra se '+
+    'corre un balance hídrico diario por ambiente del lote (agua útil = lluvia − evapotranspiración, acotada '+
+    'a la capacidad del suelo), y sobre la <b>ventana crítica</b> de cada cultivo se mide el índice de agua '+
+    '(ETR acumulada ÷ ETc acumulada). El rinde esperado sale de la fórmula de FAO-33: '+
+    'rinde = referencia × (1 − Ky × (1 − índice de agua)). La tabla de abajo muestra, lote por lote, contra '+
+    'qué ancla se compara, cuántos milímetros cayeron desde la siembra, cuántos en la ventana crítica y '+
+    'cuánto de esa ventana ya transcurrió.</p>'+
+
+    (nombresSaturacion.length
+      ? '<div class="hi-aviso"><b>Un límite de la fórmula, no un error:</b> con el coeficiente de '+
+        esc(nombresSaturacion.join(" y "))+', la fórmula de FAO-33 satura y llega a 0 kg/ha por debajo de '+
+        'ese índice de agua. Cualquier valor entre 0 y ese umbral muestra el mismo 0 kg/ha: no es que el '+
+        'modelo dejó de calcular, es que la fórmula ya llegó al piso.</div>'
+      : '')+
+
+    '<h2>Marcas de confianza</h2>'+
+    '<p>'+
+      (nombresPropios.length
+        ? 'El rinde de referencia de '+esc(nombresPropios.join(", "))+' es <b>criterio propio</b> del '+
+          'productor, no la mediana oficial del partido. '
+        : 'Todos los cultivos de esta sementera usan el rinde de referencia <b>oficial del partido</b>, '+
+          'sin ningún ajuste manual. ')+
+      (conNapa
+        ? 'Al menos un lote tiene cargado a mano un <b>aporte de napa</b> por ambiente, que el balance '+
+          'hídrico de superficie no modela solo. '
+        : 'Ningún lote tiene cargado un aporte de napa. ')+
+      (conGruesa
+        ? 'Al menos un rango sale de una <b>estimación gruesa</b>: no se pudo bajar la historia de 20 años '+
+          'de ese campo y el tramo que falta se completó con la lluvia mensual típica, no con los '+
+          'percentiles propios del lugar.'
+        : 'Todos los rangos calculados se completaron con los percentiles propios de cada campo, sin caer '+
+          'al respaldo de lluvia típica.')+
+    '</p>'+
+
+    '<h2>Detalle por lote</h2>'+
+    '<table><thead><tr><th>Establecimiento</th><th>Lote</th><th>Cultivo</th><th>ha</th>'+
+    '<th>Ancla</th><th>mm desde siembra</th><th>mm en ventana</th><th>Ventana transcurrida</th>'+
+    '<th>Rango de rinde</th><th>Producción</th><th>Marcas</th></tr></thead><tbody>'+
+    filasTabla+'</tbody></table>'+
+
+    '<div class="hi-pie">Rinde esperado por agua: FAO-33 sobre la ventana crítica de cada cultivo, con el '+
+    'rinde mediano del partido (o el criterio propio, donde esté cargado) como referencia. No modela '+
+    'enfermedades, granizo, malezas, plagas, nitrógeno ni fecha de siembra fuera de la ventana óptima, y '+
+    'tampoco el aporte de napa salvo el cargado a mano por ambiente. Documento generado por AGROCONTROL, '+
+    'sin garantía comercial ni bancaria.</div>'+
+  '</div>';
+}
+
 function vistaSementera(){
   var c = campania(campActiva), s = sementeraActual();
   var cab = '<div class="cabecera"><div><h1>Sementera</h1>'+
@@ -4441,11 +4680,11 @@ function vistaSementera(){
     '<button class="btn sec" data-a="asignarCultivo">+ Planificar cultivo</button></div></div>';
 
   if(!s || !s.filas.length)
-    return cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada sembrado en '+esc(c.nombre)+'.</b>'+
+    return '<div class="pantalla">'+cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada sembrado en '+esc(c.nombre)+'.</b>'+
       'El módulo proyecta el rinde de los lotes ya sembrados: en cuanto registres una siembra con su fecha '+
       'y su superficie, acá vas a ver cuánto puede rendir cada uno y cuánto podés comprometer sin pasarte.'+
       '<br><br><button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></p></div>'+
-      bloqueRindesBase();
+      bloqueRindesBase()+'</div>';
 
   var ficha = '<div class="ficha">'+
     '<div><div class="eyebrow">Superficie en pie</div><div class="v">'+nf(s.ha,1)+'<span class="u">ha</span></div>'+
@@ -4527,10 +4766,11 @@ function vistaSementera(){
     '<div class="aclara">Tocá un lote para ver su ficha y la cuenta del modelo abierta</div></div>'+
     '<div class="bloque-cuerpo">'+s.filas.map(semDetalleLote).join("")+'</div></div>';
 
-  return cab+ficha+alarma+aviso+tarjetas+lotes+bloqueRindesBase()+
+  return '<div class="pantalla">'+cab+ficha+alarma+aviso+bloqueDescargas()+tarjetas+lotes+bloqueRindesBase()+
     '<p class="pie">El rinde esperado por agua responde sólo al balance hídrico: FAO-33 sobre la ventana crítica de cada cultivo, '+
     'con el rinde mediano del partido como referencia. No modela enfermedades, granizo, malezas, plagas, nitrógeno ni fecha de siembra fuera de la ventana óptima, '+
-    'y tampoco el aporte de napa salvo el que cargues a mano por ambiente.</p>';
+    'y tampoco el aporte de napa salvo el que cargues a mano por ambiente.</p></div>'+
+    hojaImprimible(s, c);
 }
 
 function vistaLote(){
