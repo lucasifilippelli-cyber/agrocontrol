@@ -666,6 +666,30 @@ var VENTANAS = {
   girasol:{et:"Floración · R5", ini:6.10,fin:6.95,f:"05 ene – 30 ene"},
   sorgo: {et:"Floración",       ini:6.80,fin:7.60,f:"25 ene – 20 feb"}
 };
+
+/* === modelo:inicio === */
+/* Rinde mediano por partido, kg/ha, últimos 20 años de la serie oficial del
+   MAGyP (Estimaciones Agrícolas). Se regenera con herramientas/generar-rindes.js.
+   La serie trae un solo "maíz": temprano y tardío comparten ancla, por eso el
+   número de Lucas la pisa cuando hace falta. */
+var RINDES_PARTIDO = {"Carmen de Areco":{"cebada":3600,"girasol":2300,"maiz_d":8400,"maiz_t":8400,"soja_1":3750,"soja_2":2540,"sorgo":5600,"trigo":3950},"Luján":{"cebada":3800,"girasol":2200,"maiz_d":7800,"maiz_t":7800,"soja_1":3450,"soja_2":2106,"sorgo":6500,"trigo":3818},"San Antonio de Areco":{"cebada":3300,"girasol":2752,"maiz_d":8050,"maiz_t":8050,"soja_1":3600,"soja_2":2190,"sorgo":6350,"trigo":4246}};
+
+/* Duggan no es partido: es localidad de San Antonio de Areco. */
+var PARTIDO_DE_LOCALIDAD = {
+  "San Antonio de Areco": "San Antonio de Areco",
+  "Duggan":               "San Antonio de Areco",
+  "Carmen de Areco":      "Carmen de Areco",
+  "Luján":                "Luján"
+};
+
+function rindeBase(cultivo, localidad){
+  var p = PARTIDO_DE_LOCALIDAD[localidad];
+  if(!p || !RINDES_PARTIDO[p]) return null;
+  var v = RINDES_PARTIDO[p][cultivo];
+  return v == null ? null : v;
+}
+/* === modelo:fin === */
+
 var TIPOS_OPERACION = {
   disponible:{nom:"Disponible", ayuda:"Entrega y precio de hoy"},
   forward:   {nom:"Forward",    ayuda:"Precio cerrado hoy, entrega más adelante"},
