@@ -67,6 +67,62 @@ test("serieDe devuelve null si no hay serie para ese establecimiento y campaña"
   assert.strictEqual(M.serieDe([], "e1", "c1"), null);
 });
 
+/* --- faltaClimaCampania: c.traido ya no alcanza para saber si hace falta bajar --- */
+
+test("faltaClimaCampania: nada falta cuando el mensual y la serie diaria de todos los establecimientos están", function(){
+  var camp = {id:"c1", traido:true};
+  var ests = [{id:"e1"}, {id:"e2"}];
+  var series = [
+    {establecimientoId:"e1", campaniaId:"c1", desde:"2025-09-01", hasta:"2026-06-30", lluvia:[1], eto:[1]},
+    {establecimientoId:"e2", campaniaId:"c1", desde:"2025-09-01", hasta:"2026-06-30", lluvia:[2], eto:[2]}
+  ];
+  assert.strictEqual(M.faltaClimaCampania(camp, ests, series), false);
+});
+
+test("faltaClimaCampania: falta si nunca se trajo el mensual, aunque las series diarias ya estén", function(){
+  var camp = {id:"c1", traido:false};
+  var ests = [{id:"e1"}];
+  var series = [
+    {establecimientoId:"e1", campaniaId:"c1", desde:"2025-09-01", hasta:"2026-06-30", lluvia:[1], eto:[1]}
+  ];
+  assert.strictEqual(M.faltaClimaCampania(camp, ests, series), true);
+});
+
+test("faltaClimaCampania: el caso real — mensual traído, serie diaria nunca bajada, no alcanza con c.traido", function(){
+  /* Es exactamente lo que le pasa a las dos campañas reales: se crearon antes
+     del módulo Sementera, así que tienen c.traido=true (la mensual ya está)
+     pero climaSeries nunca se llenó para ellas. */
+  var camp = {id:"c1", traido:true};
+  var ests = [{id:"e1"}];
+  assert.strictEqual(M.faltaClimaCampania(camp, ests, []), true);
+});
+
+test("faltaClimaCampania: falta si sólo uno de varios establecimientos tiene la serie diaria", function(){
+  var camp = {id:"c1", traido:true};
+  var ests = [{id:"e1"}, {id:"e2"}];
+  var series = [
+    {establecimientoId:"e1", campaniaId:"c1", desde:"2025-09-01", hasta:"2026-06-30", lluvia:[1], eto:[1]}
+  ];
+  assert.strictEqual(M.faltaClimaCampania(camp, ests, series), true);
+});
+
+test("faltaClimaCampania: sin campaña no hay nada que bajar", function(){
+  assert.strictEqual(M.faltaClimaCampania(null, [{id:"e1"}], []), false);
+});
+
+test("faltaClimaCampania: sin establecimientos el mensual alcanza", function(){
+  assert.strictEqual(M.faltaClimaCampania({id:"c1", traido:true}, [], []), false);
+});
+
+test("faltaClimaCampania: no confunde la serie de otra campaña con la propia", function(){
+  var camp = {id:"c1", traido:true};
+  var ests = [{id:"e1"}];
+  var series = [
+    {establecimientoId:"e1", campaniaId:"c2", desde:"2025-09-01", hasta:"2026-06-30", lluvia:[1], eto:[1]}
+  ];
+  assert.strictEqual(M.faltaClimaCampania(camp, ests, series), true);
+});
+
 test("el agua útil no pasa de la capacidad: el excedente se pierde", function(){
   var b = M.balanceHidrico({ lluvia:[100, 100], eto:[0, 0], cau:150, au0:100, kc:1 });
   assert.strictEqual(b.au[0], 150);

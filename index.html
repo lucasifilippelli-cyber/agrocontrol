@@ -761,6 +761,24 @@ function serieDe(series, establecimientoId, campaniaId){
   return { desde:fila.desde, hasta:fila.hasta, lluvia:fila.lluvia||[], eto:fila.eto||[] };
 }
 
+/* c.traido es una marca de antes del módulo Sementera: sólo decía "ya bajé
+   la lluvia mensual de esta campaña". Hoy traerLluviaCampania también baja
+   la serie diaria (lluvia y ETo) de cada establecimiento, y c.traido no
+   distingue entre las dos cosas. Por eso una campaña creada antes de este
+   módulo —como las dos reales de la app— queda con traido=true y
+   climaSeries vacío para siempre: Sementera dice "todavía no sé" sin poder
+   arreglarlo solo. Esta función es la condición completa: falta bajar algo
+   si falta el mensual O si falta la serie diaria de cualquier establecimiento
+   de la campaña. Pura, para poder evaluarla en cada arranque y en cada
+   cambio de campaña sin pegarle a la red. */
+function faltaClimaCampania(campania, establecimientos, series){
+  if(!campania) return false;
+  if(!campania.traido) return true;
+  return (establecimientos || []).some(function(es){
+    return !serieDe(series, es.id, campania.id);
+  });
+}
+
 /* Días de diferencia entre dos fechas ISO, mediodía UTC para no pisar el
    cambio de horario. */
 function diasEntre(a, b){
@@ -1990,9 +2008,28 @@ function traerPronostico(){
    campaniaId es opcional y por defecto es la activa: cargarEjemplo() lo usa
    para traer también la serie de la campaña cerrada, sin tener que cambiar
    campActiva de un lado a otro para conseguirlo. */
+/* Campañas para las que ya se intentó bajar el clima sin forzar en esta
+   sesión (recarga de página incluida, porque es una var en memoria y no en
+   localStorage). Sin esto, una campaña vieja a la que le falta la serie
+   diaria y cuya bajada falla —sin señal, cuota agotada— volvería a pedirle
+   a Open-Meteo en cada arranque y en cada cambio de campaña sin avisar
+   nada distinto: mismo resultado, mismo pedido. Forzar (botón, campaña
+   nueva, ejemplo) siempre ignora esta marca. */
+var climaIntentado = {};
+
 function traerLluviaCampania(forzar, campaniaId){
   var c=campania(campaniaId||campActiva); if(!c) return Promise.resolve();
-  if(c.traido && !forzar) return Promise.resolve();
+  if(!forzar){
+    /* c.traido es una marca vieja, de antes de Sementera: sólo decía "ya
+       bajé la mensual". faltaClimaCampania mira también si falta la serie
+       diaria de algún establecimiento, que es lo que de verdad usa el
+       módulo — así una campaña con traido=true pero sin serie diaria (las
+       dos campañas reales de la app, creadas antes de este módulo) se da
+       cuenta sola de que le falta algo. */
+    if(!faltaClimaCampania(c, E.establecimientos, E.climaSeries)) return Promise.resolve();
+    if(climaIntentado[c.id]) return Promise.resolve();
+    climaIntentado[c.id]=true;
+  }
   var desde=c.desde;
   var finCamp=new Date(desde); finCamp.setFullYear(finCamp.getFullYear()+1); finCamp.setDate(finCamp.getDate()-1);
   /* el archivo de Open-Meteo va unos días atrás del presente */

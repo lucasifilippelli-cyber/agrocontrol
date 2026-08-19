@@ -25,11 +25,21 @@ function extraerFuncion(html, nombre){
    y si guardar() se llamó. */
 function entorno(opts){
   var html = fs.readFileSync(__dirname + "/../index.html", "utf8");
-  var src = extraerFuncion(html, "traerLluviaCampania");
+  /* La guarda de traerLluviaCampania ahora depende de faltaClimaCampania (que
+     a su vez usa serieDe) y de climaIntentado, la memoria en sesión que
+     evita la tormenta de pedidos. Las tres viven fuera del bloque de
+     modelo salvo las dos primeras, así que se extraen igual que la función
+     principal y se concatenan en el mismo contexto. */
+  var src = extraerFuncion(html, "serieDe") + "\n" +
+            extraerFuncion(html, "faltaClimaCampania") + "\n" +
+            "var climaIntentado = {};\n" +
+            extraerFuncion(html, "traerLluviaCampania");
 
-  var campaniaObj = {id:"c1", desde:"2026-01-01", manual:{}, lluvia:[0,0,0,0,0,0,0,0,0,0,0,0], traido:false};
+  var campaniaObj = {id:"c1", desde:"2026-01-01", manual:{}, lluvia:[0,0,0,0,0,0,0,0,0,0,0,0],
+    traido: opts.traido || false};
   var marcados = [];
   var guardarLlamado = 0;
+  var fetchLlamados = 0;
   var siguienteId = 1;
 
   function jsonDe(es){
@@ -42,12 +52,13 @@ function entorno(opts){
   var ctx = {
     Promise: Promise,
     campActiva: "c1",
-    E: {establecimientos: opts.establecimientos, climaSeries: []},
+    E: {establecimientos: opts.establecimientos, climaSeries: (opts.climaSeriesInicial || []).slice()},
     campania: function(id){ return id === campaniaObj.id ? campaniaObj : null; },
     marcar: function(coleccion, fila){ marcados.push({coleccion:coleccion, fila:fila}); },
     guardar: function(){ guardarLlamado++; return Promise.resolve(); },
     uid: function(){ return "s" + (siguienteId++); },
     fetch: function(u){
+      fetchLlamados++;
       var es = opts.establecimientos.filter(function(x){
         return u.indexOf("latitude=" + x.lat) >= 0;
       })[0];
@@ -59,11 +70,14 @@ function entorno(opts){
   vm.runInContext(src + "\nthis.__f = traerLluviaCampania;", ctx);
 
   return {
-    ejecutar: function(){ return ctx.__f(true); },
+    /* sin argumento, forzar=true — así los tests que ya existían siguen
+       probando exactamente lo mismo que antes de este fix. */
+    ejecutar: function(forzar){ return ctx.__f(forzar===undefined ? true : forzar); },
     campania: campaniaObj,
     E: ctx.E,
     marcados: function(){ return marcados; },
-    guardarLlamado: function(){ return guardarLlamado; }
+    guardarLlamado: function(){ return guardarLlamado; },
+    fetchLlamados: function(){ return fetchLlamados; }
   };
 }
 
@@ -115,5 +129,75 @@ test("si falla justo el primer establecimiento, el resumen mensual no se actuali
     assert.strictEqual(env.E.climaSeries.length, 1);
     assert.strictEqual(env.E.climaSeries[0].establecimientoId, "e2");
     assert.strictEqual(env.guardarLlamado(), 1, "guardar() corre igual aunque el primero haya fallado");
+  });
+});
+
+/* ============================================================
+   Task 13 · c.traido ya no alcanza como condición
+   ============================================================ */
+
+test("con el mensual y la serie diaria completos, no pide nada sin forzar", function(){
+  var e1 = {id:"e1", lat:"-34.2", lon:"-59.4", mm1:10, mm2:5, eto1:4, eto2:3, falla:false};
+  var env = entorno({establecimientos:[e1], traido:true, climaSeriesInicial:[
+    {establecimientoId:"e1", campaniaId:"c1", desde:"2026-01-01", hasta:"2026-01-02", lluvia:[1,2], eto:[1,1]}
+  ]});
+
+  return env.ejecutar(false).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 0, "nada faltaba: no hay razón para pedirle a Open-Meteo");
+    assert.strictEqual(env.guardarLlamado(), 0);
+  });
+});
+
+test("es el caso de las dos campañas reales: mensual ya traído pero sin serie diaria, y sin forzar igual la baja", function(){
+  /* Antes de este fix, c.traido=true cortaba acá para siempre: el módulo
+     Sementera no tenía forma de darse cuenta solo de que le faltaba la serie
+     diaria. */
+  var e1 = {id:"e1", lat:"-34.2", lon:"-59.4", mm1:10, mm2:5, eto1:4, eto2:3, falla:false};
+  var env = entorno({establecimientos:[e1], traido:true, climaSeriesInicial:[]});
+
+  return env.ejecutar(false).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 1);
+    assert.strictEqual(env.E.climaSeries.length, 1);
+    assert.strictEqual(env.E.climaSeries[0].establecimientoId, "e1");
+  });
+});
+
+test("si falta la serie diaria de un solo establecimiento entre varios, igual pide sin forzar", function(){
+  var e1 = {id:"e1", lat:"-34.2", lon:"-59.4", mm1:10, mm2:5, eto1:4, eto2:3, falla:false};
+  var e2 = {id:"e2", lat:"-34.5", lon:"-59.1", mm1:8, mm2:2, eto1:3, eto2:3, falla:false};
+  var env = entorno({establecimientos:[e1, e2], traido:true, climaSeriesInicial:[
+    {establecimientoId:"e1", campaniaId:"c1", desde:"2026-01-01", hasta:"2026-01-02", lluvia:[1,2], eto:[1,1]}
+    /* e2 no tiene serie guardada todavía */
+  ]});
+
+  return env.ejecutar(false).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 2, "pide a los dos establecimientos, no sólo al que falta");
+    assert.strictEqual(env.E.climaSeries.length, 2);
+  });
+});
+
+test("si la bajada falla, no se reintenta sola en cada pintado — sólo se acuerda que ya lo intentó en esta sesión", function(){
+  var e1 = {id:"e1", lat:"-34.2", lon:"-59.4", mm1:0, mm2:0, eto1:0, eto2:0, falla:true};
+  var env = entorno({establecimientos:[e1], traido:false, climaSeriesInicial:[]});
+
+  return env.ejecutar(false).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 1, "el primer intento sin forzar pide una vez");
+    assert.strictEqual(env.E.climaSeries.length, 0);
+    return env.ejecutar(false);
+  }).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 1,
+      "un segundo llamado sin forzar en la misma sesión no dispara otro pedido: ya se sabe que se intentó y falló");
+  });
+});
+
+test("forzar siempre pide, aunque ya se haya intentado sin forzar en esta sesión", function(){
+  var e1 = {id:"e1", lat:"-34.2", lon:"-59.4", mm1:0, mm2:0, eto1:0, eto2:0, falla:true};
+  var env = entorno({establecimientos:[e1], traido:false, climaSeriesInicial:[]});
+
+  return env.ejecutar(false).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 1);
+    return env.ejecutar(true);
+  }).then(function(){
+    assert.strictEqual(env.fetchLlamados(), 2, "forzar (soltarMes, campaña nueva, ejemplo) no respeta la marca de intento");
   });
 });
