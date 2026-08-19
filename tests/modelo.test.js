@@ -66,3 +66,24 @@ test("serieDe devuelve null si no hay serie para ese establecimiento y campaña"
   assert.strictEqual(M.serieDe(series, "e1", "c2"), null);
   assert.strictEqual(M.serieDe([], "e1", "c1"), null);
 });
+
+test("el agua útil no pasa de la capacidad: el excedente se pierde", function(){
+  var b = M.balanceHidrico({ lluvia:[100, 100], eto:[0, 0], cau:150, au0:100, kc:1 });
+  assert.strictEqual(b.au[0], 150);
+  assert.strictEqual(b.au[1], 150);
+});
+
+test("el agua útil no baja de cero y la ETR se corta en lo disponible", function(){
+  var b = M.balanceHidrico({ lluvia:[0, 0], eto:[10, 10], cau:150, au0:5, kc:1 });
+  assert.strictEqual(b.au[0], 0);
+  assert.strictEqual(b.etr[0], 5);   // sólo pudo evapotranspirar lo que había
+  assert.strictEqual(b.etc[0], 10);  // la demanda era 10
+  assert.strictEqual(b.etr[1], 0);
+});
+
+test("la demanda es ETo por Kc", function(){
+  var b = M.balanceHidrico({ lluvia:[0], eto:[10], cau:150, au0:100, kc:1.2 });
+  assert.strictEqual(b.etc[0], 12);
+  assert.strictEqual(b.etr[0], 12);
+  assert.strictEqual(b.au[0], 88);
+});

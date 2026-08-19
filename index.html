@@ -715,6 +715,23 @@ function mmEntre(serie, desdeISO, hastaISO){
   for(var i = i0; i <= i1; i++) t += (serie.lluvia[i] || 0);
   return Math.round(t * 10) / 10;
 }
+
+/* Balance hídrico diario de superficie. No modela napa: ver el ajuste por
+   ambiente en la Task 6 y la advertencia de docs/sementera.md. */
+function balanceHidrico(o){
+  var cau = o.cau, au = Math.min(o.au0, cau);
+  var n = o.lluvia.length, aus = [], etrs = [], etcs = [];
+  for(var i = 0; i < n; i++){
+    var etc = (o.eto[i] || 0) * o.kc;
+    var disp = au + (o.lluvia[i] || 0);
+    var etr = Math.min(etc, Math.max(0, disp));
+    au = Math.min(cau, disp - etr);
+    aus.push(Math.round(au * 10) / 10);
+    etrs.push(Math.round(etr * 10) / 10);
+    etcs.push(Math.round(etc * 10) / 10);
+  }
+  return { au:aus, etr:etrs, etc:etcs };
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
