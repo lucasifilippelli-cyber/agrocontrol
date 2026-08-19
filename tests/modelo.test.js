@@ -93,3 +93,34 @@ test("la lluvia del día alcanza para la evapotranspiración de ese mismo día",
   assert.strictEqual(b.etr[0], 10);
   assert.strictEqual(b.au[0], 0);
 });
+
+test("sin estrés el índice de agua es 1 y el rinde es el ancla", function(){
+  var ia = 1;
+  assert.strictEqual(M.rindeEsperado(3600, ia, 1.0), 3600);
+});
+
+test("FAO-33: con Ky 1 y mitad del agua, se pierde la mitad del rinde", function(){
+  assert.strictEqual(M.rindeEsperado(3600, 0.5, 1.0), 1800);
+});
+
+test("un Ky más alto castiga más el mismo déficit", function(){
+  var soja = M.rindeEsperado(3600, 0.8, 1.0);
+  var maiz = M.rindeEsperado(3600, 0.8, 1.5);
+  assert.ok(maiz < soja, "el maíz debería sufrir más el mismo déficit");
+});
+
+test("el rinde nunca es negativo por más que el déficit sea total", function(){
+  assert.strictEqual(M.rindeEsperado(3600, 0, 1.5), 0);
+});
+
+test("la ventana crítica se ubica a partir del inicio de la campaña", function(){
+  var v = M.ventanaCritica("soja_1", "2025-07-01");
+  assert.ok(v.desde >= "2026-01-01" && v.desde <= "2026-01-20", "R3-R5 arranca en enero, dio " + v.desde);
+  assert.strictEqual(v.etapa, "Llenado · R3–R5");
+});
+
+test("el índice de agua es la ETR sobre la ETC dentro de la ventana", function(){
+  var bal = { etr:[5, 5, 2], etc:[5, 5, 10] };  // 12 de 20
+  var ia = M.indiceAgua(bal, "2026-01-01", { desde:"2026-01-01", hasta:"2026-01-03" });
+  assert.strictEqual(Math.round(ia * 100) / 100, 0.6);
+});

@@ -668,6 +668,13 @@ var VENTANAS = {
   sorgo: {et:"Floración",       ini:6.80,fin:7.60,f:"25 ene – 20 feb"}
 };
 
+/* Respuesta del rendimiento al agua (FAO-33) y coeficiente de cultivo (FAO-56).
+   VALORES DE MANUAL, PENDIENTES DE VALIDACIÓN POR LUCAS. */
+var KY = { maiz_t:1.50, maiz_d:1.50, soja_1:1.00, soja_2:1.00,
+           trigo:1.05, cebada:1.00, girasol:0.95, sorgo:0.90 };
+var KC = { maiz_t:1.20, maiz_d:1.20, soja_1:1.15, soja_2:1.15,
+           trigo:1.15, cebada:1.15, girasol:1.10, sorgo:1.05 };
+
 /* Rinde mediano por partido, kg/ha, últimos 20 años de la serie oficial del
    MAGyP (Estimaciones Agrícolas). Se regenera con herramientas/generar-rindes.js
    y esta tabla es su salida exacta: no se edita a mano. La serie trae un solo
@@ -731,6 +738,38 @@ function balanceHidrico(o){
     etcs.push(Math.round(etc * 10) / 10);
   }
   return { au:aus, etr:etrs, etc:etcs };
+}
+
+/* VENTANAS trae ini/fin como meses fraccionarios desde el inicio de campaña. */
+function ventanaCritica(cultivo, desdeCampaniaISO){
+  var v = VENTANAS[cultivo];
+  if(!v) return null;
+  function fecha(frac){
+    var b = new Date(desdeCampaniaISO + "T12:00:00Z");
+    var mes = Math.floor(frac);
+    var d = new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth() + mes, 1));
+    var dias = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(1 + Math.round((frac - mes) * dias));
+    return d.toISOString().slice(0, 10);
+  }
+  return { desde: fecha(v.ini), hasta: fecha(v.fin), etapa: v.et };
+}
+
+/* Índice de agua: ETR sobre ETC acumuladas en la ventana crítica. Uno es sin
+   estrés, cero es estrés total. */
+function indiceAgua(balance, desdeSerieISO, ventana){
+  var i0 = Math.max(0, diasEntre(desdeSerieISO, ventana.desde));
+  var i1 = Math.min(balance.etc.length - 1, diasEntre(desdeSerieISO, ventana.hasta));
+  var etr = 0, etc = 0;
+  for(var i = i0; i <= i1; i++){ etr += (balance.etr[i] || 0); etc += (balance.etc[i] || 0); }
+  if(etc <= 0) return 1;
+  return Math.max(0, Math.min(1, etr / etc));
+}
+
+/* FAO-33: la pérdida relativa de rinde es proporcional a la pérdida relativa
+   de agua, según el Ky propio de cada cultivo. */
+function rindeEsperado(rBase, ia, ky){
+  return Math.max(0, Math.round(rBase * (1 - ky * (1 - ia))));
 }
 /* === modelo:fin === */
 
