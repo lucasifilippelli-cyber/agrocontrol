@@ -965,3 +965,54 @@ test("napa en 0 no marca la fila: es 'lo consideré y no aporta', no un ajuste",
   var f = fila({ serie: serieHasta("2026-02-26", 3, 4), lote:cero });
   assert.strictEqual(f.napa, false);
 });
+
+/* ============================================================
+   Task 9 · fix round 2
+   ============================================================ */
+
+test("escribirOverrides arma la clave que espera la base y no pisa el resto del perfil", function(){
+  var p = M.escribirOverrides({ nombre:"Lucas" }, { e1:{ maiz_d:11000 } });
+  assert.strictEqual(p.nombre, "Lucas");
+  assert.strictEqual(JSON.stringify(p.rindes_base), JSON.stringify({ e1:{ maiz_d:11000 } }));
+});
+
+test("escribir y volver a leer da lo mismo: el nombre de la columna vive en un solo par", function(){
+  /* La lectura estaba encapsulada y la escritura no: el día que perfil pase
+     por aCamello, arreglar sólo el lector deja al escritor poniendo la clave
+     vieja en memoria — el servidor guardaría bien y la pantalla no vería su
+     propio cambio hasta recargar. */
+  var mapa = { e1:{ soja_1:4200 } };
+  assert.strictEqual(JSON.stringify(M.overridesDePerfil(M.escribirOverrides({}, mapa))),
+                     JSON.stringify(mapa));
+});
+
+test("escribirOverrides sobre un perfil todavía inexistente devuelve uno usable", function(){
+  var p = M.escribirOverrides(null, { e1:{ trigo:5000 } });
+  assert.strictEqual(JSON.stringify(M.overridesDePerfil(p)), JSON.stringify({ e1:{ trigo:5000 } }));
+});
+
+test("con la ventana cubierta entera no se estimó nada: la fila no queda marcada como gruesa", function(){
+  /* Complemento del test de historia null con ventana pendiente: acá el
+     inicializador arranca en true y sólo la línea que propaga lo que hizo
+     escenariosVentana puede bajarlo. Sin ella, un rango construido con datos
+     reales de punta a punta se muestra como estimación gruesa. */
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4), historiaLarga:null });
+  assert.ok(f.kgHa, "la ventana tiene que estar cubierta para que el test sirva");
+  assert.strictEqual(f.normal, false);
+});
+
+test("sin rango no hay nada que calificar: la fila sin cuenta no queda marcada como gruesa", function(){
+  /* La insignia "estimación gruesa" al lado de un "todavía no sé" habla de
+     un rango que no existe. */
+  var f = fila({});
+  assert.strictEqual(f.falta, "serie");
+  assert.strictEqual(f.kgHa, null);
+  assert.strictEqual(f.normal, false);
+});
+
+test("un cultivo cuyos lotes no se pudieron calcular tampoco arrastra la marca gruesa", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[], historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+  assert.strictEqual(s.cultivos[0].kgHa, null);
+  assert.strictEqual(s.cultivos[0].normal, false);
+});

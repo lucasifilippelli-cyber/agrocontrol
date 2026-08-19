@@ -1138,9 +1138,22 @@ function mesEntregaDe(cultivo, desdeCampaniaISO){
    el consejo que la pantalla da cuando falta el ancla —"cargá el rinde que
    esperás vos"— quedaba inoperante, sin un solo error visible. Mismo modo de
    falla que el mes de entrega del forward: el dato existe y no aparece.
-   Este es el único lugar del archivo donde se escribe ese nombre. */
+
+   El nombre de la columna vive en este par de funciones y en ningún otro
+   lado: encapsular sólo la lectura dejaba la escritura suelta, y el día que
+   perfil pase por aCamello —la deuda que ya está anotada— arreglar el lector
+   dejaría al escritor poniendo la clave vieja en memoria: el servidor
+   guardaría bien y la pantalla no vería su propio cambio hasta recargar.
+   escribirOverrides sirve para las dos escrituras, la del perfil en memoria
+   y la del PATCH, porque el cuerpo que espera la base es exactamente un
+   perfil vacío con el mapa adentro. */
 function overridesDePerfil(perfilFila){
   return (perfilFila && perfilFila.rindes_base) || {};
+}
+function escribirOverrides(perfilFila, mapa){
+  var p = perfilFila || {};
+  p.rindes_base = mapa;
+  return p;
 }
 
 /* Arma el mapa que se graba en perfiles.rindes_base a partir de lo que
@@ -1266,7 +1279,9 @@ function filaSementera(o){
       f.mmVentana = diasEntre(ventana.desde, hastaCub) >= 0 ? mmEntre(serie, ventana.desde, hastaCub) : 0;
     }
   }
-  if(f.falta) return f;
+  /* Sin cuenta no hay rango, y sin rango no hay nada que calificar de grueso:
+     la insignia al lado de un "todavía no sé" habla de algo que no existe. */
+  if(f.falta){ f.normal = false; return f; }
 
   var iaSuma = 0, iaHa = 0, haCon = 0, todos = true;
   var acum = { pesimista:0, esperado:0, optimista:0 };
@@ -1303,7 +1318,7 @@ function filaSementera(o){
   /* Con un solo ambiente sin escenario el lote entero queda sin número: un
      promedio de la parte que sí se pudo calcular es un rinde parcial
      presentado como si fuera el del lote. */
-  if(!todos || haCon <= 0){ f.falta = "ventana"; return f; }
+  if(!todos || haCon <= 0){ f.falta = "ventana"; f.normal = false; return f; }
 
   f.kgHa = { pesimista:Math.round(acum.pesimista / haCon),
              esperado: Math.round(acum.esperado  / haCon),
@@ -1351,7 +1366,7 @@ function sementeraDeCampania(o){
     g.filas.push(f); g.lotes++; g.ha = Math.round((g.ha + f.ha) * 10) / 10;
     if(f.ancla && f.ancla.propio) g.propio = true;
     if(f.napa) g.napa = true;
-    if(f.normal) g.normal = true;
+    if(f.normal && f.kgHa) g.normal = true;
     if(f.kgHa){
       g.conDato++;
       var a = acum[f.cultivo];
@@ -2962,11 +2977,12 @@ A.rindesBase=function(estId){
     guardar:function(d){
       var valores={}; cultivos.forEach(function(k){ valores[k]=d[k]; });
       var nuevo=armarOverrides(previo, estId, valores);
-      if(!perfil) perfil={};
-      perfil.rindes_base=nuevo;
+      perfil=escribirOverrides(perfil, nuevo);
       guardarCache();
       var propios=(nuevo[estId]?Object.keys(nuevo[estId]).length:0);
-      sb.actualizar("perfiles", sesion.user.id, {rindes_base:nuevo})
+      /* el cuerpo del PATCH sale de la misma función: un perfil vacío con el
+         mapa adentro es exactamente lo que la tabla espera */
+      sb.actualizar("perfiles", sesion.user.id, escribirOverrides({}, nuevo))
         .then(function(){
           avisar(propios?"Guardé "+propios+" rinde"+(propios===1?"":"s")+" propio"+(propios===1?"":"s")+" de "+es.nombre+"."
                         :"Todos los cultivos de "+es.nombre+" vuelven al rinde oficial.");
@@ -4149,8 +4165,16 @@ var SEM_FALTA = {
 };
 /* Cuando la ventana crítica ya pasó entera no queda nada que estimar y los
    tres escenarios convergen en un solo número. Es la cuenta terminada, no un
-   error: "entre 3.450 y 3.450 kg/ha" se lee como una cuenta rota. */
-function semConverge(r){ return r && r.pesimista === r.optimista; }
+   error: "entre 3.450 y 3.450 kg/ha" se lee como una cuenta rota.
+
+   Se exige que el número sea mayor que cero porque hay otra forma de que los
+   tres escenarios coincidan, y no significa lo mismo: si los tres percentiles
+   de lluvia caen por debajo del índice de agua donde FAO-33 satura, los tres
+   dan 0 con la ventana crítica ENTERA POR DELANTE. Decir ahí "la ventana ya
+   pasó" es falso, y es justo el año Niña para el que se escribió el módulo. */
+function semConverge(r){ return !!r && r.pesimista === r.optimista && r.optimista > 0; }
+/* Cero de verdad: el agua no alcanza para ningún grano. Distinto de no saber. */
+function semCero(r){ return !!r && r.optimista === 0; }
 
 function semNoSe(clave, corto){
   var m = SEM_FALTA[clave] || SEM_FALTA.ventana;
@@ -4216,9 +4240,11 @@ function semCadena(f, cu){
     '</small></span><span class="cadena-v">Ky '+nf(f.ky,2)+'</span></div>'+
   '<div class="cadena-paso final"><span class="cadena-i">=</span>'+
     '<span class="cadena-t"><strong>Rinde esperado por agua</strong><small>'+
-      (semConverge(f.kgHa)
-        ?'la ventana crítica ya pasó entera: no queda tramo por estimar'
-        :nf(f.kgHa.pesimista)+' a '+nf(f.kgHa.optimista)+' kg/ha según cómo siga la lluvia')+'</small></span>'+
+      (semCero(f.kgHa)
+        ?'cero: ni en el escenario optimista el agua alcanza para hacer grano'
+        :(semConverge(f.kgHa)
+          ?'la ventana crítica ya pasó entera: no queda tramo por estimar'
+          :nf(f.kgHa.pesimista)+' a '+nf(f.kgHa.optimista)+' kg/ha según cómo siga la lluvia'))+'</small></span>'+
     '<span class="cadena-v">'+nf(f.kgHa.esperado)+' kg/ha</span></div>';
   return '<div class="cadena">'+pasos+'</div>';
 }
@@ -4233,7 +4259,8 @@ function semDetalleLote(f){
       semMarcas({propio:f.ancla.propio, napa:f.napa, normal:f.normal})+'</span>'+
     (f.kgHa
       ?'<span class="sem-rango"><b>'+nf(f.kgHa.esperado)+' kg/ha</b>'+
-        (semConverge(f.kgHa)?'ventana cumplida':nf(f.kgHa.pesimista)+' a '+nf(f.kgHa.optimista))+'</span>'
+        (semCero(f.kgHa)?'el agua no alcanza'
+          :(semConverge(f.kgHa)?'ventana cumplida':nf(f.kgHa.pesimista)+' a '+nf(f.kgHa.optimista)))+'</span>'
       :semNoSe(f.falta, true))+
     '</summary>';
 
@@ -4377,11 +4404,14 @@ function vistaSementera(){
       semMarcas(g)+
       (g.tn
         ?'<div class="panel-vivo"><h4>Rinde esperado por agua</h4>'+
-          '<div class="panel-fila"><span>'+(semConverge(g.kgHa)?'Rinde esperado por agua':'Rango de rinde')+
-            '<small>'+(semConverge(g.kgHa)
-              ?'la ventana crítica ya pasó entera: no queda tramo por estimar'
-              :'pesimista, esperado y optimista según cómo siga la lluvia')+'</small></span>'+
-            '<b>'+(semConverge(g.kgHa)?nf(g.kgHa.esperado)
+          '<div class="panel-fila'+(semCero(g.kgHa)?' mal':'')+'"><span>'+
+            (semCero(g.kgHa)||semConverge(g.kgHa)?'Rinde esperado por agua':'Rango de rinde')+
+            '<small>'+(semCero(g.kgHa)
+              ?'cero: ni en el escenario optimista el agua alcanza para hacer grano'
+              :(semConverge(g.kgHa)
+                ?'la ventana crítica ya pasó entera: no queda tramo por estimar'
+                :'pesimista, esperado y optimista según cómo siga la lluvia'))+'</small></span>'+
+            '<b>'+(semCero(g.kgHa)||semConverge(g.kgHa)?nf(g.kgHa.esperado)
                    :nf(g.kgHa.pesimista)+' · '+nf(g.kgHa.esperado)+' · '+nf(g.kgHa.optimista))+' kg/ha</b></div>'+
           '<div class="panel-fila"><span>Producción esperada</span><b>'+nf(g.tn.esperada,1)+' t</b></div>'+
           '<div class="panel-fila"><span>Comprometido<small>vendido de esta campaña</small></span><b>'+nf(g.tnVendidas,1)+' t</b></div>'+
