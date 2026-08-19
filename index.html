@@ -1212,7 +1212,10 @@ function traerPronostico(){
 /* lluvia mensual real de la campaña, salvo los meses cargados a mano; y, por
    cada establecimiento, la serie diaria de lluvia y ETo que usa el modelo de
    rinde. El resumen mensual sigue saliendo del primer establecimiento, igual
-   que antes: es lo que ya muestran la vista de Lluvias y el resumen de campaña. */
+   que antes: es lo que ya muestran la vista de Lluvias y el resumen de campaña.
+   Cada establecimiento se pide y se guarda por separado: uno caído (coordenadas
+   raras, rate-limit, corte de red) no puede tirar abajo a los demás ni dejar
+   sin persistir lo que sí llegó — acá la mala señal es la norma, no la excepción. */
 function traerLluviaCampania(forzar){
   var c=campania(campActiva); if(!c) return Promise.resolve();
   if(c.traido && !forzar) return Promise.resolve();
@@ -1222,35 +1225,52 @@ function traerLluviaCampania(forzar){
   var tope=new Date(Date.now()-6*864e5);
   var hasta=(finCamp<tope?finCamp:tope).toISOString().slice(0,10);
   if(hasta<=desde) return Promise.resolve();
-  var pedidos=E.establecimientos.map(function(es){
+
+  function pedir(es){
     var u="https://archive-api.open-meteo.com/v1/archive?latitude="+es.lat+"&longitude="+es.lon+
           "&start_date="+desde+"&end_date="+hasta+
           "&daily=precipitation_sum,et0_fao_evapotranspiration&timezone=America%2FArgentina%2FBuenos_Aires";
-    return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-      .then(function(j){
-        var fila=(E.climaSeries||[]).filter(function(x){
-          return x.establecimientoId===es.id && x.campaniaId===c.id;
-        })[0];
-        if(!fila){ fila={id:uid(), establecimientoId:es.id, campaniaId:c.id}; E.climaSeries=(E.climaSeries||[]).concat([fila]); }
-        fila.desde=desde; fila.hasta=hasta;
-        fila.lluvia=j.daily.precipitation_sum.map(function(v){return v||0;});
-        fila.eto=j.daily.et0_fao_evapotranspiration.map(function(v){return v||0;});
-        marcar("climaSeries", fila);
-        return j;
-      });
+    return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+  }
+
+  function guardarSerie(es, j){
+    var fila=(E.climaSeries||[]).filter(function(x){
+      return x.establecimientoId===es.id && x.campaniaId===c.id;
+    })[0];
+    if(!fila){ fila={id:uid(), establecimientoId:es.id, campaniaId:c.id}; E.climaSeries=(E.climaSeries||[]).concat([fila]); }
+    fila.desde=desde; fila.hasta=hasta;
+    fila.lluvia=j.daily.precipitation_sum.map(function(v){return v||0;});
+    fila.eto=j.daily.et0_fao_evapotranspiration.map(function(v){return v||0;});
+    marcar("climaSeries", fila);
+  }
+
+  function llenarMensual(j){
+    var base=new Date(desde+"T12:00:00"), acum=[0,0,0,0,0,0,0,0,0,0,0,0];
+    j.daily.time.forEach(function(f,i){
+      var d=new Date(f+"T12:00:00");
+      var idx=(d.getFullYear()-base.getFullYear())*12 + (d.getMonth()-base.getMonth());
+      if(idx>=0 && idx<12) acum[idx]+=(j.daily.precipitation_sum[i]||0);
+    });
+    for(var m=0;m<12;m++){ if(!c.manual[m]) c.lluvia[m]=Math.round(acum[m]*10)/10; }
+    c.traido=true; c.traidoHasta=hasta;
+    marcar("campanias",c);
+  }
+
+  var principal = E.establecimientos[0]
+    ? pedir(E.establecimientos[0]).then(function(j){
+        guardarSerie(E.establecimientos[0], j);
+        llenarMensual(j);
+      }).catch(function(){ /* sin el primero no hay resumen mensual esta vez, pero no frena al resto */ })
+    : Promise.resolve();
+
+  var resto = E.establecimientos.slice(1).map(function(es){
+    return pedir(es).then(function(j){ guardarSerie(es, j); })
+      .catch(function(){ /* un establecimiento caído degrada sólo su propia serie */ });
   });
-  return Promise.all(pedidos).then(function(resultados){
-      var j=resultados[0], base=new Date(desde+"T12:00:00"), acum=[0,0,0,0,0,0,0,0,0,0,0,0];
-      j.daily.time.forEach(function(f,i){
-        var d=new Date(f+"T12:00:00");
-        var idx=(d.getFullYear()-base.getFullYear())*12 + (d.getMonth()-base.getMonth());
-        if(idx>=0 && idx<12) acum[idx]+=(j.daily.precipitation_sum[i]||0);
-      });
-      for(var m=0;m<12;m++){ if(!c.manual[m]) c.lluvia[m]=Math.round(acum[m]*10)/10; }
-      c.traido=true; c.traidoHasta=hasta;
-      marcar("campanias",c); guardar();
-    })
-    .catch(function(){ /* si falla, quedan los valores que haya */ });
+
+  return Promise.all([principal].concat(resto)).then(function(){
+    return guardar();
+  });
 }
 
 /* --- iconos según código WMO --- */
