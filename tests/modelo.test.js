@@ -467,3 +467,15 @@ test("I4: totalNormalVentana con la ventana a caballo de dos meses", function(){
   var t = M.totalNormalVentana({ desde:"2025-07-29", hasta:"2025-08-02" }, "2025-07-01");
   assert.strictEqual(t, 5);   // 3×28/31 + 2×35/31 = 4,9677… → 5,0
 });
+
+test("el número de Lucas pisa al oficial", function(){
+  var ancla = M.rindeAncla("maiz_d", { localidad:"Luján" }, { "maiz_d": 11000 });
+  assert.strictEqual(ancla.kgHa, 11000);
+  assert.strictEqual(ancla.propio, true);
+});
+
+test("sin override manda el oficial y queda marcado como tal", function(){
+  var ancla = M.rindeAncla("maiz_d", { localidad:"Luján" }, {});
+  assert.strictEqual(ancla.kgHa, 7800);
+  assert.strictEqual(ancla.propio, false);
+});

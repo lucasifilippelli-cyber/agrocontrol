@@ -697,6 +697,18 @@ function rindeBase(cultivo, localidad){
   return v == null ? null : v;
 }
 
+/* El oficial es el valor por defecto; el de Lucas lo pisa y queda marcado,
+   igual que el pluviómetro manual pisa al automático. La serie oficial trae
+   un solo "maíz" (no separa temprano de tardío) y su mediana de partido
+   mezcla campos bien y mal llevados: el override es lo que corrige los dos
+   límites cuando el criterio de Lucas dice otra cosa. */
+function rindeAncla(cultivo, establecimiento, overrides){
+  var o = overrides && overrides[cultivo];
+  if(o != null && o !== "") return { kgHa: Number(o), propio: true };
+  var v = rindeBase(cultivo, establecimiento.localidad);
+  return { kgHa: v, propio: false };
+}
+
 /* Serie diaria de lluvia y ETo por establecimiento y campaña. Pura: recibe la
    colección de climaSeries en vez de leer E, para poder testearla sola. */
 function serieDe(series, establecimientoId, campaniaId){
@@ -2119,24 +2131,43 @@ A.nuevoEstablecimiento=function(){
       traerPronostico().then(pintar); avisar("Establecimiento agregado. Traigo su pronóstico.");
     }});
 };
+/* Agua útil inicial por ambiente (mm, argiudol típico de la Pampa Ondulada,
+   en el metro). Precarga el campo; Lucas la ajusta si su suelo es otro. */
+var CAU_INICIAL = { "Loma":140, "Media loma":160, "Bajo":180 };
+
 A.nuevoLote=function(id){
   var L=id?lote(id):null;
+  function ambVal(i,campo){ var a=L&&L.ambientes[i]; return (a&&a[campo]!=null)?a[campo]:null; }
   abrirForm({titulo:L?"Editar lote":"Nuevo lote",
     nota:"Los ambientes son opcionales. Si los cargás, las tres superficies tienen que sumar la del lote.",
     valores:L?{establecimientoId:L.establecimientoId,nombre:L.nombre,ha:L.ha,
-      a1:(L.ambientes[0]||{}).ha||"",a2:(L.ambientes[1]||{}).ha||"",a3:(L.ambientes[2]||{}).ha||""}:null,
+      a1:(L.ambientes[0]||{}).ha||"",a2:(L.ambientes[1]||{}).ha||"",a3:(L.ambientes[2]||{}).ha||"",
+      cau1:ambVal(0,"cau"),cau2:ambVal(1,"cau"),cau3:ambVal(2,"cau"),
+      napa1:ambVal(0,"napa"),napa2:ambVal(1,"napa"),napa3:ambVal(2,"napa")}:null,
     campos:[{k:"establecimientoId",label:"Establecimiento",tipo:"select",req:true,opciones:opcEstab(),ancho:true},
             {k:"nombre",label:"Nombre del lote",req:true,ph:"Lote 7 — Aguada"},
             {k:"ha",label:"Superficie (ha)",tipo:"number",paso:"0.1",min:"0.1",req:true,ph:"148.6"},
             {k:"a1",label:"Loma (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
+            {k:"cau1",label:"Loma — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:140,hint:"Capacidad del suelo en el metro."},
+            {k:"napa1",label:"Loma — aporte de napa (mm)",tipo:"number",paso:"1",min:"0",hint:"Cuánto suma la napa en este ambiente. Dejalo vacío si no aporta."},
             {k:"a2",label:"Media loma (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
-            {k:"a3",label:"Bajo (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"}],
+            {k:"cau2",label:"Media loma — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:160,hint:"Capacidad del suelo en el metro."},
+            {k:"napa2",label:"Media loma — aporte de napa (mm)",tipo:"number",paso:"1",min:"0",hint:"Cuánto suma la napa en este ambiente. Dejalo vacío si no aporta."},
+            {k:"a3",label:"Bajo (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
+            {k:"cau3",label:"Bajo — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:180,hint:"Capacidad del suelo en el metro."},
+            {k:"napa3",label:"Bajo — aporte de napa (mm)",tipo:"number",paso:"1",min:"0",hint:"Cuánto suma la napa en este ambiente. Dejalo vacío si no aporta."}],
     validar:function(d){
       var ha=parseFloat(d.ha)||0, s=(parseFloat(d.a1)||0)+(parseFloat(d.a2)||0)+(parseFloat(d.a3)||0);
       if(s>0 && Math.abs(s-ha)>0.15) return {a1:"Los ambientes suman "+nf(s,1)+" ha y el lote tiene "+nf(ha,1)+" ha."};
     },
     guardar:function(d){
-      var amb=[]; [["Loma",d.a1],["Media loma",d.a2],["Bajo",d.a3]].forEach(function(p){ var v=parseFloat(p[1])||0; if(v>0) amb.push({nombre:p[0],ha:v}); });
+      var amb=[];
+      [["Loma",d.a1,d.cau1,d.napa1],["Media loma",d.a2,d.cau2,d.napa2],["Bajo",d.a3,d.cau3,d.napa3]].forEach(function(p){
+        var v=parseFloat(p[1])||0;
+        if(v>0) amb.push({ nombre:p[0], ha:v,
+          cau: (p[2]==="" || p[2]==null) ? CAU_INICIAL[p[0]] : parseFloat(p[2]),
+          napa: (p[3]==="" || p[3]==null) ? null : parseFloat(p[3]) });
+      });
       if(L){ L.establecimientoId=d.establecimientoId; L.nombre=d.nombre; L.ha=parseFloat(d.ha); L.ambientes=amb;
              marcar("lotes",L); avisar("Lote actualizado."); }
       else { var nl={id:uid(),establecimientoId:d.establecimientoId,nombre:d.nombre,ha:parseFloat(d.ha),ambientes:amb};
