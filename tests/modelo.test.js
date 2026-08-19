@@ -113,14 +113,87 @@ test("el rinde nunca es negativo por más que el déficit sea total", function()
   assert.strictEqual(M.rindeEsperado(3600, 0, 1.5), 0);
 });
 
-test("la ventana crítica se ubica a partir del inicio de la campaña", function(){
+test("la ventana crítica de maíz temprano cae exacta, cruzando diciembre a enero", function(){
+  var v = M.ventanaCritica("maiz_t", "2025-07-01");
+  assert.strictEqual(v.desde, "2025-12-21");
+  assert.strictEqual(v.hasta, "2026-01-13");
+  assert.strictEqual(v.etapa, "Floración · R1");
+});
+
+test("la ventana crítica de soja de primera cae exacta, en enero-febrero", function(){
   var v = M.ventanaCritica("soja_1", "2025-07-01");
-  assert.ok(v.desde >= "2026-01-01" && v.desde <= "2026-01-20", "R3-R5 arranca en enero, dio " + v.desde);
+  assert.strictEqual(v.desde, "2026-01-10");
+  assert.strictEqual(v.hasta, "2026-02-26");
   assert.strictEqual(v.etapa, "Llenado · R3–R5");
+});
+
+test("la ventana crítica de maíz tardío cae exacta, en febrero-marzo", function(){
+  var v = M.ventanaCritica("maiz_d", "2025-07-01");
+  assert.strictEqual(v.desde, "2026-02-08");
+  assert.strictEqual(v.hasta, "2026-03-07");
+  assert.strictEqual(v.etapa, "Floración · R1");
+});
+
+test("la ventana crítica respeta el febrero bisiesto", function(){
+  // Campaña 2027/28: la ventana de soja de primera cae en un febrero de 29
+  // días (2028 es bisiesto), y da una fecha distinta a la del febrero de 28
+  // días del test anterior para el mismo cultivo.
+  var v = M.ventanaCritica("soja_1", "2027-07-01");
+  assert.strictEqual(v.desde, "2028-01-10");
+  assert.strictEqual(v.hasta, "2028-02-27");
+});
+
+test("un cultivo desconocido no tiene ventana crítica", function(){
+  assert.strictEqual(M.ventanaCritica("quinoa", "2025-07-01"), null);
+});
+
+test("sin fecha de inicio de campaña no hay ventana crítica, no revienta", function(){
+  assert.strictEqual(M.ventanaCritica("soja_1", null), null);
+});
+
+test("una fracción que redondearía al mes siguiente queda acotada al último día del mes", function(){
+  // Ninguna ventana real llega a esto hoy, pero la tabla está pensada para
+  // que Lucas la ajuste, así que se fuerza el borde con un cultivo de prueba.
+  M.VENTANAS._prueba_borde = { et:"Prueba", ini:0, fin:0.999 };
+  var v = M.ventanaCritica("_prueba_borde", "2026-02-01");  // febrero de 28 días
+  delete M.VENTANAS._prueba_borde;
+  assert.strictEqual(v.hasta, "2026-02-28");
 });
 
 test("el índice de agua es la ETR sobre la ETC dentro de la ventana", function(){
   var bal = { etr:[5, 5, 2], etc:[5, 5, 10] };  // 12 de 20
-  var ia = M.indiceAgua(bal, "2026-01-01", { desde:"2026-01-01", hasta:"2026-01-03" });
-  assert.strictEqual(Math.round(ia * 100) / 100, 0.6);
+  var r = M.indiceAgua(bal, "2026-01-01", { desde:"2026-01-01", hasta:"2026-01-03" });
+  assert.strictEqual(Math.round(r.ia * 100) / 100, 0.6);
+  assert.strictEqual(r.dias, 3);
+  assert.strictEqual(r.diasVentana, 3);
+});
+
+test("si la ventana crítica cae entera fuera de la serie, el índice de agua es null", function(){
+  // Lote recién sembrado: la serie sólo trae los primeros días y la ventana
+  // crítica está en enero, mucho más adelante.
+  var bal = { etr:[1, 1, 1], etc:[2, 2, 2] };
+  var r = M.indiceAgua(bal, "2025-09-01", { desde:"2026-01-10", hasta:"2026-02-26" });
+  assert.strictEqual(r, null);
+});
+
+test("con cobertura parcial de la ventana, el índice de agua avisa cuánto cubrió", function(){
+  // La ventana dura 48 días pero la serie sólo trae los primeros 5, y esos
+  // 5 fueron secos: el índice no se extrapola al total, se informa la
+  // cobertura para que quien llama decida qué hacer.
+  var etr = [], etc = [];
+  for(var i = 0; i < 5; i++){ etr.push(0); etc.push(4); }
+  var bal = { etr: etr, etc: etc };
+  var r = M.indiceAgua(bal, "2026-01-10", { desde:"2026-01-10", hasta:"2026-02-26" });
+  assert.strictEqual(r.ia, 0);
+  assert.strictEqual(r.dias, 5);
+  assert.strictEqual(r.diasVentana, 48);
+  assert.ok(r.dias < r.diasVentana, "la cobertura tiene que quedar marcada como parcial");
+});
+
+test("si no hubo demanda de agua en los días cubiertos, el índice de agua es 1", function(){
+  var bal = { etr:[0, 0], etc:[0, 0] };
+  var r = M.indiceAgua(bal, "2026-01-01", { desde:"2026-01-01", hasta:"2026-01-02" });
+  assert.strictEqual(r.ia, 1);
+  assert.strictEqual(r.dias, 2);
+  assert.strictEqual(r.diasVentana, 2);
 });
