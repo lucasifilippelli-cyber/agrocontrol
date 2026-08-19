@@ -1053,6 +1053,262 @@ function compromiso(o){
   var margen = Math.round((o.tnPesimista - o.tnVendidas) * 10) / 10;
   return { margen: margen, excedido: margen < 0 };
 }
+
+/* ============================================================
+   Lo que la pantalla de Sementera muestra se arma acá, no en el
+   HTML: puro, sin leer E, para que cada "todavía no sé" quede
+   protegido por un test y no por una lectura atenta del código.
+   ============================================================ */
+
+/* Agua útil al momento de la siembra: 60 % de la capacidad del ambiente
+   (docs/sementera.md). VALOR DE MANUAL, PENDIENTE DE VALIDACIÓN POR LUCAS,
+   igual que Ky, Kc y los umbrales de los semáforos. */
+var AU0_FRACCION = 0.60;
+
+/* Agua útil por ambiente, mm en el metro, argiudol típico de la Pampa
+   Ondulada. Precarga el formulario de lotes y también resuelve el ambiente
+   que quedó cargado sin ella. PENDIENTE DE VALIDACIÓN POR LUCAS. */
+var CAU_INICIAL = { "Loma":140, "Media loma":160, "Bajo":180 };
+/* Un lote sin ambientes cargados corre entero como una media loma. */
+var CAU_SIN_AMBIENTES = 160;
+
+/* Mes de entrega con el que se le busca el forward a cada cultivo, contado en
+   meses desde el inicio de la campaña (julio es 0): la posición estándar del
+   mercado local. PENDIENTE DE VALIDACIÓN POR LUCAS. */
+var MESES_ENTREGA = { maiz_t:9, maiz_d:12, soja_1:10, soja_2:10,
+                      trigo:6, cebada:6, girasol:8, sorgo:9 };
+
+/* precios_forward guarda el mes de entrega SIEMPRE en el día 1 —convención
+   canónica de la tabla, forzada por un check en la base—, así que la fecha
+   con la que se consulta se arma igual o forwardDe no encuentra nada. */
+function mesEntregaDe(cultivo, desdeCampaniaISO){
+  var n = MESES_ENTREGA[cultivo];
+  if(n == null || !desdeCampaniaISO) return null;
+  var b = new Date(desdeCampaniaISO + "T12:00:00Z");
+  return new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth() + n, 1)).toISOString().slice(0, 10);
+}
+
+/* Los ambientes con los que corre el balance hídrico. Un lote sin ambientes
+   corre entero como uno solo; un ambiente sin agua útil cargada cae al valor
+   inicial que le toca por nombre. El aporte de napa es el parche declarado de
+   docs/sementera.md para lo que el balance de superficie no modela: suma
+   milímetros disponibles —capacidad y agua inicial juntas— sólo en el
+   ambiente donde Lucas lo cargó, porque dentro del mismo lote el bajo tiene
+   napa y la loma no. */
+function ambientesDeLote(l){
+  var amb = ((l && l.ambientes) || []).filter(function(a){ return (parseFloat(a.ha) || 0) > 0; });
+  if(!amb.length) return [{ nombre:"Lote entero", ha:(parseFloat(l && l.ha) || 0),
+                            cau:CAU_SIN_AMBIENTES, napa:null }];
+  return amb.map(function(a){
+    return { nombre:a.nombre, ha:parseFloat(a.ha) || 0,
+             cau:(a.cau != null ? Number(a.cau) : (CAU_INICIAL[a.nombre] || CAU_SIN_AMBIENTES)),
+             napa:(a.napa == null ? null : Number(a.napa)) };
+  });
+}
+
+/* El balance hídrico corre DESDE LA FECHA DE SIEMBRA (docs/sementera.md). La
+   serie del campo arranca con la campaña —en julio—, y hacerle arrastrar al
+   cultivo los meses de barbecho previos le regala o le quita un agua inicial
+   que no es la suya: el agua útil a la siembra es un supuesto propio
+   (AU0_FRACCION), no el saldo de un balance que empezó cuatro meses antes.
+   Devuelve null cuando la siembra es posterior al último día que trae la
+   serie —sembrado hace tres días, el archivo va unos días atrás—, que es
+   "todavía no hay con qué" y no un lote sin agua. */
+function serieDesdeSiembra(serie, fechaSiembraISO){
+  if(!serie || !serie.lluvia || !serie.lluvia.length) return null;
+  var i = fechaSiembraISO ? diasEntre(serie.desde, fechaSiembraISO) : 0;
+  if(i <= 0) return serie;
+  if(i >= serie.lluvia.length) return null;
+  return { desde:fechaSiembraISO, hasta:serie.hasta,
+           lluvia:serie.lluvia.slice(i), eto:(serie.eto || []).slice(i) };
+}
+
+/* La sementera de un cultivo-lote: la ficha de lo sembrado más la cuenta del
+   modelo, ambiente por ambiente y ponderada por superficie.
+
+   `falta` dice por qué NO hay número, y es lo que la pantalla tiene que
+   mostrar en vez de un cero o un guión: "ancla" (el partido no está en la
+   tabla oficial y nadie cargó el suyo), "cultivo" (no tiene ventana crítica
+   codificada, como la alfalfa o la vicia de servicio), "serie" (todavía no
+   bajó la lluvia diaria de ese campo) y "ventana" (la serie no llega a cubrir
+   la ventana crítica ni completándola con percentiles, o su ETc da cero).
+
+   `ia` es el índice de agua MEDIDO: sólo los días que la serie efectivamente
+   trae, sin rellenar nada. Es null hasta que la ventana crítica empieza a
+   transcurrir —el caso normal durante media campaña— y eso es "todavía no hay
+   nada que calcular", no "no hubo estrés". El rango de kgHa, en cambio, sí
+   sale desde el día de la siembra porque escenariosVentana completa el tramo
+   pendiente con percentiles, y por eso los dos números conviven: uno es lo
+   medido y el otro es la proyección. */
+function filaSementera(o){
+  var cl = o.cl || {}, l = o.lote || {}, es = o.establecimiento || {}, c = o.campania || {};
+  var ky = KY[cl.cultivo], kc = KC[cl.cultivo];
+  var ancla = rindeAncla(cl.cultivo, es, o.overrides);
+  var ventana = ventanaCritica(cl.cultivo, c.desde);
+  var serie = serieDesdeSiembra(o.serie, cl.fechaSiembra);
+  var hist = o.historiaLarga || null;
+  var amb = ambientesDeLote(l);
+
+  var f = {
+    id:cl.id, cultivo:cl.cultivo, loteId:cl.loteId,
+    lote:(l.nombre || ""), establecimiento:(es.nombre || ""),
+    ha:(parseFloat(cl.haSembrada) || 0),
+    fechaSiembra:(cl.fechaSiembra || null),
+    variedad:(cl.variedad || ""), densidad:(cl.densidad || ""),
+    cosechado:!!cl.fechaCosecha,
+    ancla:ancla, ventana:ventana,
+    ky:(ky == null ? null : ky), kc:(kc == null ? null : kc),
+    /* Saturación de FAO-33: bajo este índice de agua la fórmula ya dio todo lo
+       que tenía para dar y cualquier valor más seco devuelve el mismo 0 kg/ha.
+       Con Ky 1,50 —maíz— eso pasa en 0,333. */
+    iaCero:((ky != null && ky > 1) ? Math.round((1 - 1 / ky) * 1000) / 1000 : 0),
+    ambientes:amb, kgHa:null, tn:null,
+    ia:null, iaDias:0,
+    iaDiasVentana:(ventana ? diasEntre(ventana.desde, ventana.hasta) + 1 : 0),
+    mmSiembra:null, mmVentana:null, serieHasta:null,
+    napa:false, normal:!!(hist && hist.normal), falta:null
+  };
+  amb.forEach(function(a){ if(a.napa != null && a.napa > 0) f.napa = true; });
+
+  if(ancla.kgHa == null) f.falta = "ancla";
+  else if(!ventana || ky == null || kc == null) f.falta = "cultivo";
+  else if(!serie) f.falta = "serie";
+
+  if(serie){
+    f.serieHasta = masDias(serie.desde, serie.lluvia.length - 1);
+    if(cl.fechaSiembra) f.mmSiembra = mmEntre(serie, cl.fechaSiembra, f.serieHasta);
+    if(ventana){
+      var hastaCub = f.serieHasta < ventana.hasta ? f.serieHasta : ventana.hasta;
+      f.mmVentana = diasEntre(ventana.desde, hastaCub) >= 0 ? mmEntre(serie, ventana.desde, hastaCub) : 0;
+    }
+  }
+  if(f.falta) return f;
+
+  var iaSuma = 0, iaHa = 0, haCon = 0, todos = true;
+  var acum = { pesimista:0, esperado:0, optimista:0 };
+  for(var i = 0; i < amb.length; i++){
+    var a = amb[i], napa = (a.napa == null ? 0 : a.napa);
+    var cau = a.cau + napa, au0 = a.cau * AU0_FRACCION + napa;
+
+    /* eto puede venir más corta que lluvia: se alinea antes de medir, por la
+       misma razón que escenariosVentana la alinea antes de rellenar. */
+    var eto = serie.eto ? serie.eto.slice() : [];
+    while(eto.length < serie.lluvia.length) eto.push(0);
+    var bal = balanceHidrico({ lluvia:serie.lluvia, eto:eto, cau:cau, au0:au0, kc:kc });
+    var medido = indiceAgua(bal, serie.desde, ventana);
+    a.ia = medido ? medido.ia : null;
+    if(medido){
+      iaSuma += medido.ia * a.ha; iaHa += a.ha;
+      f.iaDias = medido.dias; f.iaDiasVentana = medido.diasVentana;
+    }
+
+    var e = escenariosVentana({ serie:serie, ventana:ventana, desdeCampaniaISO:c.desde,
+      cau:cau, au0:au0, kc:kc, historiaLarga:hist, rBase:ancla.kgHa, ky:ky });
+    a.kgHa = e;
+    if(!e) todos = false;
+    else {
+      acum.pesimista += e.pesimista * a.ha;
+      acum.esperado  += e.esperado  * a.ha;
+      acum.optimista += e.optimista * a.ha;
+      haCon += a.ha;
+    }
+  }
+  if(iaHa > 0) f.ia = Math.round(iaSuma / iaHa * 1000) / 1000;
+
+  /* Con un solo ambiente sin escenario el lote entero queda sin número: un
+     promedio de la parte que sí se pudo calcular es un rinde parcial
+     presentado como si fuera el del lote. */
+  if(!todos || haCon <= 0){ f.falta = "ventana"; return f; }
+
+  f.kgHa = { pesimista:Math.round(acum.pesimista / haCon),
+             esperado: Math.round(acum.esperado  / haCon),
+             optimista:Math.round(acum.optimista / haCon) };
+  f.tn = { pesimista:Math.round(f.kgHa.pesimista * f.ha / 100) / 10,
+           esperada: Math.round(f.kgHa.esperado  * f.ha / 100) / 10,
+           optimista:Math.round(f.kgHa.optimista * f.ha / 100) / 10 };
+  return f;
+}
+
+/* La campaña entera: una fila por cultivo-lote sembrado y el resumen por
+   cultivo que va adelante en la pantalla. El resumen se queda en null cuando
+   ningún lote del cultivo tiene con qué calcular, y entonces `comp` también
+   es null: sin producción esperada no hay límite de venta que valga, y decir
+   "no te pasaste" ahí sería exactamente el error que este módulo existe para
+   no cometer. */
+function sementeraDeCampania(o){
+  var c = o.campania || {};
+  var porLote = {}, porEst = {};
+  (o.lotes || []).forEach(function(l){ porLote[l.id] = l; });
+  (o.establecimientos || []).forEach(function(e){ porEst[e.id] = e; });
+
+  var filas = (o.cultivoLotes || []).filter(function(cl){
+    return cl.campaniaId === c.id && cl.fechaSiembra && (parseFloat(cl.haSembrada) || 0) > 0;
+  }).map(function(cl){
+    var l = porLote[cl.loteId] || {};
+    var es = porEst[l.establecimientoId] || {};
+    return filaSementera({ cl:cl, lote:l, establecimiento:es, campania:c,
+      serie:serieDe(o.series, l.establecimientoId, c.id),
+      historiaLarga:((o.historias || {})[l.establecimientoId] || null),
+      overrides:((o.overrides || {})[l.establecimientoId] || null) });
+  }).sort(function(a, b){ return b.ha - a.ha; });
+
+  var mapa = {}, acum = {}, cultivos = [];
+  filas.forEach(function(f){
+    var g = mapa[f.cultivo];
+    if(!g){
+      g = mapa[f.cultivo] = { cultivo:f.cultivo, ha:0, lotes:0, conDato:0, sinDato:0,
+        kgHa:null, tn:null, tnVendidas:0, comp:null,
+        mesEntrega:null, precio:null, valor:null,
+        propio:false, napa:false, normal:false, filas:[] };
+      acum[f.cultivo] = { p:0, e:0, o:0, ha:0 };
+      cultivos.push(g);
+    }
+    g.filas.push(f); g.lotes++; g.ha = Math.round((g.ha + f.ha) * 10) / 10;
+    if(f.ancla && f.ancla.propio) g.propio = true;
+    if(f.napa) g.napa = true;
+    if(f.normal) g.normal = true;
+    if(f.kgHa){
+      g.conDato++;
+      var a = acum[f.cultivo];
+      a.p += f.kgHa.pesimista * f.ha;
+      a.e += f.kgHa.esperado  * f.ha;
+      a.o += f.kgHa.optimista * f.ha;
+      a.ha += f.ha;
+    } else g.sinDato++;
+  });
+
+  var tn = 0, vendidas = 0, valor = 0, hayValor = false, excedidos = 0, sinDato = 0;
+  cultivos.forEach(function(g){
+    var a = acum[g.cultivo];
+    if(a.ha > 0){
+      g.kgHa = { pesimista:Math.round(a.p / a.ha), esperado:Math.round(a.e / a.ha),
+                 optimista:Math.round(a.o / a.ha) };
+      g.tn = { pesimista:Math.round(a.p / 100) / 10, esperada:Math.round(a.e / 100) / 10,
+               optimista:Math.round(a.o / 100) / 10 };
+    }
+    g.tnVendidas = Math.round(((o.vendidas || {})[g.cultivo] || 0) * 10) / 10;
+    g.comp = g.tn ? compromiso({ tnPesimista:g.tn.pesimista, tnVendidas:g.tnVendidas }) : null;
+    g.mesEntrega = mesEntregaDe(g.cultivo, c.desde);
+    g.precio = g.mesEntrega ? forwardDe(o.forwards || [], g.cultivo, g.mesEntrega) : null;
+    g.valor = (g.precio != null && g.tn) ? Math.round(g.precio * g.tn.esperada) : null;
+
+    if(g.tn) tn += g.tn.esperada;
+    vendidas += g.tnVendidas;
+    if(g.valor != null){ valor += g.valor; hayValor = true; }
+    if(g.comp && g.comp.excedido) excedidos++;
+    sinDato += g.sinDato;
+  });
+  cultivos.sort(function(a, b){ return b.ha - a.ha; });
+
+  var ha = 0;
+  filas.forEach(function(f){ ha += f.ha; });
+  return { filas:filas, cultivos:cultivos,
+           ha:Math.round(ha * 10) / 10,
+           tn:Math.round(tn * 10) / 10,
+           tnVendidas:Math.round(vendidas * 10) / 10,
+           valor:(hayValor ? valor : null),
+           excedidos:excedidos, sinDato:sinDato };
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {

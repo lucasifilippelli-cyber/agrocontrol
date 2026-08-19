@@ -579,3 +579,178 @@ test("compromiso: con una entrada no numérica devuelve null", function(){
 test("compromiso: con NaN explícito devuelve null en vez de excedido:false", function(){
   assert.strictEqual(M.compromiso({ tnPesimista:NaN, tnVendidas:80 }), null);
 });
+
+/* ============================================================
+   Task 9 · el armado de la vista Sementera
+   Lo que la pantalla muestra sale de acá, así que acá se prueba:
+   sobre todo que un "todavía no sé" no se disfrace de número.
+   ============================================================ */
+
+var CAMP = { id:"c1", nombre:"2025/26", desde:"2025-07-01" };
+var EST  = { id:"e1", nombre:"La Constancia", localidad:"San Antonio de Areco" };
+var LOTE = { id:"l1", establecimientoId:"e1", nombre:"Lote 7 — Aguada", ha:100,
+             ambientes:[ { nombre:"Loma", ha:40, cau:140, napa:null },
+                         { nombre:"Bajo", ha:60, cau:180, napa:null } ] };
+var CL   = { id:"cl1", campaniaId:"c1", loteId:"l1", cultivo:"soja_1",
+             haSembrada:100, fechaSiembra:"2025-11-05",
+             variedad:"DM 4670", densidad:"320.000 pl/ha" };
+
+/* Serie diaria pareja desde el inicio de campaña hasta la fecha que se pida. */
+function serieHasta(hastaISO, mm, eto){
+  var n = M.diasEntre("2025-07-01", hastaISO) + 1, lluvia = [], etos = [];
+  for(var i = 0; i < n; i++){ lluvia.push(mm); etos.push(eto); }
+  return { id:"s1", establecimientoId:"e1", campaniaId:"c1",
+           desde:"2025-07-01", hasta:hastaISO, lluvia:lluvia, eto:etos };
+}
+function fila(extra){
+  var o = { cl:CL, lote:LOTE, establecimiento:EST, campania:CAMP,
+            serie:null, historiaLarga:null, overrides:null };
+  Object.keys(extra || {}).forEach(function(k){ o[k] = extra[k]; });
+  return M.filaSementera(o);
+}
+
+test("sin serie climática el lote no da un rinde: dice que todavía no sabe", function(){
+  var f = fila({});
+  assert.strictEqual(f.kgHa, null);
+  assert.strictEqual(f.tn, null);
+  assert.strictEqual(f.falta, "serie");
+});
+
+test("con la ventana crítica por delante hay rango proyectado pero nada medido", function(){
+  /* El caso normal durante media campaña: sembrado en noviembre, la ventana
+     de soja 1ª arranca el 10 de enero. */
+  var f = fila({ serie: serieHasta("2025-12-31", 3, 4) });
+  assert.ok(f.kgHa, "tiene que dar un rango proyectado");
+  assert.strictEqual(f.ia, null, "no hay índice de agua medido todavía");
+  assert.strictEqual(f.iaDias, 0);
+  assert.ok(f.iaDiasVentana > 0);
+});
+
+test("el índice de agua aparece recién cuando la ventana empieza a transcurrir", function(){
+  var f = fila({ serie: serieHasta("2026-01-20", 3, 4) });
+  assert.notStrictEqual(f.ia, null);
+  assert.strictEqual(f.iaDias, 11);          /* del 10 al 20 de enero */
+  assert.strictEqual(f.iaDiasVentana, 48);   /* 10 de enero al 26 de febrero */
+});
+
+test("con Ky 1,50 todo índice de agua bajo 0,333 da el mismo cero", function(){
+  var f = fila({ cl:{ id:"cl2", campaniaId:"c1", loteId:"l1", cultivo:"maiz_t",
+                      haSembrada:100, fechaSiembra:"2025-09-25" } });
+  assert.strictEqual(f.iaCero, 0.333);
+  assert.strictEqual(M.rindeEsperado(8050, 0.30, 1.5), 0);
+  assert.strictEqual(M.rindeEsperado(8050, 0.05, 1.5), 0);
+});
+
+test("el ancla que puso el agrónomo queda marcada como propia", function(){
+  var f = fila({ serie: serieHasta("2026-02-26", 3, 4), overrides:{ soja_1:4200 } });
+  assert.strictEqual(f.ancla.propio, true);
+  assert.strictEqual(f.ancla.kgHa, 4200);
+});
+
+test("la historia climática degradada a NORMAL queda marcada en la fila", function(){
+  var f = fila({ serie: serieHasta("2025-12-31", 3, 4),
+                 historiaLarga:{ desde:null, lluvia:[], normal:true } });
+  assert.strictEqual(f.normal, true);
+});
+
+var LOTE_CON_NAPA = { id:"l1", establecimientoId:"e1", nombre:"Lote 7 — Aguada", ha:100,
+  ambientes:[ { nombre:"Loma", ha:40, cau:140, napa:null },
+              { nombre:"Bajo", ha:60, cau:180, napa:60 } ] };
+
+test("el aporte de napa queda marcado y sostiene el rinde en un déficit moderado", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var sin = fila({ serie:serie });
+  var con = fila({ serie:serie, lote:LOTE_CON_NAPA });
+  assert.strictEqual(sin.napa, false);
+  assert.strictEqual(con.napa, true);
+  assert.ok(con.kgHa.esperado > sin.kgHa.esperado, "la napa tiene que sostener el rinde");
+});
+
+test("en una seca larga la napa se consume y deja de aportar, pero nunca resta", function(){
+  /* No es un defecto: 60 mm de napa contra 3,75 mm/día de déficit se agotan
+     mucho antes de la ventana crítica. Se prueba para que quede escrito que
+     el aporte es un depósito y no una canilla abierta. */
+  var serie = serieHasta("2026-02-26", 2, 5);
+  var sin = fila({ serie:serie });
+  var con = fila({ serie:serie, lote:LOTE_CON_NAPA });
+  assert.ok(con.kgHa.esperado >= sin.kgHa.esperado);
+});
+
+test("el balance arranca en la siembra, no en el barbecho de julio", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var s = M.serieDesdeSiembra(serie, "2025-11-05");
+  assert.strictEqual(s.desde, "2025-11-05");
+  assert.strictEqual(s.lluvia.length, serie.lluvia.length - 127);
+  assert.strictEqual(s.eto.length, s.lluvia.length);
+});
+
+test("sembrado hace tres días todavía no hay serie: no es un lote sin agua", function(){
+  assert.strictEqual(M.serieDesdeSiembra(serieHasta("2025-11-01", 3, 4), "2025-11-05"), null);
+  assert.strictEqual(fila({ serie: serieHasta("2025-11-01", 3, 4) }).falta, "serie");
+});
+
+test("un lote que todavía no se sembró no entra en la sementera", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[{ id:"cl9", campaniaId:"c1", loteId:"l1", cultivo:"soja_1", haSembrada:0 }],
+    series:[], historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+  assert.strictEqual(s.filas.length, 0);
+  assert.strictEqual(s.cultivos.length, 0);
+});
+
+test("sin escenarios no hay compromiso: no dice que no te pasaste", function(){
+  /* El defecto que este proyecto ya se comió dos veces: sin datos, la
+     pantalla no puede mostrar margen ni un tranquilizador "todo bien". */
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[], historias:{}, overrides:{},
+    vendidas:{ soja_1:200 }, forwards:[] });
+  var g = s.cultivos[0];
+  assert.strictEqual(g.kgHa, null);
+  assert.strictEqual(g.tn, null);
+  assert.strictEqual(g.comp, null);
+  assert.strictEqual(s.tn, 0);
+  assert.strictEqual(s.sinDato, 1);
+});
+
+test("el rinde del cultivo es el promedio de sus lotes ponderado por superficie", function(){
+  var l2 = { id:"l2", establecimientoId:"e1", nombre:"Lote 3 — Molino", ha:300, ambientes:[] };
+  var cl2 = { id:"cl2", campaniaId:"c1", loteId:"l2", cultivo:"soja_1",
+              haSembrada:300, fechaSiembra:"2025-11-05" };
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE, l2], establecimientos:[EST],
+    cultivoLotes:[CL, cl2], series:[serie], historias:{}, overrides:{},
+    vendidas:{}, forwards:[] });
+  var g = s.cultivos[0];
+  var f1 = s.filas.filter(function(f){ return f.id === "cl1"; })[0];
+  var f2 = s.filas.filter(function(f){ return f.id === "cl2"; })[0];
+  var esperado = Math.round((f1.kgHa.esperado * 100 + f2.kgHa.esperado * 300) / 400);
+  assert.strictEqual(g.ha, 400);
+  assert.strictEqual(g.kgHa.esperado, esperado);
+});
+
+test("avisa cuando lo vendido pasa el escenario pesimista del cultivo", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serie], historias:{}, overrides:{},
+    vendidas:{ soja_1:9999 }, forwards:[] });
+  assert.strictEqual(s.cultivos[0].comp.excedido, true);
+  assert.strictEqual(s.excedidos, 1);
+});
+
+test("el mes de entrega sale siempre en el día 1 y encuentra el forward", function(){
+  assert.strictEqual(M.mesEntregaDe("soja_1", "2025-07-01"), "2026-05-01");
+  assert.strictEqual(M.mesEntregaDe("trigo",  "2025-07-01"), "2026-01-01");
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serie], historias:{}, overrides:{}, vendidas:{},
+    forwards:[{ id:"p1", cultivo:"soja_1", mesEntrega:"2026-05-01",
+                usdTn:310, fechaCarga:"2026-08-01" }] });
+  assert.strictEqual(s.cultivos[0].precio, 310);
+  assert.strictEqual(s.cultivos[0].valor, Math.round(310 * s.cultivos[0].tn.esperada));
+});
+
+test("un lote sin ambientes cargados corre entero como una media loma", function(){
+  var amb = M.ambientesDeLote({ id:"l2", nombre:"Lote 3", ha:120, ambientes:[] });
+  assert.strictEqual(amb.length, 1);
+  assert.strictEqual(amb[0].ha, 120);
+  assert.strictEqual(amb[0].cau, 160);
+});
