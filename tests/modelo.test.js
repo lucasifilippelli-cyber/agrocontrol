@@ -514,3 +514,15 @@ test("armarAmbiente: un valor normal de napa pasa como número", function(){
   assert.strictEqual(a.ha, 28.1);
   assert.strictEqual(a.nombre, "Bajo");
 });
+
+test("forwardDe toma el precio cargado más recientemente", function(){
+  var lista = [
+    { cultivo:"soja_1", mesEntrega:"2026-05-01", usdTn:330, fechaCarga:"2026-08-01" },
+    { cultivo:"soja_1", mesEntrega:"2026-05-01", usdTn:340, fechaCarga:"2026-08-15" }
+  ];
+  assert.strictEqual(M.forwardDe(lista, "soja_1", "2026-05-01"), 340);
+});
+
+test("sin precio cargado devuelve null en vez de suponer", function(){
+  assert.strictEqual(M.forwardDe([], "soja_1", "2026-05-01"), null);
+});

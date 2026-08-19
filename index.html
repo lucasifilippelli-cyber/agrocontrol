@@ -1007,6 +1007,15 @@ function escenariosVentana(o){
   }
   return escenarios({ rBase: o.rBase, ky: o.ky, iaPeor: ias[0], iaMedio: ias[1], iaMejor: ias[2] });
 }
+
+/* Único dato del módulo que no entra solo: no hay fuente pública sin
+   credenciales. Si algún día hay acceso a MATBA-ROFEX, se automatiza acá. */
+function forwardDe(lista, cultivo, mesEntregaISO){
+  var c = lista.filter(function(p){
+    return p.cultivo === cultivo && p.mesEntrega === mesEntregaISO;
+  }).sort(function(a, b){ return a.fechaCarga < b.fechaCarga ? 1 : -1; });
+  return c.length ? Number(c[0].usdTn) : null;
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -1047,7 +1056,8 @@ function uid(){
 /* ---------- nombres: camello en la app, guion bajo en la base ---------- */
 /* Postgres no acepta "" en una columna de fecha, y la app usa la cadena vacía
    para "todavía no". La traducción es el lugar donde eso se normaliza. */
-var COLUMNAS_FECHA={fecha:1,fecha_siembra:1,fecha_cosecha:1,fecha_plan:1,fecha_cierre:1,desde:1,hasta:1,traido_hasta:1};
+var COLUMNAS_FECHA={fecha:1,fecha_siembra:1,fecha_cosecha:1,fecha_plan:1,fecha_cierre:1,desde:1,hasta:1,traido_hasta:1,
+                    mes_entrega:1,fecha_carga:1};
 function aGuion(o){
   var r={};
   for(var k in o){
@@ -1344,11 +1354,11 @@ var TABLAS = {
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
-  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series"
+  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[],climaSeries:[]};
+           telegramCuentas:[],climaSeries:[],preciosForward:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -2500,6 +2510,33 @@ A.borrarGasto=function(id){
     E.gastos=E.gastos.filter(function(x){return x.id!==id;}); marcarBaja("gastos",id); avisar("Gasto eliminado."); });
 };
 
+/* ---------- precios forward ---------- */
+/* Único dato de Finanzas que no entra solo: no hay una fuente pública y
+   gratuita de precios forward sin credenciales. Se carga a mano; si algún
+   día hay acceso a MATBA-ROFEX, se automatiza sin tocar el resto (ver
+   forwardDe en el modelo). */
+A.nuevoPrecioForward=function(id){
+  var P=id?E.preciosForward.filter(function(x){return x.id===id;})[0]:null;
+  abrirForm({titulo:P?"Editar precio forward":"Cargar precio forward",
+    nota:"No hay una fuente pública y gratuita de precios forward: por eso este es el único dato del módulo que se carga a mano. Si algún día hay acceso a MATBA-ROFEX, se trae solo.",
+    valores:P?{cultivo:P.cultivo,mesEntrega:P.mesEntrega,usdTn:P.usdTn,fechaCarga:P.fechaCarga}
+             :{fechaCarga:hoyISO()},
+    campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivos()},
+            {k:"mesEntrega",label:"Mes de entrega",tipo:"date",req:true},
+            {k:"usdTn",label:"Dólares por tonelada",tipo:"number",paso:"0.01",min:"0.01",req:true},
+            {k:"fechaCarga",label:"Fecha de carga",tipo:"date",req:true,hint:"Hoy, salvo que estés cargando un precio de otro día."}],
+    guardar:function(d){
+      var b={cultivo:d.cultivo,mesEntrega:d.mesEntrega,usdTn:parseFloat(d.usdTn),fechaCarga:d.fechaCarga};
+      if(P){ Object.keys(b).forEach(function(k){P[k]=b[k];}); marcar("preciosForward",P); avisar("Precio forward actualizado."); }
+      else { b.id=uid(); E.preciosForward.push(b); marcar("preciosForward",b); avisar("Precio forward cargado."); }
+    }});
+};
+A.borrarPrecioForward=function(id){
+  var p=E.preciosForward.filter(function(x){return x.id===id;})[0];
+  confirmar("Eliminar precio forward",esc(CULTIVOS[p.cultivo].nom)+" · entrega "+fecha(p.mesEntrega)+".",function(){
+    E.preciosForward=E.preciosForward.filter(function(x){return x.id!==id;}); marcarBaja("preciosForward",id); avisar("Precio forward eliminado."); });
+};
+
 A.nuevoInsumo=function(id){
   var I=id?insumo(id):null;
   abrirForm({titulo:I?"Editar insumo":"Nuevo insumo",
@@ -3383,14 +3420,19 @@ function vistaFinanzas(){
   var cab='<div class="cabecera"><div><h1>Finanzas</h1>'+
     '<div class="sub">Ventas, gastos y resultado de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
     '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
+    '<button class="btn sec" data-a="nuevoPrecioForward">+ Precio forward</button>'+
     '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
 
   var ventas=E.ventas.filter(function(v){return v.campaniaId===campActiva;})
                      .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
   var gastos=E.gastos.filter(function(g){return g.campaniaId===campActiva;})
                      .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
+  /* los precios forward no son por campaña: el mes de entrega puede caer en
+     cualquiera, así que se listan todos los que haya cargados */
+  var preciosForward=(E.preciosForward||[]).slice()
+                     .sort(function(a,b){return (b.fechaCarga||"").localeCompare(a.fechaCarga||"");});
 
-  if(!ventas.length && !gastos.length && ec.costos<0.01)
+  if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length)
     return cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
       'Registrá las ventas de grano y los gastos que no son insumos —contratistas, fletes, arrendamiento— '+
       'y acá vas a ver el resultado por lote y por cultivo.<br><br>'+
@@ -3509,7 +3551,23 @@ function vistaFinanzas(){
           '<button class="btn peligro mini" data-a="borrarGasto" data-arg="'+g.id+'">×</button></span></td></tr>';
       }).join("")+'</tbody></table></div>':'')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloqueGastos;
+  var bloquePreciosForward='<div class="bloque"><div class="bloque-cab"><h2>Precios forward</h2>'+
+    '<div class="aclara">Se cargan a mano: no hay una fuente pública y gratuita para traerlos solos</div></div>'+
+    (preciosForward.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th>Cultivo</th>'+
+      '<th class="num">Mes de entrega</th><th class="num">USD/tn</th><th class="num">Cargado el</th>'+
+      '<th class="der">Acciones</th></tr></thead><tbody>'+
+      preciosForward.map(function(p){
+        var cu=CULTIVOS[p.cultivo];
+        return '<tr><td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</td>'+
+          '<td class="num">'+fecha(p.mesEntrega)+'</td>'+
+          '<td class="num" style="font-weight:700">'+nf(p.usdTn,1)+'</td>'+
+          '<td class="num">'+fecha(p.fechaCarga)+'</td>'+
+          '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoPrecioForward" data-arg="'+p.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarPrecioForward" data-arg="'+p.id+'">×</button></span></td></tr>';
+      }).join("")+'</tbody></table></div>'
+     :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
+
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos;
 }
 
 function vistaClima(){
