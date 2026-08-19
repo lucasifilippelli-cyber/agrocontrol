@@ -878,9 +878,9 @@ function percentilesDeVentana(historiaLarga, ventana, desdeCampaniaISO){
   if(historico.length) return percentilesVentana(historico);
   var normal = totalNormalVentana(ventana, desdeCampaniaISO);
   return {
-    p20: Math.round(normal * (1 - 0.84 * CV_LLUVIA_NORMAL)),
+    p20: Math.round(normal * (1 - 0.84 * CV_LLUVIA_NORMAL) * 10) / 10,  /* mismo redondeo a 1 decimal que la rama real */
     p50: normal,
-    p80: Math.round(normal * (1 + 0.84 * CV_LLUVIA_NORMAL))
+    p80: Math.round(normal * (1 + 0.84 * CV_LLUVIA_NORMAL) * 10) / 10
   };
 }
 
@@ -955,6 +955,14 @@ function escenariosVentana(o){
   var ias = [];
   for(var k = 0; k < pcts.length; k++){
     var lluvia = o.serie.lluvia.slice(), eto = o.serie.eto.slice();
+    /* Fix round 2, C3: eto puede venir más corta que lluvia (serieDe la trae
+       con eto: fila.eto||[]). Si se hace push directo sobre ese array corto,
+       el relleno climatológico aterriza en los índices de los días REALES en
+       vez de en los pendientes, y el tramo pendiente queda con ETc 0 — el
+       mismo agujero de C3 por otra puerta. Se rellena con 0 hasta el largo
+       real antes de appendear los días pendientes, para que los índices de
+       lluvia y eto queden alineados día a día. */
+    while(eto.length < o.serie.lluvia.length) eto.push(0);
     if(faltan > 0){
       var mmDia = pcts[k] / faltan;                       /* reparto sobre el tramo pendiente, no la ventana */
       for(var j = 0; j < faltan; j++){ lluvia.push(mmDia); eto.push(etoDias[j]); }
@@ -997,7 +1005,7 @@ var SB_KEY = "sb_publishable_TDaLmB7FDpLsfSNDrb98-Q_UfEMOY58";
 var CLAVE_CACHE = "agrocontrol.cache.v1",
     CLAVE_SESION = "agrocontrol.sesion.v1",
     CLAVE_CLIMA = "agrocontrol.clima.v1",
-    CLAVE_HISTORIA = "agrocontrol.historia.v1";
+    CLAVE_HISTORIA = "agrocontrol.historia.v2";  /* v2: la Task 5 fix round 1 le agregó .eto; v1 no la tiene y el caché no vence solo */
 
 var E = null, campActiva = null, vistaActual = "inicio", loteAbierto = null;
 var estabClima = null, diaSel = 0;

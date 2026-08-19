@@ -374,7 +374,7 @@ test("C2: el ETo del relleno sale de la climatología del día, no del promedio 
   assert.strictEqual(e.pesimista, e.optimista);   // no llovió en ningún percentil: sólo cambia el ETo
 });
 
-test("C3: sin ETc en la ventana no hay base para un rinde, y no se devuelve el ancla completa", function(){
+test("C3: sin ETc en la ventana no hay base para un rinde, y no se devuelve el ancla completa (ventana cubierta)", function(){
   // Reproduce el camino exacto de los hallazgos: una fila de climaSeries sin
   // ETo (serieDe la trae con eto:[] cuando la campaña se trajo con una
   // versión anterior). Antes, indiceAgua daba ia=1 "sin demanda" y los tres
@@ -390,10 +390,45 @@ test("C3: sin ETc en la ventana no hay base para un rinde, y no se devuelve el a
   assert.strictEqual(M.escenariosVentana(o), null);
 });
 
+test("C3 (fix round 2): con eto más corta que lluvia, el relleno climatológico no se desplaza a los días reales", function(){
+  // Fix round 1 dejó una guarda (etcVentana <= 0) pero abrió el mismo agujero
+  // por otra puerta: el push sobre o.serie.eto.slice() appendea al FINAL del
+  // array corto, no en la posición del día. Con eto:[] (5 días reales sin
+  // dato) y 5 días pendientes con ETo climatológica real, el push viejo hacía
+  // aterrizar esos 25 mm/día en los índices 0-4 (los días REALES) y dejaba
+  // los índices 5-9 (los días pendientes, los que en verdad importan) en
+  // ETc 0 — la guarda no frena nada porque la ETc total de la ventana sigue
+  // dando positiva, sólo que mal repartida. Con cau chico (20) y 30 mm/día de
+  // lluvia real, la demanda mal ubicada se satisface sola con esa lluvia y da
+  // ancla completa (4000); bien ubicada, la lluvia real desborda el perfil
+  // sin uso (etc=0 esos días) y el perfil llega vacío a la ventana que
+  // importa. Verificado contra el código sin el parche de padding: da
+  // {pesimista:4000, esperado:4000, optimista:4000}, el mismo bug que
+  // reportó la revisión.
+  var lluvia = [], eto = [];
+  for(var i = 0; i <= 1470; i++){ lluvia.push(0); eto.push(0); }
+  [5,6,7,8,9, 370,371,372,373,374, 735,736,737,738,739,
+   1100,1101,1102,1103,1104, 1466,1467,1468,1469,1470].forEach(function(idx){ eto[idx] = 25; });
+
+  var o = {
+    serie: { desde:"2026-01-01", lluvia:[30,30,30,30,30], eto:[] },
+    ventana: { desde:"2026-01-01", hasta:"2026-01-10" },
+    desdeCampaniaISO: null,
+    cau:20, au0:0, kc:1,
+    historiaLarga: { desde:"2021-01-01", lluvia:lluvia, eto:eto },
+    rBase:4000, ky:1
+  };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.pesimista, 640);
+  assert.notStrictEqual(e.pesimista, 4000);   // el bug de la revisión daba el ancla completa
+});
+
 test("C4: sin 20 años reales, percentilesDeVentana abre un rango alrededor de NORMAL en vez de un punto", function(){
   var ventana = { desde:"2025-07-10", hasta:"2025-07-15" };  // 6 días, todos julio
   var p = M.percentilesDeVentana(null, ventana, "2025-07-01");
-  assert.strictEqual(p.p20, 4);
+  // Fix round 2: unificado a un decimal en las dos ramas (antes p20/p80
+  // redondeaban a entero y p50 a un decimal, inconsistente).
+  assert.strictEqual(p.p20, 3.8);
   assert.strictEqual(p.p50, 5.4);
   assert.strictEqual(p.p80, 7);
   assert.ok(p.p20 < p.p50 && p.p50 < p.p80, "antes colapsaban los tres al mismo punto");
