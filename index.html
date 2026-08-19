@@ -1715,6 +1715,32 @@ function semilla(){
     {id:"v7",campaniaId:"c2526",cultivo:"cebada",fecha:"2025-12-12",tipoOperacion:"forward",toneladas:770,precioTn:198,moneda:"USD",tipoCambio:null,comprador:"Maltería",fechaEntrega:"2026-01-20",nota:""},
     {id:"v8",campaniaId:"c2526",cultivo:"soja_2",fecha:"2026-05-25",tipoOperacion:"disponible",toneladas:600,precioTn:289,moneda:"USD",tipoCambio:null,comprador:"Terminal Rosario",fechaEntrega:null,nota:""}
   ];
+  /* Precios forward de ejemplo: el único dato de Sementera que no entra solo.
+     mesEntrega va siempre en día 1 (convención canónica, forzada por un check
+     en la base) y sale de mesEntregaDe(cultivo, campania.desde) —no se puede
+     inventar cualquier fecha, tiene que coincidir con lo que la pantalla va a
+     pedir. La campaña cerrada (2025/26) trae los ocho cultivos, para que
+     Sementera valúe y calcule el margen de compromiso completo; la campaña en
+     curso (2026/27) trae los cultivos que ya están sembrados o planificados,
+     aunque todavía no haya producción esperada con la cual valuar. */
+  var PF=function(id,k,mes,precio,carga){return {id:id,cultivo:k,mesEntrega:mes,usdTn:precio,fechaCarga:carga};};
+  var preciosForward=[
+    /* 2025/26 (desde 2025-07-01) */
+    PF("pf1", "trigo",   "2026-01-01", 208,    "2025-08-15"),
+    PF("pf2", "cebada",  "2026-01-01", 200,    "2025-08-15"),
+    PF("pf3", "girasol", "2026-03-01", 435,    "2025-09-10"),
+    PF("pf4", "maiz_t",  "2026-04-01", 172,    "2025-10-05"),
+    PF("pf5", "sorgo",   "2026-04-01", 152,    "2025-10-05"),
+    PF("pf6", "soja_1",  "2026-05-01", 300,    "2025-11-01"),
+    PF("pf7", "soja_2",  "2026-05-01", 296,    "2025-11-01"),
+    PF("pf8", "maiz_d",  "2026-07-01", 178,    "2025-11-15"),
+    /* 2026/27 (desde 2026-07-01), sólo los cultivos que ya están en el lote */
+    PF("pf9", "trigo",   "2027-01-01", 212,    "2026-08-10"),
+    PF("pf10","cebada",  "2027-01-01", 203,    "2026-08-10"),
+    PF("pf11","maiz_t",  "2027-04-01", 176,    "2026-08-10"),
+    PF("pf12","soja_1",  "2027-05-01", 305,    "2026-08-10"),
+    PF("pf13","maiz_d",  "2027-07-01", 182,    "2026-08-10")
+  ];
   var G=function(id,camp,cl,fecha,cat,desc,monto,moneda,tc,prov){
     return {id:id,campaniaId:camp,cultivoLoteId:cl,fecha:fecha,categoria:cat,descripcion:desc,
             monto:monto,moneda:moneda,tipoCambio:tc,proveedor:prov};
@@ -1758,7 +1784,7 @@ function semilla(){
   return {establecimientos:est,lotes:lotes,campanias:camps,cultivoLotes:cl,tickets:tickets,
           insumos:insumos,ordenes:ordenes.concat(ordCerradas),
           ordenInsumos:ordenInsumos.concat(oiCerradas),movimientos:movimientos,
-          monitoreo:monitoreo,ventas:ventas,gastos:gastos};
+          monitoreo:monitoreo,ventas:ventas,gastos:gastos,preciosForward:preciosForward};
 }
 
 /* La colección en memoria de cada tabla. Las vistas siguen leyendo de E igual
@@ -1863,20 +1889,44 @@ function semillaConIds(){
   s.ventas.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId); });
   s.gastos.forEach(function(x){ x.id=nid(x.id); x.campaniaId=nid(x.campaniaId);
                                 x.cultivoLoteId=x.cultivoLoteId?nid(x.cultivoLoteId):null; });
+  /* precios_forward no referencia campaña ni ningún otro id: sólo cultivo y
+     mes de entrega, así que alcanza con darle un id propio. */
+  s.preciosForward.forEach(function(x){ x.id=nid(x.id); });
   return s;
 }
 function cargarEjemplo(){
   var s=semillaConIds();
   /* orden de inserción: primero lo que otros referencian */
   var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes",
-             "ordenInsumos","movimientos","monitoreo","ventas","gastos"];
+             "ordenInsumos","movimientos","monitoreo","ventas","gastos","preciosForward"];
   orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
   campActiva=(s.campanias.filter(function(c){return c.estado==="curso";})[0]||s.campanias[0]).id;
+  var otraCampania=s.campanias.filter(function(c){return c.id!==campActiva;})[0];
   estabClima=s.establecimientos[0].id;
   normalizar();
+
+  /* Rinde propio de ejemplo, sólo para maíz tardío (cultivo "maiz_d" en este
+     modelo: CULTIVOS.maiz_d.nom === "Maíz tardío") en La Constancia: es el
+     cultivo donde el criterio propio importa de verdad, porque la serie
+     oficial trae un solo "maíz" sin separar temprano de tardío (ver
+     rindeAncla). Va en perfiles.rindes_base, igual que un override real
+     cargado a mano desde A.rindesBase, y por eso se manda aparte con
+     sb.actualizar en vez de sumarse a la cola de guardar(). */
+  var overridesEjemplo={}; overridesEjemplo[s.establecimientos[0].id]={maiz_d:9800};
+  perfil=escribirOverrides(perfil||{}, overridesEjemplo);
+  var pRindes=(sesion&&sesion.user)
+    ?sb.actualizar("perfiles", sesion.user.id, escribirOverrides({}, overridesEjemplo))
+    :Promise.resolve();
+
   return guardar().then(function(){
-    return traerLluviaCampania(true);
-  }).then(function(){
+    /* El clima diario se baja para las dos campañas, no sólo la activa: es lo
+       que deja que quien mire el ejemplo cambie de campaña y vea los dos
+       estados de Sementera —2026/27, que todavía no sabe nada, y 2025/26,
+       que ya tiene con qué calcular rangos y valuación. */
+    return traerLluviaCampania(true).then(function(){
+      return otraCampania?traerLluviaCampania(true, otraCampania.id):Promise.resolve();
+    });
+  }).then(function(){ return pRindes; }).then(function(){
     localStorage.removeItem(CLAVE_CLIMA); CLIMA.pron={};
     return traerPronostico();
   });
@@ -1932,9 +1982,12 @@ function traerPronostico(){
    que antes: es lo que ya muestran la vista de Lluvias y el resumen de campaña.
    Cada establecimiento se pide y se guarda por separado: uno caído (coordenadas
    raras, rate-limit, corte de red) no puede tirar abajo a los demás ni dejar
-   sin persistir lo que sí llegó — acá la mala señal es la norma, no la excepción. */
-function traerLluviaCampania(forzar){
-  var c=campania(campActiva); if(!c) return Promise.resolve();
+   sin persistir lo que sí llegó — acá la mala señal es la norma, no la excepción.
+   campaniaId es opcional y por defecto es la activa: cargarEjemplo() lo usa
+   para traer también la serie de la campaña cerrada, sin tener que cambiar
+   campActiva de un lado a otro para conseguirlo. */
+function traerLluviaCampania(forzar, campaniaId){
+  var c=campania(campaniaId||campActiva); if(!c) return Promise.resolve();
   if(c.traido && !forzar) return Promise.resolve();
   var desde=c.desde;
   var finCamp=new Date(desde); finCamp.setFullYear(finCamp.getFullYear()+1); finCamp.setDate(finCamp.getDate()-1);
