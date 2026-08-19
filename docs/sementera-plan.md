@@ -454,7 +454,11 @@ git commit -m "Calcular el balance hídrico diario del lote"
 - Produces:
   - `KY` y `KC` — objetos `{claveCultivo: number}`
   - `ventanaCritica(cultivo, desdeCampaniaISO)` → `{desde, hasta, etapa}` en ISO
-  - `indiceAgua(balance, desdeSerieISO, ventana)` → `number` en `[0,1]`
+  - `indiceAgua(balance, desdeSerieISO, ventana)` → `null` cuando la ventana
+    crítica no está cubierta por la serie, o `{ia, dias, diasVentana}` cuando sí.
+    Devolver un número pelado no alcanza: sin cobertura la función no puede
+    distinguir "sin estrés" de "todavía no hay datos", y las dos cosas terminan
+    en una decisión de venta.
   - `rindeEsperado(rBase, ia, ky)` → `number` en kg/ha
 
 - [ ] **Step 1: Escribir el test que falla**
