@@ -197,3 +197,110 @@ test("si no hubo demanda de agua en los días cubiertos, el índice de agua es 1
   assert.strictEqual(r.dias, 2);
   assert.strictEqual(r.diasVentana, 2);
 });
+
+test("los percentiles salen de la lluvia acumulada de cada año en la ventana", function(){
+  var hist = [80, 100, 120, 140, 160, 180, 200, 220, 240, 260];
+  var p = M.percentilesVentana(hist);
+  assert.ok(p.p20 < p.p50 && p.p50 < p.p80, "tienen que venir ordenados");
+  assert.strictEqual(p.p50, 170);
+});
+
+test("los tres escenarios vienen ordenados de peor a mejor", function(){
+  var e = M.escenarios({ rBase:3600, ky:1.0, iaPeor:0.6, iaMedio:0.8, iaMejor:0.95 });
+  assert.ok(e.pesimista <= e.esperado && e.esperado <= e.optimista);
+});
+
+test("con la ventana crítica ya cerrada los tres escenarios convergen", function(){
+  var e = M.escenarios({ rBase:3600, ky:1.0, iaPeor:0.8, iaMedio:0.8, iaMejor:0.8 });
+  assert.strictEqual(e.pesimista, e.esperado);
+  assert.strictEqual(e.esperado, e.optimista);
+});
+
+test("con un solo año de historia los tres percentiles coinciden", function(){
+  // Es lo que pasa cuando no hay 20 años reales y se cae a un único valor
+  // típico (NORMAL): sin distribución no hay rango, converge a un punto.
+  var p = M.percentilesVentana([37]);
+  assert.strictEqual(p.p20, 37);
+  assert.strictEqual(p.p50, 37);
+  assert.strictEqual(p.p80, 37);
+});
+
+test("totalesPorAnio suma la lluvia de la ventana equivalente en cada año que la serie larga cubre entero", function(){
+  // Tres años seguidos (2021 a 2023, ninguno bisiesto) con la ventana del
+  // 10 al 14 de enero cargada a un valor constante y distinto por año.
+  var lluvia = [];
+  for(var i = 0; i < 1095; i++) lluvia.push(0);
+  for(i = 9;   i <= 13;  i++) lluvia[i]   = 10;  // 2021-01-10..14 → 50
+  for(i = 374; i <= 378; i++) lluvia[i]   = 14;  // 2022-01-10..14 → 70
+  for(i = 739; i <= 743; i++) lluvia[i]   = 18;  // 2023-01-10..14 → 90
+  var historiaLarga = { desde:"2021-01-01", lluvia:lluvia };
+  var ventana = { desde:"2024-01-10", hasta:"2024-01-14" };
+  // JSON.stringify en vez de deepStrictEqual: el array sale de otro contexto
+  // de vm y no es reference-equal, aunque tenga el mismo contenido.
+  assert.strictEqual(JSON.stringify(M.totalesPorAnio(historiaLarga, ventana)), JSON.stringify([90, 70, 50]));
+});
+
+test("totalesPorAnio descarta el año que la serie larga no cubre entero", function(){
+  // El archivo sólo arranca a mitad de 2022: el año 2023 (equivalente n=1)
+  // cierra entero, pero 2022 (n=2, enero) queda antes del arranque y se corta ahí.
+  var lluvia = [];
+  for(var i = 0; i < 700; i++) lluvia.push(0);
+  for(i = 223; i <= 227; i++) lluvia[i] = 33 / 5;  // 2023-01-10..14 suma 33
+  var historiaLarga = { desde:"2022-06-01", lluvia:lluvia };
+  var ventana = { desde:"2024-01-10", hasta:"2024-01-14" };
+  var r = M.totalesPorAnio(historiaLarga, ventana);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0], 33);
+});
+
+test("sin ventana crítica, escenariosVentana no inventa nada y devuelve null", function(){
+  // Campaña sin fecha: ventanaCritica ya devuelve null antes; acá se propaga.
+  var r = M.escenariosVentana({ ventana:null, serie:{desde:"2026-01-01",lluvia:[],eto:[]},
+    cau:50, au0:50, kc:1, rBase:4000, ky:1 });
+  assert.strictEqual(r, null);
+});
+
+test("con el tramo futuro de la ventana sin datos, el rango sale de los tres percentiles de lluvia", function(){
+  // Tres días reales secando el perfil (cau=au0=50, ETo 20/día sin lluvia)
+  // dejan el agua útil en cero justo al entrar a la ventana. Los dos días de
+  // la ventana (4 y 5 de enero) todavía no ocurrieron, así que se rellenan
+  // con la lluvia de los percentiles 20/50/80 de once años de historia: la
+  // ventana equivalente (4 y 5 de enero de cada año, 2015 a 2025) está
+  // cargada con una suma creciente para que los percentiles den exactamente
+  // 0, 20 y 60 mm sin interpolar.
+  var lluvia = [];
+  for(var i = 0; i <= 3657; i++) lluvia.push(0);
+  var porAnio = [ [3656,100], [3290,80], [2925,60], [2560,40], [2195,30],
+                   [1829,20], [1464,10], [1099,5], [734,0], [368,0], [3,0] ];
+  porAnio.forEach(function(par){ lluvia[par[0]] = par[1]; });
+
+  var o = {
+    serie: { desde:"2026-01-01", lluvia:[0,0,0], eto:[20,20,20] },
+    ventana: { desde:"2026-01-04", hasta:"2026-01-05" },
+    desdeCampaniaISO: null,
+    cau:50, au0:50, kc:1,
+    historiaLarga: { desde:"2015-01-01", lluvia:lluvia },
+    rBase:4000, ky:1
+  };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.pesimista, 0);
+  assert.strictEqual(e.esperado, 2000);
+  assert.strictEqual(e.optimista, 4000);
+});
+
+test("con la ventana crítica ya cubierta por datos reales, escenariosVentana converge", function(){
+  // La serie ya trae los dos días de la ventana: no hay nada que rellenar,
+  // así que los tres percentiles usan exactamente el mismo balance.
+  var o = {
+    serie: { desde:"2026-02-01", lluvia:[0,0], eto:[20,20] },
+    ventana: { desde:"2026-02-01", hasta:"2026-02-02" },
+    desdeCampaniaISO: null,
+    cau:50, au0:50, kc:1,
+    historiaLarga: null,
+    rBase:4000, ky:1
+  };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.pesimista, e.esperado);
+  assert.strictEqual(e.esperado, e.optimista);
+  assert.strictEqual(e.optimista, 4000);
+});

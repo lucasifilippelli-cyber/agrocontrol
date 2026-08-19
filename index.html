@@ -784,6 +784,113 @@ function indiceAgua(balance, desdeSerieISO, ventana){
 function rindeEsperado(rBase, ia, ky){
   return Math.max(0, Math.round(rBase * (1 - ky * (1 - ia))));
 }
+
+function percentil(ordenado, p){
+  var i = (ordenado.length - 1) * p;
+  var lo = Math.floor(i), hi = Math.ceil(i);
+  if(lo === hi) return ordenado[lo];
+  return Math.round(ordenado[lo] + (ordenado[hi] - ordenado[lo]) * (i - lo));
+}
+
+/* historico: un total de mm por año, para la misma ventana del calendario.
+   Con un solo año cargado los tres percentiles coinciden: es lo que pasa
+   cuando no hay 20 años reales y se cae a un único valor típico (NORMAL). */
+function percentilesVentana(historico){
+  var o = historico.slice().sort(function(a, b){ return a - b; });
+  return { p20: percentil(o, 0.20), p50: percentil(o, 0.50), p80: percentil(o, 0.80) };
+}
+
+function escenarios(o){
+  var r = [ rindeEsperado(o.rBase, o.iaPeor,  o.ky),
+            rindeEsperado(o.rBase, o.iaMedio, o.ky),
+            rindeEsperado(o.rBase, o.iaMejor, o.ky) ]
+          .sort(function(a, b){ return a - b; });
+  return { pesimista:r[0], esperado:r[1], optimista:r[2] };
+}
+
+/* Lluvia acumulada en la misma ventana del calendario (mismo mes y día,
+   corridos n años), para cada año hacia atrás que la serie larga cubre
+   entero. Un año que el archivo de Open-Meteo no cubre completo (el borde
+   más viejo de los 20 años) se descarta en vez de sumar un pedazo — el
+   mismo criterio que indiceAgua aplica para la ventana de la campaña actual. */
+function totalesPorAnio(historiaLarga, ventana){
+  if(!historiaLarga || !historiaLarga.lluvia || !historiaLarga.lluvia.length) return [];
+  var totales = [];
+  for(var n = 1; ; n++){
+    var d0 = new Date(ventana.desde + "T12:00:00Z");
+    var d1 = new Date(ventana.hasta + "T12:00:00Z");
+    var desdeAnio = new Date(Date.UTC(d0.getUTCFullYear() - n, d0.getUTCMonth(), d0.getUTCDate())).toISOString().slice(0, 10);
+    var hastaAnio = new Date(Date.UTC(d1.getUTCFullYear() - n, d1.getUTCMonth(), d1.getUTCDate())).toISOString().slice(0, 10);
+    var i0 = diasEntre(historiaLarga.desde, desdeAnio);
+    var i1 = diasEntre(historiaLarga.desde, hastaAnio);
+    if(i0 < 0) break;                                  /* se acabó el archivo */
+    if(i1 >= historiaLarga.lluvia.length) continue;     /* este año puntual no cerró */
+    totales.push(mmEntre({ desde: historiaLarga.desde, lluvia: historiaLarga.lluvia }, desdeAnio, hastaAnio));
+  }
+  return totales;
+}
+
+/* Lluvia típica (NORMAL, mensual) prorrateada día a día sobre la ventana,
+   cuando no hay 20 años reales para sacar percentiles: el respaldo de
+   respaldo. Sin fecha de inicio de campaña no hay forma de ubicar la ventana
+   en el calendario de NORMAL, así que da 0 en vez de inventar un mes. */
+function totalNormalVentana(ventana, desdeCampaniaISO){
+  if(!desdeCampaniaISO) return 0;
+  var total = 0;
+  var d = new Date(ventana.desde + "T12:00:00Z");
+  var fin = new Date(ventana.hasta + "T12:00:00Z");
+  var base = new Date(desdeCampaniaISO + "T12:00:00Z");
+  while(d <= fin){
+    var idx = (d.getUTCFullYear() - base.getUTCFullYear()) * 12 + (d.getUTCMonth() - base.getUTCMonth());
+    var dias = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    if(idx >= 0 && idx < 12) total += (NORMAL[idx] || 0) / dias;
+    d = new Date(d.getTime() + 864e5);
+  }
+  return Math.round(total * 10) / 10;
+}
+
+function promedioSerie(xs){
+  if(!xs || !xs.length) return 0;
+  var t = 0;
+  for(var i = 0; i < xs.length; i++) t += (xs[i] || 0);
+  return t / xs.length;
+}
+
+/* El corazón de la Task 5: indiceAgua sólo sabe responder sobre una ventana
+   completa, así que acá se la completamos. El tramo de la ventana crítica que
+   todavía no ocurrió se rellena con la lluvia típica de esa franja del
+   calendario, repartida pareja entre los días que faltan — una vez por cada
+   percentil (pesimista p20, esperado p50, optimista p80) — y de cada balance
+   sale un índice de agua distinto. Así un lote recién sembrado no da "no sé":
+   da un rango, que se va cerrando solo a medida que la ventana pasa de
+   pronóstico a historia y hay menos tramo por estimar.
+   o: { serie:{desde,lluvia,eto}, ventana, desdeCampaniaISO, cau, au0, kc,
+        historiaLarga:{desde,lluvia}, rBase, ky }
+   Si igual queda algún escenario sin índice de agua (por ejemplo porque la
+   campaña no tiene fecha y ventana es null) se propaga null: mejor "todavía
+   no" que un rinde inventado. */
+function escenariosVentana(o){
+  if(!o.ventana) return null;
+  var historico = totalesPorAnio(o.historiaLarga, o.ventana);
+  if(!historico.length) historico = [ totalNormalVentana(o.ventana, o.desdeCampaniaISO) ];
+  var p = percentilesVentana(historico);
+  var diasVentana = diasEntre(o.ventana.desde, o.ventana.hasta) + 1;
+  var faltan = diasEntre(o.serie.desde, o.ventana.hasta) + 1 - o.serie.lluvia.length;
+  var etoProm = promedioSerie(o.serie.eto);
+  var pcts = [p.p20, p.p50, p.p80], ias = [];
+  for(var k = 0; k < pcts.length; k++){
+    var lluvia = o.serie.lluvia.slice(), eto = o.serie.eto.slice();
+    if(faltan > 0){
+      var mmDia = pcts[k] / diasVentana;
+      for(var i = 0; i < faltan; i++){ lluvia.push(mmDia); eto.push(etoProm); }
+    }
+    var bal = balanceHidrico({ lluvia: lluvia, eto: eto, cau: o.cau, au0: o.au0, kc: o.kc });
+    var r = indiceAgua(bal, o.serie.desde, o.ventana);
+    if(!r) return null;
+    ias.push(r.ia);
+  }
+  return escenarios({ rBase: o.rBase, ky: o.ky, iaPeor: ias[0], iaMedio: ias[1], iaMejor: ias[2] });
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -807,7 +914,8 @@ var SB_KEY = "sb_publishable_TDaLmB7FDpLsfSNDrb98-Q_UfEMOY58";
 
 var CLAVE_CACHE = "agrocontrol.cache.v1",
     CLAVE_SESION = "agrocontrol.sesion.v1",
-    CLAVE_CLIMA = "agrocontrol.clima.v1";
+    CLAVE_CLIMA = "agrocontrol.clima.v1",
+    CLAVE_HISTORIA = "agrocontrol.historia.v1";
 
 var E = null, campActiva = null, vistaActual = "inicio", loteAbierto = null;
 var estabClima = null, diaSel = 0;
@@ -1340,6 +1448,54 @@ function traerLluviaCampania(forzar){
   return Promise.all([principal].concat(resto)).then(function(){
     return guardar();
   });
+}
+
+/* Últimos 20 años de lluvia diaria por establecimiento: es lo que alimenta
+   escenariosVentana para armar los tres percentiles (Task 5). A diferencia
+   del pronóstico y la serie de la campaña, esto no envejece — la lluvia de
+   hace diez años no cambia — así que el caché no vence y sólo se vuelve a
+   pedir si se fuerza. Si la consulta falla (mala señal, rate-limit, campo sin
+   cobertura) se degrada a la lluvia mensual típica (NORMAL) y se marca
+   `normal:true` para que la vista avise que el rango es más ancho de lo que
+   podría ser: nunca puede voltear la pantalla. */
+var HISTORIA = {};
+
+function historiaEnCache(esId){
+  try{
+    var todas = JSON.parse(localStorage.getItem(CLAVE_HISTORIA) || "{}");
+    if(todas[esId]){ HISTORIA[esId] = todas[esId]; return true; }
+  }catch(e){}
+  return false;
+}
+function guardarHistoria(esId, h){
+  HISTORIA[esId] = h;
+  try{
+    var todas = JSON.parse(localStorage.getItem(CLAVE_HISTORIA) || "{}");
+    todas[esId] = h;
+    localStorage.setItem(CLAVE_HISTORIA, JSON.stringify(todas));
+  }catch(e){}
+}
+
+function traerHistoriaLarga(es, forzar){
+  if(!forzar && historiaEnCache(es.id)) return Promise.resolve(HISTORIA[es.id]);
+  var tope = new Date(Date.now() - 6*864e5);         // el archivo va unos días atrás
+  var hasta = tope.toISOString().slice(0, 10);
+  var desde20 = new Date(tope); desde20.setFullYear(desde20.getFullYear() - 20);
+  var desde = desde20.toISOString().slice(0, 10);
+  var u = "https://archive-api.open-meteo.com/v1/archive?latitude="+es.lat+"&longitude="+es.lon+
+        "&start_date="+desde+"&end_date="+hasta+
+        "&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires";
+  return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(function(j){
+      var h = { desde:desde, lluvia:j.daily.precipitation_sum.map(function(v){return v||0;}), normal:false };
+      guardarHistoria(es.id, h);
+      return h;
+    })
+    .catch(function(){
+      var h = { desde:null, lluvia:[], normal:true };
+      HISTORIA[es.id] = h;
+      return h;
+    });
 }
 
 /* --- iconos según código WMO --- */
