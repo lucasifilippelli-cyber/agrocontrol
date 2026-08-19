@@ -87,3 +87,9 @@ test("la demanda es ETo por Kc", function(){
   assert.strictEqual(b.etr[0], 12);
   assert.strictEqual(b.au[0], 88);
 });
+
+test("la lluvia del día alcanza para la evapotranspiración de ese mismo día", function(){
+  var b = M.balanceHidrico({ lluvia:[10], eto:[10], cau:150, au0:0, kc:1 });
+  assert.strictEqual(b.etr[0], 10);
+  assert.strictEqual(b.au[0], 0);
+});
