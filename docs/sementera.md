@@ -134,8 +134,9 @@ Ondulada, en el metro: **loma 140 mm, media loma 160 mm, bajo 180 mm**. Agua
 **El modelo ignora el aporte de napa.** En la Pampa Ondulada, en años húmedos y
 en los bajos, la napa sostiene el cultivo y el balance hídrico de superficie se
 queda corto: el modelo va a subestimar el rinde justo donde más aporta. Se deja
-un ajuste por lote —"aporte de napa", en mm— que Lucas carga si lo considera, y
-la hoja imprimible aclara si se usó.
+un ajuste **por ambiente** —"aporte de napa", en mm— que Lucas carga si lo
+considera, porque dentro de un mismo lote el bajo tiene napa y la loma no. La
+hoja imprimible aclara si se usó.
 
 Tampoco modela: nitrógeno, enfermedades, plagas, malezas, granizo, ni fecha de
 siembra fuera de la ventana óptima.
