@@ -251,7 +251,9 @@ mensualizada. El modelo la necesita diaria y por campo.
   - Tabla `clima_series(id, user_id, establecimiento_id, campania_id, desde,
     hasta, lluvia jsonb, eto jsonb)`
   - `E.climaSeries` — colección en memoria
-  - `serieDe(establecimientoId, campaniaId)` → `{desde, hasta, lluvia:[], eto:[]}` o `null`
+  - `serieDe(series, establecimientoId, campaniaId)` → `{desde, hasta, lluvia:[], eto:[]}`
+    o `null`. Recibe la colección por argumento para ser pura y testeable fuera
+    del navegador; quien la use desde la app pasa `E.climaSeries`.
   - `mmEntre(serie, desdeISO, hastaISO)` → `number`
 
 - [ ] **Step 1: Escribir la migración**
