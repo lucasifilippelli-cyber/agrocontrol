@@ -288,19 +288,147 @@ test("con el tramo futuro de la ventana sin datos, el rango sale de los tres per
   assert.strictEqual(e.optimista, 4000);
 });
 
-test("con la ventana crítica ya cubierta por datos reales, escenariosVentana converge", function(){
-  // La serie ya trae los dos días de la ventana: no hay nada que rellenar,
-  // así que los tres percentiles usan exactamente el mismo balance.
+test("con la ventana crítica ya cubierta por datos reales, escenariosVentana converge (I3: con historia que sí abre percentiles)", function(){
+  // Fix round 1, I3: el test original pasaba historiaLarga:null, así que los
+  // tres percentiles ya salían en 0 antes de llegar al balance — convergía
+  // aunque el relleno estuviera roto (mutante verificado por la revisión:
+  // mover `faltan` a +2 y seguía en verde). Se reusa la historia con
+  // percentiles bien separados (p20/p50/p80 = 0/20/60, el mismo dataset del
+  // test de "rango ancho") pero con la ventana ya cubierta entera por datos
+  // reales: no hay nada que rellenar, así que da lo mismo qué percentiles
+  // haya disponibles.
+  var lluvia = [];
+  for(var i = 0; i <= 3657; i++) lluvia.push(0);
+  var porAnio = [ [3656,100], [3290,80], [2925,60], [2560,40], [2195,30],
+                   [1829,20], [1464,10], [1099,5], [734,0], [368,0], [3,0] ];
+  porAnio.forEach(function(par){ lluvia[par[0]] = par[1]; });
+
   var o = {
-    serie: { desde:"2026-02-01", lluvia:[0,0], eto:[20,20] },
-    ventana: { desde:"2026-02-01", hasta:"2026-02-02" },
+    serie: { desde:"2026-01-01", lluvia:[0,0,0,0,0], eto:[15,15,15,15,15] },
+    ventana: { desde:"2026-01-04", hasta:"2026-01-05" },
     desdeCampaniaISO: null,
     cau:50, au0:50, kc:1,
-    historiaLarga: null,
+    historiaLarga: { desde:"2015-01-01", lluvia:lluvia },
     rBase:4000, ky:1
   };
   var e = M.escenariosVentana(o);
   assert.strictEqual(e.pesimista, e.esperado);
   assert.strictEqual(e.esperado, e.optimista);
-  assert.strictEqual(e.optimista, 4000);
+  assert.strictEqual(e.optimista, 667);   // ia = 5/30, con estrés real de por medio
+});
+
+test("C1: el percentil sale del tramo pendiente, no de la ventana entera", function(){
+  // Caso de los hallazgos: ventana de 10 días partida en A (días 1-5, ya
+  // ocurridos y secos) y B (días 6-10, todavía pendientes). Cinco años de
+  // historia donde el total de la ventana siempre da 50 (p20 de la ventana
+  // entera = 50) pero el reparto entre A y B varía tanto que el p20 de B
+  // solo es 8 — la mediana no sirve de pesimista.
+  var lluvia = [];
+  for(var i = 0; i <= 1470; i++) lluvia.push(0);
+  // [offset del 1° de enero de ese año, A; offset del 6 de enero, B]
+  var datos = [
+    [1461, 0,  1466, 50],  // 2025: A=0,  B=50
+    [1095, 50, 1100, 0],   // 2024: A=50, B=0
+    [730,  10, 735,  40],  // 2023: A=10, B=40
+    [365,  40, 370,  10],  // 2022: A=40, B=10
+    [0,    25, 5,    25]   // 2021: A=25, B=25
+  ];
+  datos.forEach(function(d){ lluvia[d[0]] = d[1]; lluvia[d[2]] = d[3]; });
+
+  var o = {
+    serie: { desde:"2026-01-01", lluvia:[0,0,0,0,0], eto:[20,20,20,20,20] },
+    ventana: { desde:"2026-01-01", hasta:"2026-01-10" },
+    desdeCampaniaISO: null,
+    cau:100, au0:100, kc:1,
+    historiaLarga: { desde:"2021-01-01", lluvia:lluvia },
+    rBase:4000, ky:1
+  };
+  var e = M.escenariosVentana(o);
+  // p20(B) = 8 → 1.6 mm/día en los 5 días pendientes → ia = 108/200 = 0.54
+  assert.strictEqual(e.pesimista, 2160);
+  // con el bug (p20 de la ventana entera / 10 días = 5 mm/día) hubiera dado 2500
+  assert.notStrictEqual(e.pesimista, 2500);
+});
+
+test("C2: el ETo del relleno sale de la climatología del día, no del promedio de toda la serie", function(){
+  // La serie real trae cinco días de ETo bajo (5 mm/día, como si arrancara en
+  // invierno) pero la climatología del día que falta rellenar es alta
+  // (30 mm/día, como corresponde a la ventana crítica). Sin lluvia en la
+  // historia (percentiles en 0, no hay relleno de agua) toda la diferencia de
+  // rinde sale exclusivamente del ETo usado.
+  var lluvia = [], eto = [];
+  for(var i = 0; i <= 1470; i++){ lluvia.push(0); eto.push(0); }
+  [5, 370, 735, 1100, 1466].forEach(function(idx){ eto[idx] = 30; });
+
+  var o = {
+    serie: { desde:"2026-01-01", lluvia:[0,0,0,0,0], eto:[5,5,5,5,5] },
+    ventana: { desde:"2026-01-06", hasta:"2026-01-06" },
+    desdeCampaniaISO: null,
+    cau:100, au0:35, kc:1,   // au0 alcanza para los 5 días reales (etc=5) sin estrés
+    historiaLarga: { desde:"2021-01-01", lluvia:lluvia, eto:eto },
+    rBase:4000, ky:1
+  };
+  var e = M.escenariosVentana(o);
+  // con ETo climatológico (30): etr = min(30,10) = 10 → ia = 10/30 = 0,333…
+  assert.strictEqual(e.pesimista, 1333);
+  assert.strictEqual(e.pesimista, e.optimista);   // no llovió en ningún percentil: sólo cambia el ETo
+});
+
+test("C3: sin ETc en la ventana no hay base para un rinde, y no se devuelve el ancla completa", function(){
+  // Reproduce el camino exacto de los hallazgos: una fila de climaSeries sin
+  // ETo (serieDe la trae con eto:[] cuando la campaña se trajo con una
+  // versión anterior). Antes, indiceAgua daba ia=1 "sin demanda" y los tres
+  // escenarios devolvían R_base completo como si fuera un cálculo.
+  var o = {
+    serie: { desde:"2026-03-01", lluvia:[0,0], eto:[] },
+    ventana: { desde:"2026-03-01", hasta:"2026-03-02" },
+    desdeCampaniaISO: null,
+    cau:50, au0:50, kc:1,
+    historiaLarga: null,
+    rBase:4000, ky:1
+  };
+  assert.strictEqual(M.escenariosVentana(o), null);
+});
+
+test("C4: sin 20 años reales, percentilesDeVentana abre un rango alrededor de NORMAL en vez de un punto", function(){
+  var ventana = { desde:"2025-07-10", hasta:"2025-07-15" };  // 6 días, todos julio
+  var p = M.percentilesDeVentana(null, ventana, "2025-07-01");
+  assert.strictEqual(p.p20, 4);
+  assert.strictEqual(p.p50, 5.4);
+  assert.strictEqual(p.p80, 7);
+  assert.ok(p.p20 < p.p50 && p.p50 < p.p80, "antes colapsaban los tres al mismo punto");
+});
+
+test("I1: si el hueco está adelante (la serie arranca después que la ventana), no se rellena y se propaga null", function(){
+  // El relleno de escenariosVentana sólo tapa el final de la ventana. Si la
+  // serie empieza después del comienzo de la ventana, indiceAgua cubre menos
+  // días de los que tiene la ventana aunque el balance tenga longitud de
+  // sobra — r.dias !== r.diasVentana tiene que frenarlo.
+  var o = {
+    serie: { desde:"2026-01-05", lluvia:[], eto:[] },
+    ventana: { desde:"2026-01-01", hasta:"2026-01-10" },
+    desdeCampaniaISO: null,
+    cau:50, au0:50, kc:1,
+    historiaLarga: null,
+    rBase:4000, ky:1
+  };
+  assert.strictEqual(M.escenariosVentana(o), null);
+});
+
+test("I2: sin serie (serieDe devuelve null) escenariosVentana no revienta, devuelve null", function(){
+  var o = { serie:null, ventana:{ desde:"2026-01-01", hasta:"2026-01-02" },
+    desdeCampaniaISO:null, cau:50, au0:50, kc:1, historiaLarga:null, rBase:4000, ky:1 };
+  assert.strictEqual(M.escenariosVentana(o), null);
+});
+
+test("I4: totalNormalVentana con la ventana dentro de un solo mes", function(){
+  // Julio de campaña = NORMAL[0] = 28 mm sobre 31 días. Seis días de ventana.
+  var t = M.totalNormalVentana({ desde:"2025-07-10", hasta:"2025-07-15" }, "2025-07-01");
+  assert.strictEqual(t, 5.4);   // 6 × 28/31, redondeado a un decimal
+});
+
+test("I4: totalNormalVentana con la ventana a caballo de dos meses", function(){
+  // Tres días de julio (NORMAL[0]=28/31) más dos de agosto (NORMAL[1]=35/31).
+  var t = M.totalNormalVentana({ desde:"2025-07-29", hasta:"2025-08-02" }, "2025-07-01");
+  assert.strictEqual(t, 5);   // 3×28/31 + 2×35/31 = 4,9677… → 5,0
 });

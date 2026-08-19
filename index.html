@@ -830,7 +830,7 @@ function totalesPorAnio(historiaLarga, ventana){
   return totales;
 }
 
-/* Lluvia típica (NORMAL, mensual) prorrateada día a día sobre la ventana,
+/* Lluvia típica (NORMAL, mensual) prorrateada día a día sobre una ventana,
    cuando no hay 20 años reales para sacar percentiles: el respaldo de
    respaldo. Sin fecha de inicio de campaña no hay forma de ubicar la ventana
    en el calendario de NORMAL, así que da 0 en vez de inventar un mes. */
@@ -856,37 +856,119 @@ function promedioSerie(xs){
   return t / xs.length;
 }
 
+/* Suma (o resta, con n negativo) n días a una fecha ISO. */
+function masDias(fechaISO, n){
+  return new Date(Date.parse(fechaISO + "T12:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+}
+
+/* Fix round 1, C4: sin 20 años reales no hay con qué armar un rango, pero
+   colapsar los tres escenarios a un solo punto (la lluvia típica) le da al
+   pesimista el mismo número que al optimista — CERO margen justo en la
+   condición de campo para la que se diseñó la degradación. Se abre un rango
+   explícito alrededor de NORMAL con el coeficiente de variación típico de la
+   lluvia mensual en la Pampa Húmeda (¡Lucas todavía no lo validó, como los
+   demás umbrales de este archivo!), en vez de fingir certeza que no hay. */
+var CV_LLUVIA_NORMAL = 0.35;
+
+/* Percentiles de lluvia para una ventana (o el tramo de ella que corresponda):
+   de los 20 años reales si la historia larga los cubre, o de NORMAL abierto
+   por CV_LLUVIA_NORMAL si no. */
+function percentilesDeVentana(historiaLarga, ventana, desdeCampaniaISO){
+  var historico = totalesPorAnio(historiaLarga, ventana);
+  if(historico.length) return percentilesVentana(historico);
+  var normal = totalNormalVentana(ventana, desdeCampaniaISO);
+  return {
+    p20: Math.round(normal * (1 - 0.84 * CV_LLUVIA_NORMAL)),
+    p50: normal,
+    p80: Math.round(normal * (1 + 0.84 * CV_LLUVIA_NORMAL))
+  };
+}
+
+/* ETo climatológica de un día del calendario (mismo mes y día), promediando
+   los años que la historia larga cubre. Fix round 1, C2: reemplaza promediar
+   el ETo de la serie entera de la campaña (que arranca en julio) para
+   rellenar días de verano — esa cuenta sesgaba el ETo casi 2 mm/día para
+   abajo en la ventana crítica de maíz. Sin ETo en la historia larga (no se
+   pidió, o se degradó a NORMAL) da 0: quien llama tiene que decidir el
+   respaldo. */
+function etoClimatologico(historiaLarga, fechaISO){
+  if(!historiaLarga || !historiaLarga.eto || !historiaLarga.eto.length) return 0;
+  var d = new Date(fechaISO + "T12:00:00Z");
+  var total = 0, n = 0;
+  for(var atras = 0; atras <= 40; atras++){
+    var fechaAnio = new Date(Date.UTC(d.getUTCFullYear() - atras, d.getUTCMonth(), d.getUTCDate())).toISOString().slice(0, 10);
+    var idx = diasEntre(historiaLarga.desde, fechaAnio);
+    if(idx < 0) break;                                    /* se acabó el archivo */
+    if(idx < historiaLarga.eto.length){ total += (historiaLarga.eto[idx] || 0); n++; }
+  }
+  return n ? total / n : 0;
+}
+
 /* El corazón de la Task 5: indiceAgua sólo sabe responder sobre una ventana
    completa, así que acá se la completamos. El tramo de la ventana crítica que
-   todavía no ocurrió se rellena con la lluvia típica de esa franja del
-   calendario, repartida pareja entre los días que faltan — una vez por cada
-   percentil (pesimista p20, esperado p50, optimista p80) — y de cada balance
+   todavía no ocurrió se rellena día por día — una vez por cada percentil de
+   lluvia (pesimista p20, esperado p50, optimista p80) — y de cada balance
    sale un índice de agua distinto. Así un lote recién sembrado no da "no sé":
    da un rango, que se va cerrando solo a medida que la ventana pasa de
    pronóstico a historia y hay menos tramo por estimar.
+
+   Fix round 1 (cuatro Critical, todos empujaban el pesimista para arriba):
+   - C1: el percentil se saca del TRAMO PENDIENTE, no de la ventana entera.
+     El p20 de una suma de días independientes lo alcanzan combinaciones que
+     se compensan; el tramo que falta solo, no — prorratear el p20 de la
+     ventana entera sienta al "pesimista" cerca de la mediana del tramo.
+   - C2: el ETo del relleno sale de etoClimatologico (por día del calendario),
+     no de promediar la serie entera de la campaña (que arranca en julio).
+   - C3: si la ETc acumulada de la ventana da cero (típicamente por falta de
+     datos de ETo, no por falta de estrés real), no hay base para un límite
+     de venta: se propaga null.
+   - C4: ver percentilesDeVentana / CV_LLUVIA_NORMAL.
+   I1: después del relleno se exige que indiceAgua haya cubierto la ventana
+   entera (r.dias === r.diasVentana) — si el hueco está adelante en vez de al
+   final (la serie arrancó después que la ventana), el relleno de acá no lo
+   tapa y no hay que fingir que sí.
+   I2: o.serie puede ser null (serieDe así lo devuelve): guardeado.
+
    o: { serie:{desde,lluvia,eto}, ventana, desdeCampaniaISO, cau, au0, kc,
-        historiaLarga:{desde,lluvia}, rBase, ky }
-   Si igual queda algún escenario sin índice de agua (por ejemplo porque la
-   campaña no tiene fecha y ventana es null) se propaga null: mejor "todavía
-   no" que un rinde inventado. */
+        historiaLarga:{desde,lluvia,eto}, rBase, ky }
+   Si igual queda algún escenario sin índice de agua se propaga null: mejor
+   "todavía no" que un rinde inventado. */
 function escenariosVentana(o){
-  if(!o.ventana) return null;
-  var historico = totalesPorAnio(o.historiaLarga, o.ventana);
-  if(!historico.length) historico = [ totalNormalVentana(o.ventana, o.desdeCampaniaISO) ];
-  var p = percentilesVentana(historico);
-  var diasVentana = diasEntre(o.ventana.desde, o.ventana.hasta) + 1;
+  if(!o.ventana || !o.serie || !o.serie.lluvia) return null;
   var faltan = diasEntre(o.serie.desde, o.ventana.hasta) + 1 - o.serie.lluvia.length;
-  var etoProm = promedioSerie(o.serie.eto);
-  var pcts = [p.p20, p.p50, p.p80], ias = [];
+  if(faltan < 0) faltan = 0;
+
+  var pcts = [0, 0, 0], etoDias = [];
+  if(faltan > 0){
+    var primerFaltante = masDias(o.ventana.hasta, -(faltan - 1));
+    var subventana = { desde: primerFaltante, hasta: o.ventana.hasta };
+    var p = percentilesDeVentana(o.historiaLarga, subventana, o.desdeCampaniaISO);
+    pcts = [p.p20, p.p50, p.p80];
+    var etoRespaldo = promedioSerie(o.serie.eto.slice(-15));  /* últimos días reales, no la campaña entera */
+    for(var i = 0; i < faltan; i++){
+      var fechaDia = masDias(primerFaltante, i);
+      var etoDia = etoClimatologico(o.historiaLarga, fechaDia);
+      etoDias.push(etoDia || etoRespaldo);
+    }
+  }
+
+  var ias = [];
   for(var k = 0; k < pcts.length; k++){
     var lluvia = o.serie.lluvia.slice(), eto = o.serie.eto.slice();
     if(faltan > 0){
-      var mmDia = pcts[k] / diasVentana;
-      for(var i = 0; i < faltan; i++){ lluvia.push(mmDia); eto.push(etoProm); }
+      var mmDia = pcts[k] / faltan;                       /* reparto sobre el tramo pendiente, no la ventana */
+      for(var j = 0; j < faltan; j++){ lluvia.push(mmDia); eto.push(etoDias[j]); }
     }
     var bal = balanceHidrico({ lluvia: lluvia, eto: eto, cau: o.cau, au0: o.au0, kc: o.kc });
     var r = indiceAgua(bal, o.serie.desde, o.ventana);
-    if(!r) return null;
+    if(!r || r.dias !== r.diasVentana) return null;
+
+    var i0 = Math.max(0, diasEntre(o.serie.desde, o.ventana.desde));
+    var i1 = Math.min(bal.etc.length - 1, diasEntre(o.serie.desde, o.ventana.hasta));
+    var etcVentana = 0;
+    for(var m = i0; m <= i1; m++) etcVentana += (bal.etc[m] || 0);
+    if(etcVentana <= 0) return null;
+
     ias.push(r.ia);
   }
   return escenarios({ rBase: o.rBase, ky: o.ky, iaPeor: ias[0], iaMedio: ias[1], iaMejor: ias[2] });
@@ -1450,14 +1532,18 @@ function traerLluviaCampania(forzar){
   });
 }
 
-/* Últimos 20 años de lluvia diaria por establecimiento: es lo que alimenta
-   escenariosVentana para armar los tres percentiles (Task 5). A diferencia
-   del pronóstico y la serie de la campaña, esto no envejece — la lluvia de
-   hace diez años no cambia — así que el caché no vence y sólo se vuelve a
-   pedir si se fuerza. Si la consulta falla (mala señal, rate-limit, campo sin
-   cobertura) se degrada a la lluvia mensual típica (NORMAL) y se marca
-   `normal:true` para que la vista avise que el rango es más ancho de lo que
-   podría ser: nunca puede voltear la pantalla. */
+/* Últimos 20 años de lluvia y ETo diarios por establecimiento: es lo que
+   alimenta escenariosVentana para armar los tres percentiles y el ETo
+   climatológico del tramo pendiente (Task 5, fix round 1 C2). A diferencia
+   del pronóstico y la serie de la campaña, esto no envejece — la lluvia y el
+   ETo de hace diez años no cambian — así que el caché no vence y sólo se
+   vuelve a pedir si se fuerza. Si la consulta falla (mala señal, rate-limit,
+   campo sin cobertura) se degrada a la lluvia mensual típica (NORMAL) y se
+   marca `normal:true`: el rango de percentilesDeVentana se abre por
+   CV_LLUVIA_NORMAL en vez de colapsar a un punto (fix C4), pero sigue siendo
+   más angosto que con 20 años reales — nunca puede voltear la pantalla, así
+   que sin señal no hay número que perder, pero conviene que la vista lo
+   avise igual el día que exista esa pantalla. */
 var HISTORIA = {};
 
 function historiaEnCache(esId){
@@ -1484,10 +1570,13 @@ function traerHistoriaLarga(es, forzar){
   var desde = desde20.toISOString().slice(0, 10);
   var u = "https://archive-api.open-meteo.com/v1/archive?latitude="+es.lat+"&longitude="+es.lon+
         "&start_date="+desde+"&end_date="+hasta+
-        "&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires";
+        "&daily=precipitation_sum,et0_fao_evapotranspiration&timezone=America%2FArgentina%2FBuenos_Aires";
   return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
     .then(function(j){
-      var h = { desde:desde, lluvia:j.daily.precipitation_sum.map(function(v){return v||0;}), normal:false };
+      var h = { desde:desde,
+                lluvia:j.daily.precipitation_sum.map(function(v){return v||0;}),
+                eto:j.daily.et0_fao_evapotranspiration.map(function(v){return v||0;}),
+                normal:false };
       guardarHistoria(es.id, h);
       return h;
     })
