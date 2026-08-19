@@ -479,3 +479,38 @@ test("sin override manda el oficial y queda marcado como tal", function(){
   assert.strictEqual(ancla.kgHa, 7800);
   assert.strictEqual(ancla.propio, false);
 });
+
+test("un override en 0 también pisa al oficial: 0 no es lo mismo que sin cargar", function(){
+  // Guarda contra simplificar "o != null && o !== \"\"" a "if(o)", que trataría
+  // un rinde propio de 0 igual que no haber cargado nada.
+  var ancla = M.rindeAncla("maiz_d", { localidad:"Luján" }, { "maiz_d": 0 });
+  assert.strictEqual(ancla.kgHa, 0);
+  assert.strictEqual(ancla.propio, true);
+});
+
+test("armarAmbiente: agua útil vacía cae al valor inicial del ambiente", function(){
+  var a = M.armarAmbiente("Loma", "52.1", "", 140, "");
+  assert.strictEqual(a.cau, 140);
+});
+
+test("armarAmbiente: un 0 explícito de agua útil se respeta, no cae al inicial", function(){
+  var a = M.armarAmbiente("Loma", "52.1", "0", 140, "");
+  assert.strictEqual(a.cau, 0);
+});
+
+test("armarAmbiente: napa vacía graba null — todavía no se consideró", function(){
+  var a = M.armarAmbiente("Bajo", "28.1", "180", 180, "");
+  assert.strictEqual(a.napa, null);
+});
+
+test("armarAmbiente: napa en \"0\" graba 0 — se consideró y no aporta", function(){
+  var a = M.armarAmbiente("Loma", "52.1", "140", 140, "0");
+  assert.strictEqual(a.napa, 0);
+});
+
+test("armarAmbiente: un valor normal de napa pasa como número", function(){
+  var a = M.armarAmbiente("Bajo", "28.1", "180", 180, "35");
+  assert.strictEqual(a.napa, 35);
+  assert.strictEqual(a.ha, 28.1);
+  assert.strictEqual(a.nombre, "Bajo");
+});

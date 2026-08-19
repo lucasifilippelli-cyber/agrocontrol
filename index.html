@@ -709,6 +709,20 @@ function rindeAncla(cultivo, establecimiento, overrides){
   return { kgHa: v, propio: false };
 }
 
+/* Arma un ambiente a partir de lo crudo que sale del formulario. Pura, para
+   que el punto más delicado de la Task 6 —vacío contra cero— quede
+   protegido por tests y no sólo por una lectura cuidadosa del código.
+   cau: vacío cae al valor inicial que le corresponde a ese ambiente
+   (cauInicial, que decide quien llama); un número, incluido 0, se respeta.
+   napa: vacío es "no lo consideré" y graba null; un número, incluido 0, es
+   "lo consideré y no aporta" y se graba tal cual — misma distinción que
+   aGuion() aplica entre null y "" para las fechas. */
+function armarAmbiente(nombre, haCrudo, cauCrudo, cauInicial, napaCrudo){
+  return { nombre: nombre, ha: parseFloat(haCrudo) || 0,
+    cau: (cauCrudo === "" || cauCrudo == null) ? cauInicial : parseFloat(cauCrudo),
+    napa: (napaCrudo === "" || napaCrudo == null) ? null : parseFloat(napaCrudo) };
+}
+
 /* Serie diaria de lluvia y ETo por establecimiento y campaña. Pura: recibe la
    colección de climaSeries en vez de leer E, para poder testearla sola. */
 function serieDe(series, establecimientoId, campaniaId){
@@ -2148,13 +2162,13 @@ A.nuevoLote=function(id){
             {k:"nombre",label:"Nombre del lote",req:true,ph:"Lote 7 — Aguada"},
             {k:"ha",label:"Superficie (ha)",tipo:"number",paso:"0.1",min:"0.1",req:true,ph:"148.6"},
             {k:"a1",label:"Loma (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
-            {k:"cau1",label:"Loma — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:140,hint:"Capacidad del suelo en el metro."},
+            {k:"cau1",label:"Loma — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:CAU_INICIAL["Loma"],hint:"Capacidad del suelo en el metro."},
             {k:"napa1",label:"Loma — aporte de napa (mm)",tipo:"number",paso:"1",min:"0",hint:"Cuánto suma la napa en este ambiente. Dejalo vacío si no aporta."},
             {k:"a2",label:"Media loma (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
-            {k:"cau2",label:"Media loma — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:160,hint:"Capacidad del suelo en el metro."},
+            {k:"cau2",label:"Media loma — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:CAU_INICIAL["Media loma"],hint:"Capacidad del suelo en el metro."},
             {k:"napa2",label:"Media loma — aporte de napa (mm)",tipo:"number",paso:"1",min:"0",hint:"Cuánto suma la napa en este ambiente. Dejalo vacío si no aporta."},
             {k:"a3",label:"Bajo (ha)",tipo:"number",paso:"0.1",min:"0",hint:"Opcional"},
-            {k:"cau3",label:"Bajo — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:180,hint:"Capacidad del suelo en el metro."},
+            {k:"cau3",label:"Bajo — agua útil (mm)",tipo:"number",paso:"1",min:"0",valor:CAU_INICIAL["Bajo"],hint:"Capacidad del suelo en el metro."},
             {k:"napa3",label:"Bajo — aporte de napa (mm)",tipo:"number",paso:"1",min:"0",hint:"Cuánto suma la napa en este ambiente. Dejalo vacío si no aporta."}],
     validar:function(d){
       var ha=parseFloat(d.ha)||0, s=(parseFloat(d.a1)||0)+(parseFloat(d.a2)||0)+(parseFloat(d.a3)||0);
@@ -2163,10 +2177,8 @@ A.nuevoLote=function(id){
     guardar:function(d){
       var amb=[];
       [["Loma",d.a1,d.cau1,d.napa1],["Media loma",d.a2,d.cau2,d.napa2],["Bajo",d.a3,d.cau3,d.napa3]].forEach(function(p){
-        var v=parseFloat(p[1])||0;
-        if(v>0) amb.push({ nombre:p[0], ha:v,
-          cau: (p[2]==="" || p[2]==null) ? CAU_INICIAL[p[0]] : parseFloat(p[2]),
-          napa: (p[3]==="" || p[3]==null) ? null : parseFloat(p[3]) });
+        var a=armarAmbiente(p[0], p[1], p[2], CAU_INICIAL[p[0]], p[3]);
+        if(a.ha>0) amb.push(a);
       });
       if(L){ L.establecimientoId=d.establecimientoId; L.nombre=d.nombre; L.ha=parseFloat(d.ha); L.ambientes=amb;
              marcar("lotes",L); avisar("Lote actualizado."); }
