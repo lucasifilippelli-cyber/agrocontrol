@@ -551,3 +551,19 @@ test("con la misma fechaCarga, desempata por creadoEn de forma estable, sin impo
   assert.strictEqual(M.forwardDe([a, b], "maiz_t", "2026-06-01"), 210);
   assert.strictEqual(M.forwardDe([b, a], "maiz_t", "2026-06-01"), 210);
 });
+
+test("el margen se mide contra el escenario pesimista, no contra el esperado", function(){
+  var c = M.compromiso({ tnPesimista:100, tnVendidas:80 });
+  assert.strictEqual(c.margen, 20);
+  assert.strictEqual(c.excedido, false);
+});
+
+test("avisa cuando lo comprometido pasa el escenario pesimista", function(){
+  var c = M.compromiso({ tnPesimista:100, tnVendidas:120 });
+  assert.strictEqual(c.margen, -20);
+  assert.strictEqual(c.excedido, true);
+});
+
+test("vender exactamente el pesimista todavía no es exceso", function(){
+  assert.strictEqual(M.compromiso({ tnPesimista:100, tnVendidas:100 }).excedido, false);
+});

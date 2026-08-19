@@ -1032,6 +1032,18 @@ function forwardDe(lista, cultivo, mesEntregaISO){
   });
   return c.length ? Number(c[0].usdTn) : null;
 }
+
+/* El límite prudente para vender a futuro es el escenario pesimista, no el
+   esperado. Un forward que no se puede entregar obliga a comprar grano en el
+   mercado para cumplir, y eso pasa justo el año en que el grano está caro:
+   está caro precisamente porque a todos les fue mal, la misma razón por la
+   que este productor no llegó a cosechar lo comprometido. El error sale
+   doble. Por eso el margen se mide contra tnPesimista y no contra tnEsperada:
+   vender exactamente el pesimista todavía no es exceso, vender un kilo más sí. */
+function compromiso(o){
+  var margen = Math.round((o.tnPesimista - o.tnVendidas) * 10) / 10;
+  return { margen: margen, excedido: margen < 0 };
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
