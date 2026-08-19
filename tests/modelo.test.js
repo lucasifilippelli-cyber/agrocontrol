@@ -526,3 +526,28 @@ test("forwardDe toma el precio cargado más recientemente", function(){
 test("sin precio cargado devuelve null en vez de suponer", function(){
   assert.strictEqual(M.forwardDe([], "soja_1", "2026-05-01"), null);
 });
+
+test("un precio de otro cultivo en el mismo mes de entrega no cuenta", function(){
+  // Guarda contra mutar el && del filtro a ||: con OR, este registro de
+  // maiz_t calzaría igual porque el mes coincide, aunque el cultivo no.
+  var lista = [
+    { cultivo:"maiz_t", mesEntrega:"2026-05-01", usdTn:200, fechaCarga:"2026-08-01" }
+  ];
+  assert.strictEqual(M.forwardDe(lista, "soja_1", "2026-05-01"), null);
+});
+
+test("un precio del cultivo correcto pero de otro mes de entrega no cuenta", function(){
+  // El cultivo existe en la lista, pero para un mes distinto: tiene que
+  // devolver null en vez del precio de ese otro mes.
+  var lista = [
+    { cultivo:"soja_1", mesEntrega:"2026-04-01", usdTn:300, fechaCarga:"2026-08-01" }
+  ];
+  assert.strictEqual(M.forwardDe(lista, "soja_1", "2026-05-01"), null);
+});
+
+test("con la misma fechaCarga, desempata por creadoEn de forma estable, sin importar el orden", function(){
+  var a = { cultivo:"maiz_t", mesEntrega:"2026-06-01", usdTn:200, fechaCarga:"2026-08-01", creadoEn:"2026-08-01T10:00:00Z" };
+  var b = { cultivo:"maiz_t", mesEntrega:"2026-06-01", usdTn:210, fechaCarga:"2026-08-01", creadoEn:"2026-08-01T15:00:00Z" };
+  assert.strictEqual(M.forwardDe([a, b], "maiz_t", "2026-06-01"), 210);
+  assert.strictEqual(M.forwardDe([b, a], "maiz_t", "2026-06-01"), 210);
+});

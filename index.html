@@ -1009,11 +1009,27 @@ function escenariosVentana(o){
 }
 
 /* Único dato del módulo que no entra solo: no hay fuente pública sin
-   credenciales. Si algún día hay acceso a MATBA-ROFEX, se automatiza acá. */
+   credenciales. Si algún día hay acceso a MATBA-ROFEX, se automatiza acá.
+   Convención: mesEntregaISO va siempre normalizado al día 1 del mes (ver
+   A.nuevoPrecioForward, que hace mesEntrega.slice(0,7)+"-01" al guardar);
+   compará contra fechas ya normalizadas, ej. "2026-05-01". */
 function forwardDe(lista, cultivo, mesEntregaISO){
   var c = lista.filter(function(p){
     return p.cultivo === cultivo && p.mesEntrega === mesEntregaISO;
-  }).sort(function(a, b){ return a.fechaCarga < b.fechaCarga ? 1 : -1; });
+  }).sort(function(a, b){
+    /* El comparador tiene que declarar el empate (0): si nunca lo hace,
+       dos elementos con la misma fechaCarga violan la antisimetría que
+       exige sort() y el resultado queda a merced de cómo el motor haya
+       recorrido el arreglo, sin relación con el orden en que Postgres
+       devolvió las filas. Con la fecha empatada se desempata por un
+       criterio explícito y estable — creadoEn si ya vino de la base,
+       o id si todavía es sólo local — para que el resultado no cambie
+       de corrida en corrida. */
+    if(a.fechaCarga !== b.fechaCarga) return a.fechaCarga < b.fechaCarga ? 1 : -1;
+    var ca = a.creadoEn || a.id || "", cb = b.creadoEn || b.id || "";
+    if(ca === cb) return 0;
+    return ca < cb ? 1 : -1;
+  });
   return c.length ? Number(c[0].usdTn) : null;
 }
 /* === modelo:fin === */
@@ -1901,6 +1917,10 @@ function rindePorCultivo(cid){
    ============================================================ */
 function nf(n,d){ d=d||0; return (n==null?0:n).toLocaleString("es-AR",{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fecha(iso){ if(!iso) return "—"; var p=iso.split("-"); return p.length===3?p[2]+"/"+p[1]+"/"+p[0].slice(2):iso; }
+/* Para fechas que en realidad representan un mes (mesEntrega del precio
+   forward): mostrar "mayo 2026" en vez de "01/05/26" evita que un dato que
+   siempre cae en el día 1 se lea como si el día importara. */
+function mesAno(iso){ if(!iso) return "—"; var p=iso.split("-"); return p.length===3?MES_L[+p[1]-1]+" "+p[0]:iso; }
 function hoyISO(){ var d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10); }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
 var $=function(id){ return document.getElementById(id); };
@@ -2522,18 +2542,24 @@ A.nuevoPrecioForward=function(id){
     valores:P?{cultivo:P.cultivo,mesEntrega:P.mesEntrega,usdTn:P.usdTn,fechaCarga:P.fechaCarga}
              :{fechaCarga:hoyISO()},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivos()},
-            {k:"mesEntrega",label:"Mes de entrega",tipo:"date",req:true},
+            {k:"mesEntrega",label:"Mes de entrega",tipo:"date",req:true,
+             hint:"Se guarda el mes: el día que elijas acá no queda, se normaliza al día 1."},
             {k:"usdTn",label:"Dólares por tonelada",tipo:"number",paso:"0.01",min:"0.01",req:true},
             {k:"fechaCarga",label:"Fecha de carga",tipo:"date",req:true,hint:"Hoy, salvo que estés cargando un precio de otro día."}],
     guardar:function(d){
-      var b={cultivo:d.cultivo,mesEntrega:d.mesEntrega,usdTn:parseFloat(d.usdTn),fechaCarga:d.fechaCarga};
+      /* mesEntrega es conceptualmente un mes, no un día: se normaliza al 1
+         para que forwardDe (y quien lo consuma, como Sementera en la Task 9)
+         compare siempre contra la misma convención, sin depender de qué día
+         del mes haya tocado el selector. */
+      var b={cultivo:d.cultivo,mesEntrega:d.mesEntrega.slice(0,7)+"-01",
+             usdTn:parseFloat(d.usdTn),fechaCarga:d.fechaCarga};
       if(P){ Object.keys(b).forEach(function(k){P[k]=b[k];}); marcar("preciosForward",P); avisar("Precio forward actualizado."); }
       else { b.id=uid(); E.preciosForward.push(b); marcar("preciosForward",b); avisar("Precio forward cargado."); }
     }});
 };
 A.borrarPrecioForward=function(id){
   var p=E.preciosForward.filter(function(x){return x.id===id;})[0];
-  confirmar("Eliminar precio forward",esc(CULTIVOS[p.cultivo].nom)+" · entrega "+fecha(p.mesEntrega)+".",function(){
+  confirmar("Eliminar precio forward",esc(CULTIVOS[p.cultivo].nom)+" · entrega "+mesAno(p.mesEntrega)+".",function(){
     E.preciosForward=E.preciosForward.filter(function(x){return x.id!==id;}); marcarBaja("preciosForward",id); avisar("Precio forward eliminado."); });
 };
 
@@ -3559,7 +3585,7 @@ function vistaFinanzas(){
       preciosForward.map(function(p){
         var cu=CULTIVOS[p.cultivo];
         return '<tr><td><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</td>'+
-          '<td class="num">'+fecha(p.mesEntrega)+'</td>'+
+          '<td class="num">'+esc(mesAno(p.mesEntrega))+'</td>'+
           '<td class="num" style="font-weight:700">'+nf(p.usdTn,1)+'</td>'+
           '<td class="num">'+fecha(p.fechaCarga)+'</td>'+
           '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoPrecioForward" data-arg="'+p.id+'">Editar</button>'+
