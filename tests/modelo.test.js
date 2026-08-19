@@ -754,3 +754,19 @@ test("un lote sin ambientes cargados corre entero como una media loma", function
   assert.strictEqual(amb[0].ha, 120);
   assert.strictEqual(amb[0].cau, 160);
 });
+
+test("el total va del pesimista al optimista y el margen suma lo que se puede calcular", function(){
+  var serie = serieHasta("2026-02-26", 3, 4);
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serie], historias:{}, overrides:{},
+    vendidas:{ soja_1:50 }, forwards:[] });
+  assert.ok(s.tnPesimista <= s.tn && s.tn <= s.tnOptimista);
+  assert.strictEqual(s.margen, s.cultivos[0].comp.margen);
+});
+
+test("sin ningún cultivo calculable el margen total es null, no cero", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[], historias:{}, overrides:{},
+    vendidas:{ soja_1:50 }, forwards:[] });
+  assert.strictEqual(s.margen, null);
+});
