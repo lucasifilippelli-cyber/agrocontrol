@@ -567,3 +567,15 @@ test("avisa cuando lo comprometido pasa el escenario pesimista", function(){
 test("vender exactamente el pesimista todavía no es exceso", function(){
   assert.strictEqual(M.compromiso({ tnPesimista:100, tnVendidas:100 }).excedido, false);
 });
+
+test("compromiso: con una entrada faltante devuelve null, no NaN disfrazado de OK", function(){
+  assert.strictEqual(M.compromiso({ tnPesimista:100 }), null);
+});
+
+test("compromiso: con una entrada no numérica devuelve null", function(){
+  assert.strictEqual(M.compromiso({ tnPesimista:"100", tnVendidas:80 }), null);
+});
+
+test("compromiso: con NaN explícito devuelve null en vez de excedido:false", function(){
+  assert.strictEqual(M.compromiso({ tnPesimista:NaN, tnVendidas:80 }), null);
+});

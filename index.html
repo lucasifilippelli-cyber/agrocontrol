@@ -1039,8 +1039,17 @@ function forwardDe(lista, cultivo, mesEntregaISO){
    está caro precisamente porque a todos les fue mal, la misma razón por la
    que este productor no llegó a cosechar lo comprometido. El error sale
    doble. Por eso el margen se mide contra tnPesimista y no contra tnEsperada:
-   vender exactamente el pesimista todavía no es exceso, vender un kilo más sí. */
+   vender exactamente el pesimista todavía no es exceso, vender un kilo más sí.
+
+   Con una entrada que no es un número finito, "margen < 0" da false para
+   NaN igual que para un margen sano: la función quedaría diciendo "no sé"
+   con la misma cara que "está todo bien", justo la que autoriza vender
+   grano que todavía no se cosechó. Mismo patrón que indiceAgua y
+   escenariosVentana: cuando no hay con qué calcular, se devuelve null en
+   vez de inventar una respuesta tranquilizadora. */
 function compromiso(o){
+  if(!o || typeof o.tnPesimista !== "number" || typeof o.tnVendidas !== "number") return null;
+  if(!isFinite(o.tnPesimista) || !isFinite(o.tnVendidas)) return null;
   var margen = Math.round((o.tnPesimista - o.tnVendidas) * 10) / 10;
   return { margen: margen, excedido: margen < 0 };
 }
