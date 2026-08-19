@@ -181,7 +181,7 @@ test("una localidad desconocida devuelve null en vez de inventar", function(){
 - [ ] **Step 4: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "falta el marcador modelo:inicio en index.html".
@@ -218,7 +218,7 @@ function rindeBase(cultivo, localidad){
 - [ ] **Step 6: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 4 tests en verde.
@@ -297,7 +297,7 @@ test("mmEntre ignora lo que cae fuera de la serie", function(){
 - [ ] **Step 3: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.mmEntre is not a function".
@@ -322,7 +322,7 @@ function mmEntre(serie, desdeISO, hastaISO){
 - [ ] **Step 5: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 6 tests en verde.
@@ -396,7 +396,7 @@ test("la demanda es ETo por Kc", function(){
 - [ ] **Step 2: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.balanceHidrico is not a function".
@@ -425,7 +425,7 @@ function balanceHidrico(o){
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 9 tests en verde.
@@ -491,7 +491,7 @@ test("el índice de agua es la ETR sobre la ETC dentro de la ventana", function(
 - [ ] **Step 2: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.rindeEsperado is not a function".
@@ -545,7 +545,7 @@ function rindeEsperado(rBase, ia, ky){
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 15 tests en verde.
@@ -596,7 +596,7 @@ test("con la ventana crítica ya cerrada los tres escenarios convergen", functio
 - [ ] **Step 2: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.percentilesVentana is not a function".
@@ -629,7 +629,7 @@ function escenarios(o){
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 18 tests en verde.
@@ -691,7 +691,7 @@ test("sin override manda el oficial y queda marcado como tal", function(){
 - [ ] **Step 3: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.rindeAncla is not a function".
@@ -712,7 +712,7 @@ function rindeAncla(cultivo, establecimiento, overrides){
 - [ ] **Step 5: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 20 tests en verde.
@@ -790,7 +790,7 @@ test("sin precio cargado devuelve null en vez de suponer", function(){
 - [ ] **Step 3: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.forwardDe is not a function".
@@ -811,7 +811,7 @@ function forwardDe(lista, cultivo, mesEntregaISO){
 - [ ] **Step 5: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 22 tests en verde.
@@ -870,7 +870,7 @@ test("vender exactamente el pesimista todavía no es exceso", function(){
 - [ ] **Step 2: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.compromiso is not a function".
@@ -890,7 +890,7 @@ function compromiso(o){
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 25 tests en verde.
@@ -1005,7 +1005,7 @@ test("el CSV y el JSON salen de las mismas filas", function(){
 - [ ] **Step 2: Correr el test y verificar que falla**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: FALLA con "M.aCSV is not a function".
@@ -1031,7 +1031,7 @@ function aJSON(filas){ return JSON.stringify(filas, null, 2); }
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 Esperado: 27 tests en verde.
@@ -1115,7 +1115,7 @@ devuelve `escenarios(...)`. Se escribe en este mismo archivo.
 - [ ] **Step 2: Correr y anotar el resultado**
 
 ```bash
-node --test tests/
+node --test
 ```
 
 **Si falla, no forzar los coeficientes para que pase.** Anotar cuánto se desvía
