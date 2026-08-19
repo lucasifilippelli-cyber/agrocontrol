@@ -10,8 +10,8 @@ contra el forward, avisar cuánto se puede comprometer sin pasarse, y dejarlo
 descargar en tres formatos.
 
 **Architecture:** Todo vive en `index.html`, que sigue siendo un archivo sin
-build ni librerías. El ancla de rinde son 15 KB embebidos de la serie oficial
-del MAGyP. Encima corre un balance hídrico diario con lluvia y ETo de
+build ni librerías. El ancla de rinde son las medianas por partido de la serie
+oficial del MAGyP, unos 700 bytes embebidos. Encima corre un balance hídrico diario con lluvia y ETo de
 Open-Meteo, y la respuesta del rendimiento al agua de FAO-33 sobre las ventanas
 críticas que ya están codificadas. Dos tablas nuevas en Supabase.
 
@@ -133,7 +133,9 @@ node herramientas/generar-rindes.js > /tmp/rindes.js && head -c 400 /tmp/rindes.
 
 Esperado: una línea `var RINDES_PARTIDO = {...};` de unos 700 bytes (las medianas
 ya agregadas, no las 369 filas crudas). San Antonio de Areco tiene que dar
-`maiz_t: 8050`, `maiz_d: 8050`, `soja_1: 3600`, `trigo: 4246`.
+`maiz_t: 8050`, `maiz_d: 8050`, `soja_1: 3600`, `trigo: 4247`.
+Los números que manda son los que produce **este** generador: si al regenerarlo
+salen distintos a los embebidos, el generador no sirve para nada.
 
 - [ ] **Step 3: Escribir el test que falla**
 
