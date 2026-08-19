@@ -689,6 +689,32 @@ function rindeBase(cultivo, localidad){
   var v = RINDES_PARTIDO[p][cultivo];
   return v == null ? null : v;
 }
+
+/* Serie diaria de lluvia y ETo por establecimiento y campaña. Pura: recibe la
+   colección de climaSeries en vez de leer E, para poder testearla sola. */
+function serieDe(series, establecimientoId, campaniaId){
+  var fila = (series||[]).filter(function(x){
+    return x.establecimientoId === establecimientoId && x.campaniaId === campaniaId;
+  })[0];
+  if(!fila) return null;
+  return { desde:fila.desde, hasta:fila.hasta, lluvia:fila.lluvia||[], eto:fila.eto||[] };
+}
+
+/* Días de diferencia entre dos fechas ISO, mediodía UTC para no pisar el
+   cambio de horario. */
+function diasEntre(a, b){
+  return Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+}
+
+/* Milímetros acumulados de una serie diaria entre dos fechas, bordes incluidos. */
+function mmEntre(serie, desdeISO, hastaISO){
+  if(!serie || !serie.lluvia || !serie.lluvia.length) return 0;
+  var i0 = Math.max(0, diasEntre(serie.desde, desdeISO));
+  var i1 = Math.min(serie.lluvia.length - 1, diasEntre(serie.desde, hastaISO));
+  var t = 0;
+  for(var i = i0; i <= i1; i++) t += (serie.lluvia[i] || 0);
+  return Math.round(t * 10) / 10;
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -728,7 +754,7 @@ function uid(){
 /* ---------- nombres: camello en la app, guion bajo en la base ---------- */
 /* Postgres no acepta "" en una columna de fecha, y la app usa la cadena vacía
    para "todavía no". La traducción es el lugar donde eso se normaliza. */
-var COLUMNAS_FECHA={fecha:1,fecha_siembra:1,fecha_cosecha:1,fecha_plan:1,fecha_cierre:1,desde:1,traido_hasta:1};
+var COLUMNAS_FECHA={fecha:1,fecha_siembra:1,fecha_cosecha:1,fecha_plan:1,fecha_cierre:1,desde:1,hasta:1,traido_hasta:1};
 function aGuion(o){
   var r={};
   for(var k in o){
@@ -1025,11 +1051,11 @@ var TABLAS = {
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
-  telegramCuentas:"telegram_cuentas"
+  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[]};
+           telegramCuentas:[],climaSeries:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -1183,22 +1209,38 @@ function traerPronostico(){
   });
 }
 
-/* lluvia mensual real de la campaña, salvo los meses cargados a mano */
+/* lluvia mensual real de la campaña, salvo los meses cargados a mano; y, por
+   cada establecimiento, la serie diaria de lluvia y ETo que usa el modelo de
+   rinde. El resumen mensual sigue saliendo del primer establecimiento, igual
+   que antes: es lo que ya muestran la vista de Lluvias y el resumen de campaña. */
 function traerLluviaCampania(forzar){
   var c=campania(campActiva); if(!c) return Promise.resolve();
   if(c.traido && !forzar) return Promise.resolve();
-  var es=E.establecimientos[0];
   var desde=c.desde;
   var finCamp=new Date(desde); finCamp.setFullYear(finCamp.getFullYear()+1); finCamp.setDate(finCamp.getDate()-1);
   /* el archivo de Open-Meteo va unos días atrás del presente */
   var tope=new Date(Date.now()-6*864e5);
   var hasta=(finCamp<tope?finCamp:tope).toISOString().slice(0,10);
   if(hasta<=desde) return Promise.resolve();
-  var u="https://archive-api.open-meteo.com/v1/archive?latitude="+es.lat+"&longitude="+es.lon+
-        "&start_date="+desde+"&end_date="+hasta+"&daily=precipitation_sum&timezone=America%2FArgentina%2FBuenos_Aires";
-  return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
-    .then(function(j){
-      var base=new Date(desde+"T12:00:00"), acum=[0,0,0,0,0,0,0,0,0,0,0,0];
+  var pedidos=E.establecimientos.map(function(es){
+    var u="https://archive-api.open-meteo.com/v1/archive?latitude="+es.lat+"&longitude="+es.lon+
+          "&start_date="+desde+"&end_date="+hasta+
+          "&daily=precipitation_sum,et0_fao_evapotranspiration&timezone=America%2FArgentina%2FBuenos_Aires";
+    return fetch(u).then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+      .then(function(j){
+        var fila=(E.climaSeries||[]).filter(function(x){
+          return x.establecimientoId===es.id && x.campaniaId===c.id;
+        })[0];
+        if(!fila){ fila={id:uid(), establecimientoId:es.id, campaniaId:c.id}; E.climaSeries=(E.climaSeries||[]).concat([fila]); }
+        fila.desde=desde; fila.hasta=hasta;
+        fila.lluvia=j.daily.precipitation_sum.map(function(v){return v||0;});
+        fila.eto=j.daily.et0_fao_evapotranspiration.map(function(v){return v||0;});
+        marcar("climaSeries", fila);
+        return j;
+      });
+  });
+  return Promise.all(pedidos).then(function(resultados){
+      var j=resultados[0], base=new Date(desde+"T12:00:00"), acum=[0,0,0,0,0,0,0,0,0,0,0,0];
       j.daily.time.forEach(function(f,i){
         var d=new Date(f+"T12:00:00");
         var idx=(d.getFullYear()-base.getFullYear())*12 + (d.getMonth()-base.getMonth());
