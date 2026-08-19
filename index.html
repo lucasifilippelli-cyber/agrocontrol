@@ -1911,11 +1911,15 @@ function cargarEjemplo(){
      oficial trae un solo "maíz" sin separar temprano de tardío (ver
      rindeAncla). Va en perfiles.rindes_base, igual que un override real
      cargado a mano desde A.rindesBase, y por eso se manda aparte con
-     sb.actualizar en vez de sumarse a la cola de guardar(). */
-  var overridesEjemplo={}; overridesEjemplo[s.establecimientos[0].id]={maiz_d:9800};
-  perfil=escribirOverrides(perfil||{}, overridesEjemplo);
+     sb.actualizar en vez de sumarse a la cola de guardar(). Mergea con lo que
+     ya hubiera en vez de pisarlo entero —mismo patrón que A.rindesBase—: el
+     establecimiento de ejemplo tiene un UUID recién generado, así que sumarlo
+     al mapa previo nunca puede tocar un override real de otro establecimiento. */
+  var previoRindes=overridesDePerfil(perfil);
+  var nuevoRindes=armarOverrides(previoRindes, s.establecimientos[0].id, {maiz_d:9200});
+  perfil=escribirOverrides(perfil||{}, nuevoRindes);
   var pRindes=(sesion&&sesion.user)
-    ?sb.actualizar("perfiles", sesion.user.id, escribirOverrides({}, overridesEjemplo))
+    ?sb.actualizar("perfiles", sesion.user.id, escribirOverrides({}, nuevoRindes))
     :Promise.resolve();
 
   return guardar().then(function(){
