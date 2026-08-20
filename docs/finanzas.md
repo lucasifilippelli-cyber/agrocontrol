@@ -1,8 +1,36 @@
-# KPIs y forecast — diseño
+# Finanzas y Contabilidad — diseño
 
-Amplía el módulo Finanzas con indicadores seleccionables y dos proyecciones —una
-económica y una financiera— que se pueden mirar sobre la campaña real o sobre una
-campaña inventada.
+El módulo pasa a llamarse **Finanzas y Contabilidad**. Suma un plan de cuentas,
+indicadores seleccionables y dos proyecciones —una económica y una financiera—
+que se pueden mirar sobre la campaña real o sobre una campaña inventada.
+
+## El plan de cuentas va primero
+
+Todo lo que se carga lleva un **código de cuenta**. Ésa es la decisión que ordena
+el resto: con los asientos codificados, el balance y el estado de resultados **no
+se arman a mano, se derivan**. Los indicadores que necesitan un balance dejan de
+depender de que alguien cargue rubros sueltos.
+
+Va **antes** que las proyecciones, no después. El motivo es concreto: las
+proyecciones crean cuentas por cobrar y por pagar a partir de los plazos. Con el
+plan de cuentas ya existente, esas dos nacen como cuentas de verdad; al revés,
+habría que armarlas como rubros sueltos y tirarlas después.
+
+**Estructura:** tabla `cuentas` con código, nombre, tipo —activo, pasivo,
+patrimonio, resultado— y cuenta padre para agrupar.
+
+**Viene con un plan por defecto ya cargado**, razonable para actividad
+agropecuaria: bienes de cambio separando granos de insumos, arrendamientos,
+labores de terceros, ventas por cultivo. **El productor puede crear cuentas
+nuevas.**
+
+**Nada se recodifica a mano:** cada gasto y cada venta lleva su cuenta, y el
+valor por defecto sale de la categoría que ya se carga hoy. Lo existente sigue
+funcionando sin tocar nada.
+
+**El plan por defecto lleva criterio propio y va al documento de validación**,
+junto con los plazos de pago y los parámetros agronómicos. Nadie lo validó
+todavía.
 
 ## Por qué existe
 
@@ -91,16 +119,39 @@ de cobro · plazo promedio de pago · ciclo de caja · cobertura de lo que falta
 pagar con ventas ya cerradas · concentración por comprador · porcentaje de
 producción esperada ya comprometida · exposición al peso.
 
+### El balance, y los indicadores que dependen de él
+
+Con el plan de cuentas, el balance se deriva casi entero:
+
+| Rubro | De dónde sale |
+|---|---|
+| Stock de insumos | De los movimientos, valuado a costo. Ya existe |
+| Stock de granos | Producción cosechada menos vendida. Ya existe |
+| Cuentas por cobrar | Ventas con cobro pendiente, según los plazos |
+| Cuentas por pagar | Gastos con pago pendiente, según los plazos |
+| Caja, deuda financiera, bienes de uso | **Carga manual**: pocos números por campaña |
+
+Con eso, **liquidez corriente, prueba ácida y endeudamiento pasan de inventados a
+reales**. Sin el saldo de caja la prueba ácida no significa nada —su gracia es
+medir cuánto se puede pagar sin vender el stock—, así que ese número es
+condición para mostrarla.
+
+Al lado de cada ratio estándar va **su traducción al rubro**, que es la que se usa
+en el campo y sale de los mismos datos:
+
+- **Endeudamiento en toneladas** — cuántas toneladas de soja se deben.
+- **Cobertura de la deuda con la cosecha esperada** — cuántas veces alcanza lo
+  que se va a cosechar para cubrir lo que se debe.
+
+Van los dos: el ratio estándar porque un banco o un contador lo reconoce, y la
+traducción porque es la que decide algo en la mesa.
+
 ### Lo que queda afuera, y por qué
 
-Liquidez corriente, prueba ácida, deuda sobre patrimonio y ROE. **Necesitan un
-balance que la app no tiene**: no hay activos, pasivos ni patrimonio cargados.
-Calcularlos con supuestos daría un número con cara de precisión y sin sustento.
-
-Tampoco entran las rotaciones tal como se usan en un comercio: suponen un negocio
-que factura todos los meses, y una campaña agrícola gasta ocho meses seguidos y
-cobra en dos. El plazo de cobro, el de pago y el ciclo de caja sí entran, pero
-medidos sobre el ciclo real y no anualizados.
+Las rotaciones tal como se usan en un comercio: suponen un negocio que factura
+todos los meses, y una campaña agrícola gasta ocho meses seguidos y cobra en dos.
+El plazo de cobro, el de pago y el ciclo de caja sí entran, pero medidos sobre el
+ciclo real y no anualizados.
 
 ### Agregar uno más tiene que ser barato
 
@@ -142,6 +193,9 @@ con los parámetros agronómicos: nadie los validó todavía.
 
 | Qué | Dónde |
 |---|---|
+| Plan de cuentas | Tabla nueva `cuentas`: código, nombre, tipo, cuenta padre |
+| Cuenta de cada asiento | Columna en `gastos` y en `ventas`; default desde la categoría |
+| Caja, deuda financiera, bienes de uso | Tabla nueva `saldos`: campaña, cuenta, importe, fecha |
 | Presupuesto de lo que falta | Tabla nueva `presupuestos`: campaña, categoría, importe, moneda |
 | Días de pago | Columna en `gastos`, anulable; default por categoría |
 | Días de cobro | Columna en `ventas`, anulable; default |
@@ -164,6 +218,13 @@ verifica con `get_advisors` después de aplicar.
   horizontales.
 
 **Límite del asistente**: no se crean cuentas de prueba ni se tipean contraseñas.
+
+## Los datos de ejemplo
+
+Se amplían para que el balance y los ratios se vean completos y no a medias:
+maquinaria, saldo de caja, una deuda bancaria y sus cuentas. Sin eso, quien abra
+el ejemplo ve la mitad de los indicadores en "todavía no sé" y no entiende para
+qué sirven.
 
 ## Fuera de alcance
 
