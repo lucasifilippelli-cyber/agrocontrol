@@ -1529,6 +1529,64 @@ function aCSV(filas){
 }
 
 function aJSON(filas){ return JSON.stringify(filas, null, 2); }
+
+/* Plan de cuentas estándar para actividad agropecuaria. Es criterio propio y
+   está PENDIENTE DE VALIDACIÓN por un contador: ver docs/finanzas.md. El
+   productor puede agregar cuentas desde la app. */
+var PLAN_BASE = [
+  {codigo:"1",       nombre:"Activo",                    tipo:"activo",     padre:null},
+  {codigo:"1.1",     nombre:"Activo corriente",          tipo:"activo",     padre:"1"},
+  {codigo:"1.1.01",  nombre:"Caja y bancos",             tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.02",  nombre:"Cuentas por cobrar",        tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.03",  nombre:"Bienes de cambio · granos", tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.04",  nombre:"Bienes de cambio · insumos",tipo:"activo",     padre:"1.1"},
+  {codigo:"1.2",     nombre:"Activo no corriente",       tipo:"activo",     padre:"1"},
+  {codigo:"1.2.01",  nombre:"Maquinaria",                tipo:"activo",     padre:"1.2"},
+  {codigo:"1.2.02",  nombre:"Inmuebles rurales",         tipo:"activo",     padre:"1.2"},
+
+  {codigo:"2",       nombre:"Pasivo",                    tipo:"pasivo",     padre:null},
+  {codigo:"2.1",     nombre:"Pasivo corriente",          tipo:"pasivo",     padre:"2"},
+  {codigo:"2.1.01",  nombre:"Cuentas por pagar",         tipo:"pasivo",     padre:"2.1"},
+  {codigo:"2.1.02",  nombre:"Deudas bancarias",          tipo:"pasivo",     padre:"2.1"},
+  {codigo:"2.1.03",  nombre:"Arrendamientos a pagar",    tipo:"pasivo",     padre:"2.1"},
+  {codigo:"2.1.04",  nombre:"Impuestos a pagar",         tipo:"pasivo",     padre:"2.1"},
+
+  {codigo:"3",       nombre:"Patrimonio neto",           tipo:"patrimonio", padre:null},
+  {codigo:"3.1.01",  nombre:"Capital",                   tipo:"patrimonio", padre:"3"},
+  {codigo:"3.1.02",  nombre:"Resultado de la campaña",   tipo:"patrimonio", padre:"3"},
+
+  {codigo:"4",       nombre:"Ingresos",                  tipo:"resultado",  padre:null},
+  {codigo:"4.1.01",  nombre:"Venta de granos",           tipo:"resultado",  padre:"4"},
+  {codigo:"4.1.02",  nombre:"Otros ingresos",            tipo:"resultado",  padre:"4"},
+
+  {codigo:"5",       nombre:"Costos y gastos",           tipo:"resultado",  padre:null},
+  {codigo:"5.1",     nombre:"Costos directos",           tipo:"resultado",  padre:"5"},
+  {codigo:"5.1.01",  nombre:"Semilla",                   tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.02",  nombre:"Fertilizantes",             tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.03",  nombre:"Fitosanitarios",            tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.04",  nombre:"Labores de terceros",       tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.05",  nombre:"Cosecha",                   tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.06",  nombre:"Flete",                     tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.2",     nombre:"Costos indirectos",         tipo:"resultado",  padre:"5"},
+  {codigo:"5.2.01",  nombre:"Arrendamiento",             tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.02",  nombre:"Honorarios",                tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.03",  nombre:"Estructura",                tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.04",  nombre:"Impuestos y comisiones",    tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.05",  nombre:"Otros",                     tipo:"resultado",  padre:"5.2"}
+];
+
+function cuentaPorCodigo(cuentas, codigo){
+  if(!cuentas) return null;
+  for(var i = 0; i < cuentas.length; i++){
+    if(cuentas[i].codigo === codigo) return cuentas[i];
+  }
+  return null;
+}
+
+function hijasDe(cuentas, codigo){
+  if(!cuentas) return [];
+  return cuentas.filter(function(c){ return c.padre === codigo; });
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -1893,11 +1951,12 @@ var TABLAS = {
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
-  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward"
+  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
+  cuentas:"cuentas"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[],climaSeries:[],preciosForward:[]};
+           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });

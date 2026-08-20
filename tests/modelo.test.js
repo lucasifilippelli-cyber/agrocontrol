@@ -1153,3 +1153,41 @@ test("aJSON conserva los null de filasSementera, no los convierte en 0", functio
   var vuelta = JSON.parse(M.aJSON(filas));
   assert.strictEqual(vuelta[0].kgHaEsperado, null);
 });
+
+test("el plan base cubre los cuatro tipos", function(){
+  var tipos = {};
+  M.PLAN_BASE.forEach(function(c){ tipos[c.tipo] = true; });
+  assert.ok(tipos.activo && tipos.pasivo && tipos.patrimonio && tipos.resultado,
+    "faltan tipos en el plan base");
+});
+
+test("ninguna cuenta del plan base apunta a un padre inexistente", function(){
+  var codigos = {};
+  M.PLAN_BASE.forEach(function(c){ codigos[c.codigo] = true; });
+  var huerfanas = M.PLAN_BASE.filter(function(c){ return c.padre && !codigos[c.padre]; });
+  /* JSON.stringify y no deepStrictEqual: el array sale de otro contexto de vm
+     y no es reference-equal, aunque tenga el mismo contenido. */
+  assert.strictEqual(JSON.stringify(huerfanas.map(function(c){ return c.codigo; })), JSON.stringify([]));
+});
+
+test("no hay códigos repetidos en el plan base", function(){
+  var vistos = {}, repetidos = [];
+  M.PLAN_BASE.forEach(function(c){
+    if(vistos[c.codigo]) repetidos.push(c.codigo);
+    vistos[c.codigo] = true;
+  });
+  assert.deepStrictEqual(repetidos, []);
+});
+
+test("cuentaPorCodigo encuentra y devuelve null si no está", function(){
+  var cs = [{codigo:"1.1.01", nombre:"Caja", tipo:"activo", padre:"1.1"}];
+  assert.strictEqual(M.cuentaPorCodigo(cs, "1.1.01").nombre, "Caja");
+  assert.strictEqual(M.cuentaPorCodigo(cs, "9.9.99"), null);
+});
+
+test("hijasDe devuelve sólo las cuentas de ese padre", function(){
+  var cs = [{codigo:"1.1.01", padre:"1.1"}, {codigo:"1.1.02", padre:"1.1"},
+            {codigo:"2.1.01", padre:"2.1"}];
+  assert.deepStrictEqual(M.hijasDe(cs, "1.1").map(function(c){ return c.codigo; }),
+                         ["1.1.01", "1.1.02"]);
+});
