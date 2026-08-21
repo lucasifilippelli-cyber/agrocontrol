@@ -1724,6 +1724,35 @@ function impedimentoBorrarCuenta(cuentas, gastos, ventas, insumos, movimientos, 
   }
   return "hay "+partes.slice(0,-1).join(", ")+" y "+partes[partes.length-1]+" imputados";
 }
+
+/* Copia de num() (más abajo en el archivo, fuera de este bloque): el arnés
+   de tests evalúa sólo lo que hay entre modelo:inicio y modelo:fin, así que
+   costoPendienteDe necesita su propia coerción numérica acá adentro. */
+function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
+/* La primera capa del costo que falta, y la única que no hay que cargar: las
+   órdenes programadas ya tienen su mezcla con dosis por hectárea. Las
+   completadas NO se cuentan acá — su costo ya está asentado en movimientos y
+   lo suma costoInsumosDe. Contarlas dos veces inflaría el costo al doble. */
+function costoPendienteDe(clId, ordenes, ordenInsumos, insumos){
+  var abiertas = {}, hay = false;
+  ordenes.forEach(function(o){
+    if(o.cultivoLoteId === clId && o.estado !== "completada"){
+      abiertas[o.id] = num(o.superficie); hay = true;
+    }
+  });
+  if(!hay) return 0;
+  var precios = {};
+  insumos.forEach(function(i){ precios[i.id] = i.precio; });
+  var total = 0, falta = false;
+  ordenInsumos.forEach(function(oi){
+    if(abiertas[oi.ordenId] == null) return;
+    var p = precios[oi.insumoId];
+    if(p == null){ falta = true; return; }
+    total += num(oi.dosisHa) * abiertas[oi.ordenId] * num(p);
+  });
+  /* Un insumo sin precio no vale cero: vale "no sé". */
+  return falta ? null : Math.round(total * 100) / 100;
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {

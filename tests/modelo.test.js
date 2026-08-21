@@ -1513,3 +1513,45 @@ test("C1: si el default ya es una hoja normal, no se duplica en las opciones", f
   var out = M.opcionesCuenta(cuentas, "4.1.01");
   assert.strictEqual(out.length, 1);
 });
+
+/* ============================================================
+   Etapa 2a, Task 1: costoPendienteDe — el costo de los trabajos
+   que faltan hacer. Primera capa del costo proyectado, sale sola
+   sin que el productor cargue nada.
+   ============================================================ */
+
+test("una orden programada suma su mezcla por superficie", function(){
+  var ordenes=[{id:"o1", cultivoLoteId:"cl1", superficie:100, estado:"programada"}];
+  var ordenInsumos=[{ordenId:"o1", insumoId:"i1", dosisHa:2}];
+  var insumos=[{id:"i1", precio:15}];
+  assert.strictEqual(M.costoPendienteDe("cl1", ordenes, ordenInsumos, insumos), 3000);
+});
+
+test("una orden completada no suma: su costo ya está en los movimientos", function(){
+  var ordenes=[{id:"o1", cultivoLoteId:"cl1", superficie:100, estado:"completada"}];
+  var ordenInsumos=[{ordenId:"o1", insumoId:"i1", dosisHa:2}];
+  var insumos=[{id:"i1", precio:15}];
+  assert.strictEqual(M.costoPendienteDe("cl1", ordenes, ordenInsumos, insumos), 0);
+});
+
+test("suma varias mezclas de la misma orden", function(){
+  var ordenes=[{id:"o1", cultivoLoteId:"cl1", superficie:50, estado:"programada"}];
+  var ordenInsumos=[{ordenId:"o1", insumoId:"i1", dosisHa:2},
+                    {ordenId:"o1", insumoId:"i2", dosisHa:1}];
+  var insumos=[{id:"i1", precio:10}, {id:"i2", precio:20}];
+  assert.strictEqual(M.costoPendienteDe("cl1", ordenes, ordenInsumos, insumos), 2000);
+});
+
+test("no cuenta órdenes de otro cultivo-lote", function(){
+  var ordenes=[{id:"o1", cultivoLoteId:"cl2", superficie:100, estado:"programada"}];
+  var ordenInsumos=[{ordenId:"o1", insumoId:"i1", dosisHa:2}];
+  var insumos=[{id:"i1", precio:15}];
+  assert.strictEqual(M.costoPendienteDe("cl1", ordenes, ordenInsumos, insumos), 0);
+});
+
+test("un insumo sin precio cargado devuelve null y no cero", function(){
+  var ordenes=[{id:"o1", cultivoLoteId:"cl1", superficie:100, estado:"programada"}];
+  var ordenInsumos=[{ordenId:"o1", insumoId:"i1", dosisHa:2}];
+  var insumos=[{id:"i1"}];
+  assert.strictEqual(M.costoPendienteDe("cl1", ordenes, ordenInsumos, insumos), null);
+});
