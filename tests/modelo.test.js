@@ -1576,3 +1576,43 @@ test("redondea a centavos un total que no cae justo", function(){
   var insumos=[{id:"i1", precio:10.005}];
   assert.strictEqual(M.costoPendienteDe("cl1", ordenes, ordenInsumos, insumos), 30.02);
 });
+
+/* importeUSD: la conversión que antes vivía adentro de importeGasto, ahora
+   una función pura del bloque del modelo. La usan el presupuesto, las
+   ventas y el escenario. */
+test("importeUSD en dólares devuelve el monto tal cual", function(){
+  assert.strictEqual(M.importeUSD({monto:100, moneda:"USD", tipoCambio:null}), 100);
+});
+
+test("importeUSD en pesos divide por el tipo de cambio del día", function(){
+  assert.strictEqual(M.importeUSD({monto:1000, moneda:"ARS", tipoCambio:1000}), 1);
+});
+
+test("importeUSD en pesos sin tipo de cambio cargado da 0, no revienta", function(){
+  assert.strictEqual(M.importeUSD({monto:1000, moneda:"ARS", tipoCambio:null}), 0);
+});
+
+test("el presupuesto pendiente descuenta lo ya gastado de esa categoría", function(){
+  var pres=[{campaniaId:"c1", categoria:"Cosecha", monto:10000, moneda:"USD"}];
+  var gastos=[{campaniaId:"c1", categoria:"Cosecha", monto:4000, moneda:"USD"}];
+  var r=M.presupuestoPendiente(pres, gastos, "c1");
+  assert.strictEqual(r.porCategoria["Cosecha"], 6000);
+  assert.strictEqual(r.total, 6000);
+});
+
+test("gastar más que el presupuesto deja el pendiente en cero, no en negativo", function(){
+  var pres=[{campaniaId:"c1", categoria:"Cosecha", monto:10000, moneda:"USD"}];
+  var gastos=[{campaniaId:"c1", categoria:"Cosecha", monto:12000, moneda:"USD"}];
+  assert.strictEqual(M.presupuestoPendiente(pres, gastos, "c1").total, 0);
+});
+
+test("no mezcla campañas", function(){
+  var pres=[{campaniaId:"c1", categoria:"Cosecha", monto:10000, moneda:"USD"}];
+  var gastos=[{campaniaId:"c2", categoria:"Cosecha", monto:4000, moneda:"USD"}];
+  assert.strictEqual(M.presupuestoPendiente(pres, gastos, "c1").total, 10000);
+});
+
+test("una categoría sin presupuesto no aporta", function(){
+  var gastos=[{campaniaId:"c1", categoria:"Flete", monto:500, moneda:"USD"}];
+  assert.strictEqual(M.presupuestoPendiente([], gastos, "c1").total, 0);
+});

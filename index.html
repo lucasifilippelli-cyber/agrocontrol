@@ -1731,6 +1731,14 @@ function impedimentoBorrarCuenta(cuentas, gastos, ventas, insumos, movimientos, 
    hoistean en todo el <script>, así que los otros usos de num() en el resto
    del archivo siguen viendo la misma (y única) definición. */
 function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
+/* Todo se lleva a dólares al tipo de cambio del día de la operación. Vivía
+   adentro de importeGasto, mezclada con la lectura de un gasto en particular;
+   se saca a una función pura porque también la necesitan las ventas y el
+   presupuesto. importeGasto/importeVenta, fuera de este bloque, la usan. */
+function importeUSD(fila){
+  if(fila.moneda==="ARS") return num(fila.tipoCambio)>0 ? num(fila.monto)/num(fila.tipoCambio) : 0;
+  return num(fila.monto);
+}
 /* La primera capa del costo que falta, y la única que no hay que cargar: las
    órdenes programadas ya tienen su mezcla con dosis por hectárea. Las
    completadas NO se cuentan acá — su costo ya está asentado en movimientos y
@@ -1754,6 +1762,27 @@ function costoPendienteDe(clId, ordenes, ordenInsumos, insumos){
   });
   /* Un insumo sin precio no vale cero: vale "no sé". */
   return falta ? null : Math.round(total * 100) / 100;
+}
+/* La segunda capa del costo que falta, y la que no sale de ninguna orden de
+   trabajo: cosecha, flete, el arrendamiento que queda, estructura. El
+   presupuesto es lo que se piensa gastar en total en esa categoría, así que
+   lo que falta es el presupuesto menos lo ya gastado. Nunca negativo:
+   haberse pasado del presupuesto no genera un ingreso. */
+function presupuestoPendiente(presupuestos, gastos, campaniaId){
+  var gastado = {};
+  gastos.forEach(function(g){
+    if(g.campaniaId !== campaniaId) return;
+    gastado[g.categoria] = (gastado[g.categoria] || 0) + importeUSD(g);
+  });
+  var por = {}, total = 0;
+  presupuestos.forEach(function(p){
+    if(p.campaniaId !== campaniaId) return;
+    var falta = importeUSD(p) - (gastado[p.categoria] || 0);
+    if(falta < 0) falta = 0;
+    por[p.categoria] = Math.round(falta * 100) / 100;
+    total += por[p.categoria];
+  });
+  return { porCategoria: por, total: Math.round(total * 100) / 100 };
 }
 /* === modelo:fin === */
 
@@ -2117,11 +2146,11 @@ var TABLAS = {
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
   telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
-  cuentas:"cuentas"
+  cuentas:"cuentas", presupuestos:"presupuestos"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[]};
+           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[],presupuestos:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -2679,12 +2708,8 @@ function ocupacionPadron(cid){
    Todo se lleva a dólares al tipo de cambio del día de la operación.
    Comparar campañas en pesos no dice nada.
    ============================================================ */
-function aUSD(monto, moneda, tc){
-  if(moneda==="ARS") return num(tc)>0 ? num(monto)/num(tc) : 0;
-  return num(monto);
-}
-function importeVenta(v){ return aUSD(num(v.toneladas)*num(v.precioTn), v.moneda, v.tipoCambio); }
-function importeGasto(g){ return aUSD(g.monto, g.moneda, g.tipoCambio); }
+function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
+function importeGasto(g){ return importeUSD(g); }
 
 /* Kilos secos que produjo cada cultivo de la campaña. */
 function produccionPorCultivo(cid){
@@ -3326,7 +3351,7 @@ A.nuevaVenta=function(id){
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
       var tn=num(d.toneladas), pu=num(d.precioTn);
-      var usd=aUSD(tn*pu,d.moneda,d.tipoCambio);
+      var usd=importeUSD({monto:tn*pu, moneda:d.moneda, tipoCambio:d.tipoCambio});
       var prod=produccionPorCultivo(campActiva)[d.cultivo];
       var vend=ventasPorCultivo(campActiva)[d.cultivo];
       var producidas=prod?prod.kg/1000:0;
@@ -3400,7 +3425,7 @@ A.nuevoGasto=function(id){
              hint:"Se resuelve sola según la categoría. Elegí una sólo si querés imputar este gasto a otra cuenta."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
-      var usd=aUSD(d.monto,d.moneda,d.tipoCambio);
+      var usd=importeUSD({monto:d.monto, moneda:d.moneda, tipoCambio:d.tipoCambio});
       var falta=(d.moneda==="ARS"&&!num(d.tipoCambio));
       var cl=d.cultivoLoteId?clDe(d.cultivoLoteId):null;
       var ha=cl?(num(cl.haCosechada)||num(cl.haSembrada)):0;
@@ -3431,6 +3456,39 @@ A.borrarGasto=function(id){
   var g=E.gastos.filter(function(x){return x.id===id;})[0];
   confirmar("Eliminar gasto",esc(g.categoria)+" de "+nf(g.monto,0)+" "+esc(g.moneda)+" del "+fecha(g.fecha)+".",function(){
     E.gastos=E.gastos.filter(function(x){return x.id!==id;}); marcarBaja("gastos",id); avisar("Gasto eliminado."); });
+};
+
+/* ---------- presupuesto ---------- */
+A.nuevoPresupuesto=function(id){
+  var P=id?E.presupuestos.filter(function(x){return x.id===id;})[0]:null;
+  if(!campActiva){ avisar("Abrí una campaña antes de cargar el presupuesto."); return; }
+  abrirForm({titulo:P?"Editar presupuesto":"Nuevo presupuesto",
+    nota:"Lo que se piensa gastar en total en esa categoría durante esta campaña: cosecha, flete, el arrendamiento que queda, estructura. No sale de ninguna orden de trabajo, así que hay que cargarlo a mano.",
+    valores:P?{categoria:P.categoria,monto:P.monto,moneda:P.moneda,tipoCambio:P.tipoCambio,nota:P.nota}
+            :{moneda:"USD"},
+    campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
+             opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
+            {k:"monto",label:"Monto",tipo:"number",paso:"0.01",min:"0",req:true},
+            {k:"moneda",label:"Moneda",tipo:"select",req:true,opciones:[{v:"USD",t:"Dólares"},{v:"ARS",t:"Pesos"}]},
+            {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
+             hint:"Pesos por dólar. Sólo si presupuestás en pesos."},
+            {k:"nota",label:"Nota",ancho:true,ph:"De dónde sale el número"}],
+    validar:function(d){
+      if(d.moneda==="ARS"&&!(parseFloat(d.tipoCambio)>0)) return {tipoCambio:"Con monto en pesos hace falta el tipo de cambio."};
+      var dup=E.presupuestos.some(function(x){return x.campaniaId===campActiva&&x.categoria===d.categoria&&(!P||x.id!==P.id);});
+      if(dup) return {categoria:"Ya hay un presupuesto de "+d.categoria+" cargado en esta campaña. Editalo en vez de duplicarlo."};
+    },
+    guardar:function(d){
+      var b={campaniaId:campActiva,categoria:d.categoria,monto:parseFloat(d.monto),moneda:d.moneda,
+             tipoCambio:parseFloat(d.tipoCambio)||null,nota:d.nota||""};
+      if(P){ Object.keys(b).forEach(function(k){P[k]=b[k];}); marcar("presupuestos",P); avisar("Presupuesto actualizado."); }
+      else { b.id=uid(); E.presupuestos.push(b); marcar("presupuestos",b); avisar("Presupuesto cargado."); }
+    }});
+};
+A.borrarPresupuesto=function(id){
+  var p=E.presupuestos.filter(function(x){return x.id===id;})[0]; if(!p) return;
+  confirmar("Eliminar presupuesto",esc(p.categoria)+" de "+nf(p.monto,0)+" "+esc(p.moneda)+".",function(){
+    E.presupuestos=E.presupuestos.filter(function(x){return x.id!==id;}); marcarBaja("presupuestos",id); avisar("Presupuesto eliminado."); });
 };
 
 /* ---------- plan de cuentas ---------- */
@@ -4475,12 +4533,45 @@ function bloqueCuentas(){
     '<div class="bloque-cuerpo">'+grupos+'</div></div>';
 }
 
+/* La segunda capa del costo que falta, y la que no sale de ninguna orden de
+   trabajo: cosecha, flete, el arrendamiento que queda, estructura. El número
+   que importa es cuánto falta de cada uno —presupuesto menos lo ya
+   gastado—, no sólo cuánto se cargó: es el que sirve para decidir. */
+function bloquePresupuestos(pres){
+  var pend=presupuestoPendiente(E.presupuestos||[], E.gastos||[], campActiva);
+  var filas=pres.slice().sort(function(a,b){
+    return CATEGORIAS_GASTO.indexOf(a.categoria)-CATEGORIAS_GASTO.indexOf(b.categoria);
+  });
+  return '<div class="bloque"><div class="bloque-cab"><h2>Presupuesto</h2>'+
+    '<div class="aclara">Cuánto falta gastar en cada categoría</div></div>'+
+    (filas.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th>Categoría</th>'+
+      '<th class="num">Presupuestado</th><th class="num col-opcional">Gastado</th>'+
+      '<th class="num">Falta</th><th class="der">Acciones</th></tr></thead><tbody>'+
+      filas.map(function(p){
+        var presUsd=importeUSD(p);
+        var gastado=E.gastos.filter(function(g){return g.campaniaId===campActiva&&g.categoria===p.categoria;})
+                             .reduce(function(a,g){return a+importeGasto(g);},0);
+        var falta=pend.porCategoria[p.categoria]||0;
+        return '<tr><td style="font-weight:600">'+esc(p.categoria)+'</td>'+
+          '<td class="num">'+nf(presUsd)+'</td>'+
+          '<td class="num col-opcional">'+nf(gastado)+'</td>'+
+          '<td class="num" style="font-weight:700;color:'+(falta>0?"var(--ok)":"var(--tierra-3)")+'">'+nf(falta)+'</td>'+
+          '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoPresupuesto" data-arg="'+p.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarPresupuesto" data-arg="'+p.id+'">×</button></span></td></tr>';
+      }).join("")+'</tbody></table></div>'+
+      '<p class="aviso bueno" style="margin:0 16px 16px">Falta gastar '+nf(pend.total)+' USD en total.</p>'
+     :'<div class="bloque-cuerpo"><p class="vacio">Sin presupuesto cargado todavía. Cargá lo que no sale de '+
+      'ninguna orden de trabajo: cosecha, flete, el arrendamiento que queda, estructura.<br><br>'+
+      '<button class="btn" data-a="nuevoPresupuesto">+ Cargar presupuesto</button></p></div>')+'</div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
   var cab='<div class="cabecera"><div><h1>Finanzas y Contabilidad</h1>'+
     '<div class="sub">Ventas, gastos, resultado y el plan de cuentas de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
     '<div class="cabecera-acc"><button class="btn sec" data-a="nuevaCuenta">+ Cuenta</button>'+
     '<button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
+    '<button class="btn sec" data-a="nuevoPresupuesto">+ Presupuesto</button>'+
     '<button class="btn sec" data-a="nuevoPrecioForward">+ Precio forward</button>'+
     '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
 
@@ -4488,13 +4579,14 @@ function vistaFinanzas(){
                      .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
   var gastos=E.gastos.filter(function(g){return g.campaniaId===campActiva;})
                      .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
+  var presupuestos=(E.presupuestos||[]).filter(function(p){return p.campaniaId===campActiva;});
   /* los precios forward no son por campaña: el mes de entrega puede caer en
      cualquiera, así que se listan todos los que haya cargados */
   var preciosForward=(E.preciosForward||[]).slice()
                      .sort(function(a,b){return (b.fechaCarga||"").localeCompare(a.fechaCarga||"");});
 
-  if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length)
-    return cab+bloqueCuentas()+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
+  if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length && !presupuestos.length)
+    return cab+bloquePresupuestos(presupuestos)+bloqueCuentas()+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
       'Registrá las ventas de grano y los gastos que no son insumos —contratistas, fletes, arrendamiento— '+
       'y acá vas a ver el resultado por lote y por cultivo.<br><br>'+
       '<button class="btn" data-a="nuevaVenta">+ Registrar una venta</button></p></div>';
@@ -4628,7 +4720,7 @@ function vistaFinanzas(){
       }).join("")+'</tbody></table></div>'
      :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloqueCuentas();
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloquePresupuestos(presupuestos)+bloqueCuentas();
 }
 
 function vistaClima(){
