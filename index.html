@@ -694,6 +694,15 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
 /* ============================================================
    1 · CATÁLOGOS
    ============================================================ */
+var MESES  = ["JUL","AGO","SEP","OCT","NOV","DIC","ENE","FEB","MAR","ABR","MAY","JUN"];
+/* === modelo:inicio === */
+/* El catálogo de cultivos vive adentro del bloque del modelo —no se
+   duplica, se trasladó— porque `recibo` (la humedad de recibo de cada
+   especie) es lo que convierte los kilos de la carta de porte en kilos
+   secos, y esa cuenta es la base de la producción de todo escenario.
+   Las declaraciones de función y las var se hoistean en todo el
+   <script>, así que los usos de CULTIVOS en las vistas siguen viendo
+   la misma (y única) definición. */
 var CULTIVOS = {
   maiz_t:  {nom:"Maíz temprano", color:"var(--c-maiz-t)",  recibo:14.5},
   maiz_d:  {nom:"Maíz tardío",   color:"var(--c-maiz-d)",  recibo:14.5},
@@ -706,8 +715,7 @@ var CULTIVOS = {
   alfalfa: {nom:"Alfalfa",       color:"var(--c-alfalfa)", recibo:0},
   vicia:   {nom:"Vicia (servicio)", color:"var(--c-vicia)",recibo:0}
 };
-var MESES  = ["JUL","AGO","SEP","OCT","NOV","DIC","ENE","FEB","MAR","ABR","MAY","JUN"];
-/* === modelo:inicio === */
+
 var NORMAL = [28,35,62,98,105,118,125,122,130,92,55,32];
 var DIAS   = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
 var DIAS_C = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
@@ -1724,6 +1732,539 @@ function impedimentoBorrarCuenta(cuentas, gastos, ventas, insumos, movimientos, 
   }
   return "hay "+partes.slice(0,-1).join(", ")+" y "+partes[partes.length-1]+" imputados";
 }
+
+/* num() vivía más abajo en el archivo, fuera de este bloque, y el arnés de
+   tests sólo evalúa lo que hay entre modelo:inicio y modelo:fin. Se traslada
+   acá adentro —no se duplica— porque las declaraciones de función se
+   hoistean en todo el <script>, así que los otros usos de num() en el resto
+   del archivo siguen viendo la misma (y única) definición. */
+function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
+/* Todo se lleva a dólares al tipo de cambio del día de la operación. Vivía
+   adentro de importeGasto, mezclada con la lectura de un gasto en particular;
+   se saca a una función pura porque también la necesitan las ventas y el
+   presupuesto. importeGasto/importeVenta, fuera de este bloque, la usan. */
+function importeUSD(fila){
+  if(fila.moneda==="ARS") return num(fila.tipoCambio)>0 ? num(fila.monto)/num(fila.tipoCambio) : 0;
+  return num(fila.monto);
+}
+/* La primera capa del costo que falta, y la única que no hay que cargar: las
+   órdenes programadas ya tienen su mezcla con dosis por hectárea. Las
+   completadas NO se cuentan acá — su costo ya está asentado en movimientos y
+   lo suma costoInsumosDe. Contarlas dos veces inflaría el costo al doble. */
+function costoPendienteDe(clId, ordenes, ordenInsumos, insumos){
+  var abiertas = {}, hay = false;
+  ordenes.forEach(function(o){
+    if(o.cultivoLoteId === clId && o.estado !== "completada"){
+      abiertas[o.id] = num(o.superficie); hay = true;
+    }
+  });
+  if(!hay) return 0;
+  var precios = {};
+  insumos.forEach(function(i){ precios[i.id] = i.precio; });
+  var total = 0, falta = false;
+  ordenInsumos.forEach(function(oi){
+    if(abiertas[oi.ordenId] == null) return;
+    var p = precios[oi.insumoId];
+    if(p == null){ falta = true; return; }
+    total += num(oi.dosisHa) * abiertas[oi.ordenId] * num(p);
+  });
+  /* Un insumo sin precio no vale cero: vale "no sé". */
+  return falta ? null : Math.round(total * 100) / 100;
+}
+/* La segunda capa del costo que falta, y la que no sale de ninguna orden de
+   trabajo: cosecha, flete, el arrendamiento que queda, estructura. El
+   presupuesto es lo que se piensa gastar en total en esa categoría, así que
+   lo que falta es el presupuesto menos lo ya gastado. Nunca negativo:
+   haberse pasado del presupuesto no genera un ingreso. */
+function presupuestoPendiente(presupuestos, gastos, campaniaId){
+  var gastado = {};
+  gastos.forEach(function(g){
+    if(g.campaniaId !== campaniaId) return;
+    gastado[g.categoria] = (gastado[g.categoria] || 0) + importeUSD(g);
+  });
+  var por = {}, total = 0;
+  presupuestos.forEach(function(p){
+    if(p.campaniaId !== campaniaId) return;
+    var falta = importeUSD(p) - (gastado[p.categoria] || 0);
+    if(falta < 0) falta = 0;
+    por[p.categoria] = Math.round(falta * 100) / 100;
+    total += por[p.categoria];
+  });
+  return { porCategoria: por, total: Math.round(total * 100) / 100 };
+}
+/* La tercera capa de la mirada financiera: sin fecha de pago o de cobro se
+   puede saber si la campaña da, pero no si va a haber plata en marzo. Los
+   plazos son criterio propio de la zona y están pendientes de validación por
+   un contador, igual que KY/KC y el plan de cuentas (ver docs/finanzas.md).
+   El productor los pisa en cada gasto o venta, y puede cambiar estos valores. */
+var PLAZOS_POR_DEFECTO = {
+  gasto: {
+    "Labores de terceros":    30,
+    "Cosecha":                30,
+    "Flete":                  30,
+    "Arrendamiento":          90,
+    "Honorarios":             30,
+    "Estructura":              0,
+    "Impuestos y comisiones":  0,
+    "Otros":                  30
+  },
+  venta: 30,
+  insumo: 90
+};
+
+function sumarDias(iso, dias){
+  if(!iso) return null;
+  var t = Date.parse(iso + "T12:00:00Z");
+  if(isNaN(t)) return null;
+  return new Date(t + dias * 864e5).toISOString().slice(0, 10);
+}
+
+function fechaPagoDe(g){
+  if(!g || !g.fecha) return null;
+  var d = (g.diasPago != null) ? g.diasPago
+        : (PLAZOS_POR_DEFECTO.gasto[g.categoria] != null
+             ? PLAZOS_POR_DEFECTO.gasto[g.categoria] : 30);
+  return sumarDias(g.fecha, d);
+}
+
+function fechaCobroDe(v){
+  if(!v) return null;
+  var base = v.fechaEntrega || v.fecha;
+  if(!base) return null;
+  var d = (v.diasCobro != null) ? v.diasCobro : PLAZOS_POR_DEFECTO.venta;
+  return sumarDias(base, d);
+}
+
+/* El costo de insumos no es un gasto: sale del movimiento que asienta el cierre
+   de la orden. La fecha de pago se cuenta desde ese cierre. Sin esto, el
+   componente más pesado del costo no tendría fecha y la curva financiera
+   mentiría justo donde más importa. */
+function fechaPagoInsumo(movimiento, orden){
+  var base = (orden && orden.fechaCierre) || (movimiento && movimiento.fecha);
+  if(!base) return null;
+  var d = (movimiento && movimiento.diasPago != null)
+            ? movimiento.diasPago : PLAZOS_POR_DEFECTO.insumo;
+  return sumarDias(base, d);
+}
+/* ============================================================
+   EL ESCENARIO
+   La pieza central: la estructura sobre la que corren todos los
+   indicadores y las dos miradas —la económica, devengada, y la
+   financiera, de flujo de fondos—. Se arma de tres maneras y las
+   tres devuelven exactamente la misma forma:
+
+     { campaniaId, cultivos:[], costos:[], cobros:[],
+       proyectado:boolean, incierto:boolean }
+
+   NINGUNA de las tres lee E: reciben las colecciones por
+   argumento. Es lo que hace que "verlo proyectado" salga gratis
+   —el mismo indicador sobre otro escenario— y que la simulación
+   de campañas sea después conectar una pantalla al mismo motor
+   en vez de reescribirlo.
+
+   `incierto` se prende en cuanto un componente vino en null: un
+   costo pendiente sin precio de insumo, un ingreso que no se
+   puede repartir entre lotes, una fecha de pago o de cobro que
+   no se pudo calcular. Es la señal de que el escenario no
+   sostiene un número firme, y los indicadores la van a usar para
+   decir "todavía no sé" en vez de dar una cifra. No significa
+   ninguna otra cosa: un cultivo sin ventas ingresa cero de
+   verdad, y eso no vuelve incierto a nada.
+   ============================================================ */
+
+function nuevoEscenario(campaniaId, proyectado){
+  return { campaniaId:(campaniaId == null ? null : campaniaId),
+           cultivos:[], costos:[], cobros:[],
+           proyectado:!!proyectado,
+           inciertoEconomico:false, inciertoFinanciero:false, incierto:false };
+}
+
+/* Un solo boolean confundía tres fallas que ablandan cosas distintas: un
+   monto desconocido ablanda la mirada económica —¿la campaña da o no da?— y
+   una fecha desconocida ablanda sólo la curva financiera —¿voy a tener plata
+   en marzo?—. Con los dos juntos, un gasto sin fecha de pago despachaba en
+   "todavía no sé" un resultado de campaña perfectamente firme. `incierto`
+   queda como la suma de las dos, para quien no necesite distinguirlas. */
+function ablandar(e, economico, financiero){
+  if(economico) e.inciertoEconomico = true;
+  if(financiero) e.inciertoFinanciero = true;
+  e.incierto = e.inciertoEconomico || e.inciertoFinanciero;
+}
+
+/* Las tres altas normalizan la fila a la forma exacta del escenario y son el
+   único lugar donde se prende `incierto`: así ninguna rama puede meter un
+   null y olvidarse de declararlo. */
+function agregarCultivo(e, x){
+  /* Las dos superficies van juntas y elige el consumidor. El escenario
+     llevaba sólo la sembrada, y economiaCampania usa la cosechada cuando la
+     hay: difieren en 5 de los 15 lotes de la campaña cerrada, hasta 7,6 %, y
+     de ahí salen los dólares por hectárea. Que sea decisión explícita de
+     quien calcula y no un descuido de quien provee. */
+  var f = { cultivo:(x.cultivo == null ? null : x.cultivo),
+            cultivoLoteId:(x.cultivoLoteId == null ? null : x.cultivoLoteId),
+            loteId:(x.loteId == null ? null : x.loteId),
+            haSembrada:num(x.haSembrada), haCosechada:num(x.haCosechada),
+            kg:num(x.kg),
+            kgEsperados:(x.kgEsperados == null ? null : num(x.kgEsperados)),
+            precioUSDt:(x.precioUSDt == null ? null : num(x.precioUSDt)),
+            precioEstimado:!!x.precioEstimado,
+            ingresoUSD:(x.ingresoUSD == null ? null : num(x.ingresoUSD)) };
+  /* precioUSDt en null no alcanza para volver incierto el escenario: un
+     cultivo que todavía no se vendió ni tiene forward ingresa cero, y cero
+     es la respuesta correcta hasta que se venda. El que no se puede sostener
+     es el ingreso. */
+  ablandar(e, f.ingresoUSD == null, false);
+  e.cultivos.push(f);
+  return f;
+}
+
+function agregarCosto(e, x){
+  var f = { cultivoLoteId:(x.cultivoLoteId == null ? null : x.cultivoLoteId),
+            categoria:(x.categoria == null ? "Otros" : x.categoria),
+            cuenta:(x.cuenta == null ? null : x.cuenta),
+            montoUSD:(x.montoUSD == null ? null : num(x.montoUSD)),
+            fechaPago:(x.fechaPago == null ? null : x.fechaPago) };
+  ablandar(e, f.montoUSD == null, f.fechaPago == null);
+  e.costos.push(f);
+  return f;
+}
+
+function agregarCobro(e, x){
+  var f = { cultivo:(x.cultivo == null ? null : x.cultivo),
+            montoUSD:(x.montoUSD == null ? null : num(x.montoUSD)),
+            fechaCobro:(x.fechaCobro == null ? null : x.fechaCobro) };
+  ablandar(e, f.montoUSD == null, f.fechaCobro == null);
+  e.cobros.push(f);
+  return f;
+}
+
+/* Los kilos secos de un cultivo-lote, sin leer E: los tickets y la humedad
+   de recibo entran por argumento. Es el cuerpo de rendimiento(), que ahora
+   sólo le pasa E.tickets y el recibo del catálogo. Con recibo desconocido no
+   se descuenta humedad —antes reventaba— porque inventar un descuento sobre
+   los kilos de la carta de porte es peor que no descontarlos. */
+function kgSecos(kg, hum, rec){
+  if(rec == null || !hum || hum <= rec) return kg;
+  return kg * (100 - hum) / (100 - rec);
+}
+
+function rendimientoDe(cl, tickets, recibo){
+  var ts = (tickets || []).filter(function(t){ return t.cultivoLoteId === cl.id; });
+  if(ts.length && num(cl.haCosechada) > 0){
+    var kg = ts.reduce(function(a, t){ return a + kgSecos(t.kgNetos, t.humedad, recibo); }, 0);
+    return { kg:kg, rinde:kg / num(cl.haCosechada), fuente:"balanza" };
+  }
+  if(num(cl.rindeDeclarado) > 0 && num(cl.haCosechada) > 0)
+    return { kg:num(cl.rindeDeclarado) * num(cl.haCosechada),
+             rinde:num(cl.rindeDeclarado), fuente:"declarado" };
+  return { kg:0, rinde:0, fuente:"sin dato" };
+}
+
+/* Ventas de la campaña agrupadas por cultivo, en toneladas y en dólares. Es
+   ventasPorCultivo() sin E, y tiene que dar exactamente lo mismo: de acá
+   sale el ingreso que Finanzas ya muestra hoy. */
+function ventasDeCampania(ventas, campaniaId){
+  var m = {};
+  (ventas || []).forEach(function(v){
+    if(v.campaniaId !== campaniaId) return;
+    if(!m[v.cultivo]) m[v.cultivo] = { tn:0, usd:0, n:0 };
+    m[v.cultivo].tn  += num(v.toneladas);
+    m[v.cultivo].usd += importeUSD({ monto:num(v.toneladas) * num(v.precioTn),
+                                     moneda:v.moneda, tipoCambio:v.tipoCambio });
+    m[v.cultivo].n++;
+  });
+  return m;
+}
+
+/* Lo que la Sementera le aporta al escenario proyectado: kilos esperados por
+   cultivo-lote y precio forward por cultivo. Recibe el objeto que devuelve
+   sementeraDeCampania() tal cual, sin recalcular nada. */
+function kgEsperadosDeSementera(sementera){
+  var m = {};
+  (((sementera || {}).filas) || []).forEach(function(f){
+    if(f && f.tn && f.tn.esperada != null) m[f.id] = f.tn.esperada * 1000;
+  });
+  return m;
+}
+function preciosDeSementera(sementera){
+  var m = {};
+  (((sementera || {}).cultivos) || []).forEach(function(g){
+    if(g && g.precio != null) m[g.cultivo] = g.precio;
+  });
+  return m;
+}
+/* El mes de entrega lo calcula sementeraDeCampania en el mismo objeto y al
+   lado del precio, y fechaCobroDe ya prefiere la entrega sobre la fecha de
+   la venta: con eso alcanza para que el proyectado ubique en el calendario
+   el cobro del grano que todavía no se vendió. No hace falta ninguna
+   columna nueva. */
+function mesesEntregaDeSementera(sementera){
+  var m = {};
+  (((sementera || {}).cultivos) || []).forEach(function(g){
+    if(g && g.mesEntrega != null) m[g.cultivo] = g.mesEntrega;
+  });
+  return m;
+}
+
+function presupuestoDeCategoria(presupuestos, campaniaId, categoria){
+  var f = (presupuestos || []).filter(function(p){
+    return p.campaniaId === campaniaId && p.categoria === categoria;
+  });
+  return f.length ? f[0] : null;
+}
+
+/* El cuerpo común del real y del proyectado. El real cuenta sólo lo
+   ocurrido: producción de cartas de porte, ventas hechas, gastos hechos y el
+   costo de insumos ya asentado en movimientos. El proyectado suma encima el
+   costo de los trabajos abiertos, el presupuesto que falta gastar y —si
+   recibe la sementera— los kilos esperados con su valuación. */
+function armarEscenario(datos, campaniaId, proyectado, sementera){
+  var d = datos || {};
+  var cultivoLotes = d.cultivoLotes || [], tickets = d.tickets || [],
+      gastos = d.gastos || [], ventas = d.ventas || [],
+      ordenes = d.ordenes || [], ordenInsumos = d.ordenInsumos || [],
+      insumos = d.insumos || [], movimientos = d.movimientos || [],
+      presupuestos = d.presupuestos || [];
+
+  var e = nuevoEscenario(campaniaId, proyectado);
+  var vend = ventasDeCampania(ventas, campaniaId);
+  var esperados = kgEsperadosDeSementera(sementera);
+  var precios = preciosDeSementera(sementera);
+  var insumoPorId = {};
+  insumos.forEach(function(i){ insumoPorId[i.id] = i; });
+
+  /* ---------- 1 · los cultivos, con su producción ---------- */
+  var filas = cultivoLotes.filter(function(cl){
+    return cl.campaniaId === campaniaId;
+  }).map(function(cl){
+    var kg = rendimientoDe(cl, tickets, (CULTIVOS[cl.cultivo] || {}).recibo).kg;
+    var kgEsp = null;
+    if(proyectado){
+      /* Un lote ya cosechado no se proyecta: lo que entró por balanza es
+         mejor dato que cualquier modelo. Por eso el escenario proyectado
+         converge al real a medida que la campaña se cierra, que es lo que
+         hace que contrastarlos signifique algo. */
+      kgEsp = kg > 0 ? kg : (esperados[cl.id] != null ? esperados[cl.id] : null);
+    }
+    return { cl:cl, cultivo:cl.cultivo, kg:kg, kgEsperados:kgEsp };
+  });
+
+  /* ---------- 2 · el ingreso, repartido por lote ----------
+     La venta va por cultivo y campaña —el grano de varios lotes viaja
+     junto— y el ingreso se reparte según cuántos kilos puso cada lote. Es
+     la atribución que Finanzas ya usa hoy, y la que la proyección no puede
+     perder: sin ella habría resultado proyectado a nivel campaña pero no
+     por lote, y se perderían los dólares por hectárea y el margen por lote,
+     que son las formas de evaluarlo que importan. */
+  var kgPorCultivo = {}, espPorCultivo = {};
+  filas.forEach(function(f){
+    kgPorCultivo[f.cultivo] = (kgPorCultivo[f.cultivo] || 0) + f.kg;
+    if(f.kgEsperados != null)
+      espPorCultivo[f.cultivo] = (espPorCultivo[f.cultivo] || 0) + f.kgEsperados;
+  });
+
+  /* Lo que falta vender de cada cultivo y a qué precio se valúa. Se calcula
+     una sola vez y lo usan las dos miradas —el ingreso proyectado de cada
+     lote y el cobro esperado de más abajo—, para que no puedan discrepar:
+     la spec pide que la curva financiera del ciclo completo dé el resultado
+     económico, y ésa es la única forma de garantizarlo. */
+  var porVender = {}, mesesEntrega = mesesEntregaDeSementera(sementera), k;
+  if(proyectado) for(k in espPorCultivo) if(Object.prototype.hasOwnProperty.call(espPorCultivo, k)){
+    var vk = vend[k] || { tn:0, usd:0 };
+    var realizadoK = vk.tn > 0 ? vk.usd / vk.tn : null;
+    var precioK = (precios[k] != null) ? precios[k] : realizadoK;
+    /* Vender forward más de lo que se espera cosechar es normal acá: lo que
+       falta se frena en cero y nunca descuenta ingreso. */
+    var tnK = espPorCultivo[k] / 1000 - vk.tn;
+    if(tnK < 0) tnK = 0;
+    porVender[k] = { tn:tnK, precio:precioK, mesEntrega:(mesesEntrega[k] || null),
+      /* Sin forward, lo que falta vender se valúa al precio ya realizado en
+         esta misma campaña. Es evidencia de mercado, no un invento, pero es
+         una extrapolación y no puede salir con la misma cara que un precio
+         cerrado: se marca, igual que rindeAncla marca el ancla propia y
+         percentilesDeVentana marca la estimación gruesa. */
+      estimado:(precios[k] == null && realizadoK != null && tnK > 0) };
+  }
+
+  filas.forEach(function(f){
+    var v = vend[f.cultivo] || { tn:0, usd:0 };
+    var realizado = v.tn > 0 ? v.usd / v.tn : null;
+    var precio = realizado, estimado = false, ingreso = null;
+
+    if(!proyectado){
+      var totalKg = kgPorCultivo[f.cultivo] || 0;
+      /* Sin producción cargada no hay con qué repartir la venta entre los
+         lotes. Cero diría "este lote no ingresó nada"; lo que pasa es que
+         todavía no se sabe cuánto le toca. La plata igual está entera en
+         los cobros: son dos cuentas distintas sobre el mismo escenario. */
+      if(totalKg > 0) ingreso = v.usd * (f.kg / totalKg);
+      else if(v.usd === 0) ingreso = 0;
+    } else {
+      var pv = porVender[f.cultivo], totalEsp = espPorCultivo[f.cultivo];
+      if(pv){ precio = pv.precio; estimado = pv.estimado; }
+      /* Un lote todavía sin sembrar no se puede valuar, pero tampoco arrastra
+         a sus hermanos: el ingreso del cultivo se reparte entre los lotes que
+         SÍ tienen kilos esperados y sólo el que falta queda en null. Cerrar
+         la rama del cultivo entero dejaba ilegible una campaña en pleno
+         armado, que es el estado normal durante meses.
+         Lo ya vendido se cuenta al precio que se cerró, no al forward:
+         revaluar grano vendido cambiaría un ingreso que ya está fijo. */
+      if(f.kgEsperados != null && pv && totalEsp > 0){
+        if(pv.tn === 0) ingreso = v.usd * (f.kgEsperados / totalEsp);
+        else if(pv.precio != null) ingreso = (v.usd + pv.tn * pv.precio) * (f.kgEsperados / totalEsp);
+      }
+    }
+
+    agregarCultivo(e, { cultivo:f.cultivo, cultivoLoteId:f.cl.id, loteId:f.cl.loteId,
+      haSembrada:f.cl.haSembrada, haCosechada:f.cl.haCosechada,
+      kg:f.kg, kgEsperados:f.kgEsperados,
+      precioUSDt:precio, precioEstimado:estimado, ingresoUSD:ingreso });
+  });
+
+  /* ---------- 3 · el costo de los insumos ya aplicados ----------
+     No es un gasto: sale del movimiento que asienta el cierre de la orden, y
+     de ahí también sale su fecha de pago. */
+  var mias = {};
+  filas.forEach(function(f){ mias[f.cl.id] = 1; });
+  var ordenDelEscenario = {};
+  ordenes.forEach(function(o){ if(mias[o.cultivoLoteId]) ordenDelEscenario[o.id] = o; });
+
+  movimientos.forEach(function(m){
+    if(m.tipo !== "aplicacion" || !m.ordenId) return;
+    var o = ordenDelEscenario[m.ordenId];
+    if(!o) return;
+    var ins = insumoPorId[m.insumoId] || null;
+    var pu = (m.precioUnitario != null) ? num(m.precioUnitario)
+           : ((ins && ins.precio != null) ? num(ins.precio) : null);
+    agregarCosto(e, { cultivoLoteId:o.cultivoLoteId,
+      categoria:((ins && ins.tipo) || "Insumos"),
+      cuenta:cuentaDeInsumo(ins),
+      /* Un insumo sin precio no vale cero: vale "no sé", igual que en
+         costoPendienteDe. */
+      montoUSD:(pu == null ? null : Math.abs(num(m.cantidad)) * pu),
+      fechaPago:fechaPagoInsumo(m, o) });
+  });
+
+  /* ---------- 4 · los gastos de la campaña ---------- */
+  gastos.forEach(function(g){
+    if(g.campaniaId !== campaniaId) return;
+    agregarCosto(e, { cultivoLoteId:g.cultivoLoteId, categoria:g.categoria,
+      cuenta:cuentaDeGasto(g), montoUSD:importeUSD(g), fechaPago:fechaPagoDe(g) });
+  });
+
+  /* ---------- 5 · los cobros ---------- */
+  ventas.forEach(function(v){
+    if(v.campaniaId !== campaniaId) return;
+    agregarCobro(e, { cultivo:v.cultivo,
+      montoUSD:importeUSD({ monto:num(v.toneladas) * num(v.precioTn),
+                            moneda:v.moneda, tipoCambio:v.tipoCambio }),
+      fechaCobro:fechaCobroDe(v) });
+  });
+
+  if(!proyectado) return e;
+
+  /* ---------- 6 · primera capa del costo que falta ----------
+     Los trabajos programados y todavía no completados ya tienen su mezcla
+     con dosis por hectárea, así que su costo es calculable y se atribuye a
+     su lote. Se emite una fila por insumo pendiente —no una por orden— para
+     que cada una lleve su propia cuenta contable, y el monto lo calcula
+     costoPendienteDe sobre esa sola línea: la suma de las filas es
+     exactamente el costo pendiente del lote, y un insumo sin precio deja en
+     null sólo su fila en vez de tapar el precio de los demás. */
+  ordenes.forEach(function(o){
+    if(!mias[o.cultivoLoteId] || o.estado === "completada") return;
+    ordenInsumos.forEach(function(oi){
+      if(oi.ordenId !== o.id) return;
+      var ins = insumoPorId[oi.insumoId] || null;
+      agregarCosto(e, { cultivoLoteId:o.cultivoLoteId,
+        categoria:((ins && ins.tipo) || "Insumos"),
+        cuenta:cuentaDeInsumo(ins),
+        montoUSD:costoPendienteDe(o.cultivoLoteId, [o], [oi], insumos),
+        /* La orden abierta todavía no cerró, así que el plazo se cuenta
+           desde la fecha en que está planificada. */
+        fechaPago:fechaPagoInsumo({ fecha:o.fechaPlan }, o) });
+    });
+  });
+
+  /* ---------- 7 · segunda capa: el presupuesto que falta gastar ----------
+     Es de campaña y no de lote —cosecha, flete, el arrendamiento que queda,
+     estructura— así que va con cultivoLoteId null: prorratearlo por
+     superficie es decisión del indicador, no del escenario.
+     La fecha y los días de pago son columnas propias de la tabla (migración
+     0015) y las carga el formulario. Si igual vienen vacías, la fila queda
+     sin fecha de pago y se ablanda sólo la curva financiera: inventarle un
+     mes es exactamente lo que la convención del null existe para impedir. */
+  var pend = presupuestoPendiente(presupuestos, gastos, campaniaId);
+  var cat;
+  for(cat in pend.porCategoria) if(Object.prototype.hasOwnProperty.call(pend.porCategoria, cat)){
+    if(!(pend.porCategoria[cat] > 0)) continue;
+    var p = presupuestoDeCategoria(presupuestos, campaniaId, cat);
+    agregarCosto(e, { cultivoLoteId:null, categoria:cat,
+      cuenta:(CUENTA_DE_CATEGORIA[cat] || "5.2.05"),
+      montoUSD:pend.porCategoria[cat],
+      fechaPago:fechaPagoDe({ fecha:(p ? p.fecha : null), categoria:cat,
+                              diasPago:(p ? p.diasPago : null) }) });
+  }
+
+  /* ---------- 8 · el cobro de lo que falta vender ----------
+     La otra mitad de la mirada financiera del proyectado. El mes de entrega
+     sale de la Sementera, que ya lo calcula al lado del precio forward, y
+     fechaCobroDe le suma el plazo de cobro. Sale del mismo `porVender` que
+     alimentó el ingreso proyectado, así que las dos miradas cierran entre sí
+     por construcción. */
+  var kv;
+  for(kv in porVender) if(Object.prototype.hasOwnProperty.call(porVender, kv)){
+    if(!(porVender[kv].tn > 0)) continue;
+    agregarCobro(e, { cultivo:kv,
+      montoUSD:(porVender[kv].precio == null ? null : porVender[kv].tn * porVender[kv].precio),
+      fechaCobro:(porVender[kv].mesEntrega
+                    ? fechaCobroDe({ fechaEntrega:porVender[kv].mesEntrega }) : null) });
+  }
+
+  return e;
+}
+
+/* Lo que efectivamente pasó hasta hoy. */
+function escenarioReal(datos, campaniaId){
+  return armarEscenario(datos, campaniaId, false, null);
+}
+
+/* Lo que pasó más lo que falta. `sementera` es el objeto que devuelve
+   sementeraDeCampania(): de ahí salen los kilos esperados por lote y el
+   precio forward por cultivo. Sin ella el proyectado suma los costos que
+   faltan pero no proyecta producción, y lo dice quedando incierto. */
+function escenarioProyectado(datos, campaniaId, sementera){
+  return armarEscenario(datos, campaniaId, true, sementera || null);
+}
+
+/* Una campaña que no existe: recibe todo armado y no lee nada. Es el
+   constructor que la pantalla de simulación va a usar sin que haya que
+   tocar un solo indicador. */
+function escenarioSimulado(config){
+  var c = config || {};
+  var e = nuevoEscenario(null, true);
+  (c.cultivos || []).forEach(function(x){
+    var kgEsp = (x.kgEsperados == null ? null : num(x.kgEsperados));
+    var precio = (x.precioUSDt == null ? null : num(x.precioUSDt));
+    var ingreso = x.ingresoUSD;
+    /* El ingreso se puede dar hecho; si no viene, sale de los kilos
+       esperados por el precio, y sin alguno de los dos queda en null. */
+    if(ingreso === undefined)
+      ingreso = (kgEsp != null && precio != null) ? (kgEsp / 1000) * precio : null;
+    /* En una campaña inventada se cosecha lo que se siembra salvo que se
+       diga otra cosa: sin eso, los dólares por hectárea de una simulación
+       dividirían por cero. `ha` a secas se sigue aceptando como sinónimo de
+       la superficie sembrada. */
+    var haSem = num(x.haSembrada != null ? x.haSembrada : x.ha);
+    var haCos = num(x.haCosechada != null ? x.haCosechada : haSem);
+    agregarCultivo(e, { cultivo:x.cultivo, cultivoLoteId:x.cultivoLoteId, loteId:x.loteId,
+      haSembrada:haSem, haCosechada:haCos, kg:x.kg, kgEsperados:kgEsp,
+      precioUSDt:precio, precioEstimado:x.precioEstimado, ingresoUSD:ingreso });
+  });
+  (c.costos || []).forEach(function(x){ agregarCosto(e, x); });
+  (c.cobros || []).forEach(function(x){ agregarCobro(e, x); });
+  return e;
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -2086,11 +2627,11 @@ var TABLAS = {
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
   telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
-  cuentas:"cuentas"
+  cuentas:"cuentas", presupuestos:"presupuestos"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[]};
+           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[],presupuestos:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -2564,17 +3105,13 @@ function ventanaDe(tipo, i, dias){
 /* ============================================================
    5 · CÁLCULO PRODUCTIVO
    ============================================================ */
-function kgSecos(kg,hum,rec){ if(!hum||hum<=rec) return kg; return kg*(100-hum)/(100-rec); }
 function ticketsDe(id){ return E.tickets.filter(function(t){return t.cultivoLoteId===id;}); }
+/* El cuerpo se mudó a rendimientoDe(), adentro del bloque del modelo: es la
+   misma cuenta, pero sin leer E, porque de ella sale la producción de todo
+   escenario y el reparto del ingreso entre lotes. Acá queda el envoltorio
+   que le acerca los tickets y la humedad de recibo del catálogo. */
 function rendimiento(cl){
-  var cul=CULTIVOS[cl.cultivo], ts=ticketsDe(cl.id);
-  if(ts.length && cl.haCosechada>0){
-    var kg=ts.reduce(function(a,t){return a+kgSecos(t.kgNetos,t.humedad,cul.recibo);},0);
-    return {kg:kg, rinde:kg/cl.haCosechada, fuente:"balanza"};
-  }
-  if(cl.rindeDeclarado>0 && cl.haCosechada>0)
-    return {kg:cl.rindeDeclarado*cl.haCosechada, rinde:cl.rindeDeclarado, fuente:"declarado"};
-  return {kg:0, rinde:0, fuente:"sin dato"};
+  return rendimientoDe(cl, E.tickets, (CULTIVOS[cl.cultivo]||{}).recibo);
 }
 function lote(id){ return E.lotes.filter(function(l){return l.id===id;})[0]; }
 function estab(id){ return E.establecimientos.filter(function(e){return e.id===id;})[0]; }
@@ -2589,7 +3126,6 @@ function nombreEstab(id){ var e=estabDeLote(id); return e?e.nombre:""; }
 /* ---------- stock: la existencia sale de los movimientos ----------
    Nunca se guarda un número de stock: se suma el libro. Así el saldo y su
    historia no pueden discrepar, que era el problema de tener las dos cosas. */
-function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
 function movimientosDe(insumoId, estId){
   return E.movimientos.filter(function(m){
     return m.insumoId===insumoId && (!estId||m.establecimientoId===estId);
@@ -2649,12 +3185,8 @@ function ocupacionPadron(cid){
    Todo se lleva a dólares al tipo de cambio del día de la operación.
    Comparar campañas en pesos no dice nada.
    ============================================================ */
-function aUSD(monto, moneda, tc){
-  if(moneda==="ARS") return num(tc)>0 ? num(monto)/num(tc) : 0;
-  return num(monto);
-}
-function importeVenta(v){ return aUSD(num(v.toneladas)*num(v.precioTn), v.moneda, v.tipoCambio); }
-function importeGasto(g){ return aUSD(g.monto, g.moneda, g.tipoCambio); }
+function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
+function importeGasto(g){ return importeUSD(g); }
 
 /* Kilos secos que produjo cada cultivo de la campaña. */
 function produccionPorCultivo(cid){
@@ -3277,7 +3809,7 @@ A.nuevaVenta=function(id){
     nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
     valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
                precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
-               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaExplicita}
+               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaExplicita,diasCobro:V.diasCobro}
             :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaExplicita},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
             {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
@@ -3293,10 +3825,12 @@ A.nuevaVenta=function(id){
             {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
              vacio:"La que corresponde por defecto (Venta de granos)",
              hint:"Se resuelve sola. Elegí una sólo si querés imputar esta venta a otra cuenta."},
+            {k:"diasCobro",label:"Días de cobro",tipo:"number",paso:"1",min:"0",
+             hint:"Vacío usa el plazo habitual de la venta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
       var tn=num(d.toneladas), pu=num(d.precioTn);
-      var usd=aUSD(tn*pu,d.moneda,d.tipoCambio);
+      var usd=importeUSD({monto:tn*pu, moneda:d.moneda, tipoCambio:d.tipoCambio});
       var prod=produccionPorCultivo(campActiva)[d.cultivo];
       var vend=ventasPorCultivo(campActiva)[d.cultivo];
       var producidas=prod?prod.kg/1000:0;
@@ -3325,7 +3859,11 @@ A.nuevaVenta=function(id){
              fechaEntrega:d.fechaEntrega||null,nota:d.nota,
              /* d.cuenta="" es la opción vacía (auto): se persiste null y
                 se resuelve por default al leer, con cuentaDeVenta. */
-             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeVenta(null)):null};
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeVenta(null)):null,
+             /* Mismo criterio que la cuenta: si lo cargado a mano coincide
+                con el plazo habitual, se persiste null y el registro sigue
+                el remapeo futuro de PLAZOS_POR_DEFECTO.venta. */
+             diasCobro:d.diasCobro?cuentaAGuardar(parseInt(d.diasCobro,10),PLAZOS_POR_DEFECTO.venta):null};
       if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
       else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
     }});
@@ -3353,7 +3891,8 @@ A.nuevoGasto=function(id){
   abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
     nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
     valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
-               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaExplicita}
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaExplicita,
+               diasPago:G.diasPago}
             :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaExplicita},
     campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
              opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
@@ -3368,9 +3907,11 @@ A.nuevoGasto=function(id){
             {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
              vacio:"La que corresponde a la categoría",
              hint:"Se resuelve sola según la categoría. Elegí una sólo si querés imputar este gasto a otra cuenta."},
+            {k:"diasPago",label:"Días de pago",tipo:"number",paso:"1",min:"0",
+             hint:"Vacío usa el plazo habitual de la categoría."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
-      var usd=aUSD(d.monto,d.moneda,d.tipoCambio);
+      var usd=importeUSD({monto:d.monto, moneda:d.moneda, tipoCambio:d.tipoCambio});
       var falta=(d.moneda==="ARS"&&!num(d.tipoCambio));
       var cl=d.cultivoLoteId?clDe(d.cultivoLoteId):null;
       var ha=cl?(num(cl.haCosechada)||num(cl.haSembrada)):0;
@@ -3392,7 +3933,12 @@ A.nuevoGasto=function(id){
              /* d.cuenta="" es la opción vacía (auto): se persiste null y
                 se resuelve por default al leer, con la categoría que de
                 verdad quedó elegida en este guardado. */
-             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria})):null};
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria})):null,
+             /* Mismo criterio que la cuenta: si lo cargado a mano coincide
+                con el plazo habitual de la categoría, se persiste null y el
+                registro sigue el remapeo futuro de PLAZOS_POR_DEFECTO. */
+             diasPago:d.diasPago?cuentaAGuardar(parseInt(d.diasPago,10),
+               PLAZOS_POR_DEFECTO.gasto[d.categoria]!=null?PLAZOS_POR_DEFECTO.gasto[d.categoria]:30):null};
       if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
       else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
     }});
@@ -3401,6 +3947,54 @@ A.borrarGasto=function(id){
   var g=E.gastos.filter(function(x){return x.id===id;})[0];
   confirmar("Eliminar gasto",esc(g.categoria)+" de "+nf(g.monto,0)+" "+esc(g.moneda)+" del "+fecha(g.fecha)+".",function(){
     E.gastos=E.gastos.filter(function(x){return x.id!==id;}); marcarBaja("gastos",id); avisar("Gasto eliminado."); });
+};
+
+/* ---------- presupuesto ---------- */
+A.nuevoPresupuesto=function(id){
+  var P=id?E.presupuestos.filter(function(x){return x.id===id;})[0]:null;
+  if(!campActiva){ avisar("Abrí una campaña antes de cargar el presupuesto."); return; }
+  abrirForm({titulo:P?"Editar presupuesto":"Nuevo presupuesto",
+    nota:"Lo que se piensa gastar en total en esa categoría durante esta campaña: cosecha, flete, el arrendamiento que queda, estructura. No sale de ninguna orden de trabajo, así que hay que cargarlo a mano.",
+    valores:P?{categoria:P.categoria,monto:P.monto,moneda:P.moneda,tipoCambio:P.tipoCambio,
+               fecha:P.fecha,diasPago:P.diasPago,nota:P.nota}
+            :{moneda:"USD"},
+    campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
+             opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
+            {k:"monto",label:"Monto",tipo:"number",paso:"0.01",min:"0",req:true},
+            {k:"moneda",label:"Moneda",tipo:"select",req:true,opciones:[{v:"USD",t:"Dólares"},{v:"ARS",t:"Pesos"}]},
+            {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
+             hint:"Pesos por dólar. Sólo si presupuestás en pesos."},
+            /* Sin esta fecha el pago no cae en ningún mes y la curva de saldo
+               no puede responder si va a haber plata en marzo, que es lo
+               único que la mirada financiera existe para responder. */
+            {k:"fecha",label:"Cuándo se compromete",tipo:"date",
+             hint:"Cuándo se contrata o se contrae. Sin esto no entra a la curva de caja."},
+            {k:"diasPago",label:"Días de pago",tipo:"number",paso:"1",min:"0",
+             hint:"Vacío usa el plazo habitual de la categoría."},
+            {k:"nota",label:"Nota",ancho:true,ph:"De dónde sale el número"}],
+    validar:function(d){
+      if(d.moneda==="ARS"&&!(parseFloat(d.tipoCambio)>0)) return {tipoCambio:"Con monto en pesos hace falta el tipo de cambio."};
+      var dup=E.presupuestos.some(function(x){return x.campaniaId===campActiva&&x.categoria===d.categoria&&(!P||x.id!==P.id);});
+      if(dup) return {categoria:"Ya hay un presupuesto de "+d.categoria+" cargado en esta campaña. Editalo en vez de duplicarlo."};
+    },
+    guardar:function(d){
+      var b={campaniaId:campActiva,categoria:d.categoria,monto:parseFloat(d.monto),moneda:d.moneda,
+             tipoCambio:parseFloat(d.tipoCambio)||null,fecha:d.fecha||null,
+             /* Mismo criterio que gastos y ventas: si lo cargado a mano
+                coincide con el plazo habitual de la categoría se persiste
+                null, y el registro sigue el remapeo futuro de
+                PLAZOS_POR_DEFECTO. */
+             diasPago:d.diasPago?cuentaAGuardar(parseInt(d.diasPago,10),
+               PLAZOS_POR_DEFECTO.gasto[d.categoria]!=null?PLAZOS_POR_DEFECTO.gasto[d.categoria]:30):null,
+             nota:d.nota||""};
+      if(P){ Object.keys(b).forEach(function(k){P[k]=b[k];}); marcar("presupuestos",P); avisar("Presupuesto actualizado."); }
+      else { b.id=uid(); E.presupuestos.push(b); marcar("presupuestos",b); avisar("Presupuesto cargado."); }
+    }});
+};
+A.borrarPresupuesto=function(id){
+  var p=E.presupuestos.filter(function(x){return x.id===id;})[0]; if(!p) return;
+  confirmar("Eliminar presupuesto",esc(p.categoria)+" de "+nf(p.monto,0)+" "+esc(p.moneda)+".",function(){
+    E.presupuestos=E.presupuestos.filter(function(x){return x.id!==id;}); marcarBaja("presupuestos",id); avisar("Presupuesto eliminado."); });
 };
 
 /* ---------- plan de cuentas ---------- */
@@ -4445,12 +5039,45 @@ function bloqueCuentas(){
     '<div class="bloque-cuerpo">'+grupos+'</div></div>';
 }
 
+/* La segunda capa del costo que falta, y la que no sale de ninguna orden de
+   trabajo: cosecha, flete, el arrendamiento que queda, estructura. El número
+   que importa es cuánto falta de cada uno —presupuesto menos lo ya
+   gastado—, no sólo cuánto se cargó: es el que sirve para decidir. */
+function bloquePresupuestos(pres){
+  var pend=presupuestoPendiente(E.presupuestos||[], E.gastos||[], campActiva);
+  var filas=pres.slice().sort(function(a,b){
+    return CATEGORIAS_GASTO.indexOf(a.categoria)-CATEGORIAS_GASTO.indexOf(b.categoria);
+  });
+  return '<div class="bloque"><div class="bloque-cab"><h2>Presupuesto</h2>'+
+    '<div class="aclara">Cuánto falta gastar en cada categoría</div></div>'+
+    (filas.length?'<div class="scroll-x"><table class="tabla"><thead><tr><th>Categoría</th>'+
+      '<th class="num">Presupuestado</th><th class="num col-opcional">Gastado</th>'+
+      '<th class="num">Falta</th><th class="der">Acciones</th></tr></thead><tbody>'+
+      filas.map(function(p){
+        var presUsd=importeUSD(p);
+        var gastado=E.gastos.filter(function(g){return g.campaniaId===campActiva&&g.categoria===p.categoria;})
+                             .reduce(function(a,g){return a+importeGasto(g);},0);
+        var falta=pend.porCategoria[p.categoria]||0;
+        return '<tr><td style="font-weight:600">'+esc(p.categoria)+'</td>'+
+          '<td class="num">'+nf(presUsd)+'</td>'+
+          '<td class="num col-opcional">'+nf(gastado)+'</td>'+
+          '<td class="num" style="font-weight:700;color:'+(falta>0?"var(--ok)":"var(--tierra-3)")+'">'+nf(falta)+'</td>'+
+          '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoPresupuesto" data-arg="'+p.id+'">Editar</button>'+
+          '<button class="btn peligro mini" data-a="borrarPresupuesto" data-arg="'+p.id+'">×</button></span></td></tr>';
+      }).join("")+'</tbody></table></div>'+
+      '<p class="aviso bueno" style="margin:0 16px 16px">Falta gastar '+nf(pend.total)+' USD en total.</p>'
+     :'<div class="bloque-cuerpo"><p class="vacio">Sin presupuesto cargado todavía. Cargá lo que no sale de '+
+      'ninguna orden de trabajo: cosecha, flete, el arrendamiento que queda, estructura.<br><br>'+
+      '<button class="btn" data-a="nuevoPresupuesto">+ Cargar presupuesto</button></p></div>')+'</div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
   var cab='<div class="cabecera"><div><h1>Finanzas y Contabilidad</h1>'+
     '<div class="sub">Ventas, gastos, resultado y el plan de cuentas de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
     '<div class="cabecera-acc"><button class="btn sec" data-a="nuevaCuenta">+ Cuenta</button>'+
     '<button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
+    '<button class="btn sec" data-a="nuevoPresupuesto">+ Presupuesto</button>'+
     '<button class="btn sec" data-a="nuevoPrecioForward">+ Precio forward</button>'+
     '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
 
@@ -4458,13 +5085,14 @@ function vistaFinanzas(){
                      .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
   var gastos=E.gastos.filter(function(g){return g.campaniaId===campActiva;})
                      .sort(function(a,b){return (b.fecha||"").localeCompare(a.fecha||"");});
+  var presupuestos=(E.presupuestos||[]).filter(function(p){return p.campaniaId===campActiva;});
   /* los precios forward no son por campaña: el mes de entrega puede caer en
      cualquiera, así que se listan todos los que haya cargados */
   var preciosForward=(E.preciosForward||[]).slice()
                      .sort(function(a,b){return (b.fechaCarga||"").localeCompare(a.fechaCarga||"");});
 
-  if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length)
-    return cab+bloqueCuentas()+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
+  if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length && !presupuestos.length)
+    return cab+bloquePresupuestos(presupuestos)+bloqueCuentas()+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
       'Registrá las ventas de grano y los gastos que no son insumos —contratistas, fletes, arrendamiento— '+
       'y acá vas a ver el resultado por lote y por cultivo.<br><br>'+
       '<button class="btn" data-a="nuevaVenta">+ Registrar una venta</button></p></div>';
@@ -4598,7 +5226,7 @@ function vistaFinanzas(){
       }).join("")+'</tbody></table></div>'
      :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloqueCuentas();
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloquePresupuestos(presupuestos)+bloqueCuentas();
 }
 
 function vistaClima(){

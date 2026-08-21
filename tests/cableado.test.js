@@ -271,3 +271,73 @@ test("cable: A.borrarCuenta permite borrar una cuenta sin insumos aplicados de v
   ctx.__A.borrarCuenta("c1");
   assert.strictEqual(confirmoAlguien, true, "sin nada que la bloquee, tiene que llegar a pedir confirmación");
 });
+
+/* ============================================================
+   Fix ronda 1 de la Task 4, I2: el escenario proyectado leía
+   `p.fecha` de los presupuestos, y esa columna no existía ni en
+   la migración ni en el formulario. Era una rama muerta en
+   producción, verde en los tests porque el test le pasaba la
+   fecha a mano. Acá se ejercita el camino real: lo que el
+   formulario de presupuesto efectivamente persiste.
+   ============================================================ */
+
+function entornoPresupuesto(presupuestosIniciales){
+  var capturado = null;
+  var src = bloqueModelo(HTML) + "\n" +
+    "var A={};\n" +
+    extraerDesde(HTML, "A.nuevoPresupuesto=function(", "A.nuevoPresupuesto") + "\n" +
+    "this.__A = A;";
+  var ctx = {
+    E: { presupuestos: presupuestosIniciales || [], gastos: [] },
+    campActiva: "camp-1",
+    avisar: function(){},
+    hoyISO: function(){ return "2026-08-21"; },
+    uid: function(){ return "id-nuevo"; },
+    marcar: function(){},
+    abrirForm: function(cfg){ capturado = cfg; }
+  };
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+  return { A: ctx.__A, cfg: function(){ return capturado; }, E: ctx.E };
+}
+
+test("cable I2: el formulario de presupuesto pide la fecha de pago", function(){
+  var env = entornoPresupuesto();
+  env.A.nuevoPresupuesto(undefined);
+  var campos = env.cfg().campos.map(function(c){ return c.k; });
+  assert.ok(campos.indexOf("fecha") !== -1,
+    "sin fecha en el formulario, la curva financiera no puede ubicar el pago en ningún mes");
+  assert.ok(campos.indexOf("diasPago") !== -1);
+});
+
+test("cable I2: guardar un presupuesto persiste la fecha, y de ahí sale la fecha de pago del escenario", function(){
+  var env = entornoPresupuesto();
+  env.A.nuevoPresupuesto(undefined);
+  env.cfg().guardar({categoria:"Cosecha", monto:"20000", moneda:"USD", tipoCambio:"",
+                     fecha:"2026-04-01", diasPago:"", nota:""});
+
+  assert.strictEqual(env.E.presupuestos.length, 1);
+  var p = env.E.presupuestos[0];
+  assert.strictEqual(p.fecha, "2026-04-01");
+  /* Mismo criterio que gastos y ventas: si no lo tocó a mano, va null y el
+     registro sigue el plazo por defecto de su categoría. */
+  assert.strictEqual(p.diasPago, null);
+});
+
+test("cable I2: un presupuesto cargado por el formulario deja el escenario con fecha de pago", function(){
+  var env = entornoPresupuesto();
+  env.A.nuevoPresupuesto(undefined);
+  env.cfg().guardar({categoria:"Cosecha", monto:"20000", moneda:"USD", tipoCambio:"",
+                     fecha:"2026-04-01", diasPago:"", nota:""});
+
+  var M = {};
+  vm.createContext(M);
+  vm.runInContext(bloqueModelo(HTML), M);
+  var e = M.escenarioProyectado({cultivoLotes:[], gastos:[], ventas:[], ordenes:[], ordenInsumos:[],
+    insumos:[], movimientos:[], tickets:[], presupuestos:env.E.presupuestos}, "camp-1", null);
+  assert.strictEqual(e.costos.length, 1);
+  assert.strictEqual(e.costos[0].montoUSD, 20000);
+  assert.strictEqual(e.costos[0].fechaPago,
+    M.fechaPagoDe({fecha:"2026-04-01", categoria:"Cosecha"}));
+  assert.strictEqual(e.inciertoFinanciero, false);
+});

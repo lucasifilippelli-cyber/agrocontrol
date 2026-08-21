@@ -183,9 +183,14 @@ el arrendamiento que queda, las aplicaciones que no se hicieron.
 **Los carga el usuario**: días de pago en cada gasto o servicio contratado, días
 de cobro en cada venta.
 
-Vienen con **valores por defecto por categoría** —insumos a 90 días, labores a
-30, cosecha contra entrega, arrendamiento en las cuotas habituales— para que la
-curva exista desde el primer día. Lo que el usuario cargue pisa al default, y el
+Vienen con **valores por defecto por categoría** —insumos a 90 días contados
+desde el cierre de la orden, labores y cosecha a 30, flete a 30, arrendamiento a
+90, estructura e impuestos contra entrega, ventas a 30 desde la entrega— para que
+la curva exista desde el primer día.
+
+**Uno de esos números está en discusión y va marcado como tal:** si la cosecha se
+paga a 30 días o contra entrega. Depende de cómo se opere con el contratista, y
+lo decide el productor con su contador. Lo que el usuario cargue pisa al default, y el
 default se puede cambiar.
 
 Sigue la regla del proyecto: los datos entran solos siempre que se pueda, la
