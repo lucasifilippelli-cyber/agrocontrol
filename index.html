@@ -1544,7 +1544,12 @@ var PLAN_BASE = [
   {codigo:"1.2",     nombre:"Activo no corriente",       tipo:"activo",     padre:"1"},
   {codigo:"1.2.01",  nombre:"Maquinaria",                tipo:"activo",     padre:"1.2"},
   {codigo:"1.2.02",  nombre:"Inmuebles rurales",         tipo:"activo",     padre:"1.2"},
-  {codigo:"1.2.03",  nombre:"Amortización acumulada de maquinaria", tipo:"activo", padre:"1.2"},
+  /* Regularizadora de activo, saldo acreedor: resta, no suma. El modelo
+     todavía no tiene un marcador de signo genérico —se agrega recién acá,
+     que es la primera cuenta que lo necesita— para que cualquier derivación
+     futura de "activo = suma de las cuentas de tipo activo" no infle el
+     activo por el monto de la amortización. */
+  {codigo:"1.2.03",  nombre:"Amortización acumulada de maquinaria", tipo:"activo", padre:"1.2", regularizadora:true},
 
   {codigo:"2",       nombre:"Pasivo",                    tipo:"pasivo",     padre:null},
   {codigo:"2.1",     nombre:"Pasivo corriente",          tipo:"pasivo",     padre:"2"},
@@ -1554,13 +1559,15 @@ var PLAN_BASE = [
   {codigo:"2.1.04",  nombre:"Impuestos a pagar",         tipo:"pasivo",     padre:"2.1"},
 
   {codigo:"3",       nombre:"Patrimonio neto",           tipo:"patrimonio", padre:null},
-  {codigo:"3.1.01",  nombre:"Capital",                   tipo:"patrimonio", padre:"3"},
-  {codigo:"3.1.02",  nombre:"Resultado de la campaña",   tipo:"patrimonio", padre:"3"},
-  {codigo:"3.1.03",  nombre:"Resultados acumulados",     tipo:"patrimonio", padre:"3"},
+  {codigo:"3.1",     nombre:"Capital y resultados",      tipo:"patrimonio", padre:"3"},
+  {codigo:"3.1.01",  nombre:"Capital",                   tipo:"patrimonio", padre:"3.1"},
+  {codigo:"3.1.02",  nombre:"Resultado de la campaña",   tipo:"patrimonio", padre:"3.1"},
+  {codigo:"3.1.03",  nombre:"Resultados acumulados",     tipo:"patrimonio", padre:"3.1"},
 
   {codigo:"4",       nombre:"Ingresos",                  tipo:"resultado",  padre:null},
-  {codigo:"4.1.01",  nombre:"Venta de granos",           tipo:"resultado",  padre:"4"},
-  {codigo:"4.1.02",  nombre:"Otros ingresos",            tipo:"resultado",  padre:"4"},
+  {codigo:"4.1",     nombre:"Ingresos operativos",       tipo:"resultado",  padre:"4"},
+  {codigo:"4.1.01",  nombre:"Venta de granos",           tipo:"resultado",  padre:"4.1"},
+  {codigo:"4.1.02",  nombre:"Otros ingresos",            tipo:"resultado",  padre:"4.1"},
 
   {codigo:"5",       nombre:"Costos y gastos",           tipo:"resultado",  padre:null},
   {codigo:"5.1",     nombre:"Costos directos",           tipo:"resultado",  padre:"5"},
@@ -1620,6 +1627,28 @@ function cuentaDeVenta(v){
   return "4.1.01";
 }
 
+var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
+
+/* Igual que CUENTA_DE_CATEGORIA para los gastos: de qué tipo es el insumo
+   sale la cuenta de costo, sin que el productor tenga que recodificar nada.
+   Los cuatro fitosanitarios comparten cuenta porque el plan no los separa
+   (ver docs/finanzas.md, todavía pendiente de validación por un contador). */
+var CUENTA_DE_TIPO_INSUMO = {
+  "Semilla":     "5.1.01",
+  "Fertilizante":"5.1.02",
+  "Herbicida":   "5.1.03",
+  "Insecticida": "5.1.03",
+  "Fungicida":   "5.1.03",
+  "Coadyuvante": "5.1.03"
+};
+/* A diferencia de cuentaDeGasto/cuentaDeVenta, acá no hay campo `cuenta`
+   cargable a mano —el insumo no tiene ese override— así que un tipo que no
+   mapea devuelve null en vez de caer en un default inventado. */
+function cuentaDeInsumo(insumo){
+  if(!insumo) return null;
+  return CUENTA_DE_TIPO_INSUMO[insumo.tipo] || null;
+}
+
 /* Esta app no tiene cierre ni asiento firme: es herramienta de gestión, no
    contabilidad formal. Por eso el default manda vivo. Si lo elegido en el
    formulario coincide con el default de la categoría, no hace falta grabar
@@ -1638,24 +1667,62 @@ function sembrarPlan(cuentasExistentes){
   return PLAN_BASE.slice();
 }
 
+/* Cuentas ofrecibles como destino de un gasto o una venta: sólo las hojas de
+   resultado. Si el código por defecto ya no está entre ellas —porque el
+   productor le creó una subcuenta desde esta misma pantalla y dejó de ser
+   hoja— se agrega igual. Dejarlo afuera hace que el <select> caiga solo al
+   índice 0 y persista una cuenta distinta a la pensada, sin ningún aviso
+   (hallazgo C1). Devuelve las cuentas ordenadas por código: PLAN_BASE traía
+   el orden gratis, E.cuentas viene de sb.leer sin `order`. */
+function opcionesCuenta(cuentas, defecto){
+  var hojas = (cuentas||[]).filter(function(c){
+    return c.tipo==="resultado" && hijasDe(cuentas,c.codigo).length===0;
+  });
+  if(defecto && !hojas.some(function(c){ return c.codigo===defecto; })){
+    var c = cuentaPorCodigo(cuentas, defecto);
+    if(c) hojas = hojas.concat([c]);
+  }
+  return hojas.slice().sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); });
+}
+
 /* La baja de una cuenta no cascadea nunca: se avisa el impedimento en
-   castellano y quien pidió borrar decide qué hacer. Los movimientos
-   imputados se miran con cuentaDeGasto/cuentaDeVenta y no con el campo
-   crudo `cuenta`, porque los registros viejos lo traen en null y resuelven
-   por categoría — mirar sólo el campo crudo dejaría borrar una cuenta que en
-   los hechos sigue siendo el destino por defecto de gastos o ventas
-   existentes. Devuelve null si se puede borrar, o el impedimento en
-   castellano si no. */
-function impedimentoBorrarCuenta(cuentas, gastos, ventas, codigo){
+   castellano y quien pidió borrar decide qué hacer.
+
+   Los gastos y las ventas se miran con cuentaDeGasto/cuentaDeVenta y no con
+   el campo crudo `cuenta`, porque los registros viejos lo traen en null y
+   resuelven por categoría — mirar sólo el campo crudo dejaría borrar una
+   cuenta que en los hechos sigue siendo el destino por defecto de gastos o
+   ventas existentes.
+
+   El consumo de insumos es distinto: no vive en `gastos` —las órdenes lo
+   asientan directo en `movimientos`, con tipo "aplicacion"— así que
+   5.1.01/02/03 daban impedimento null aunque fueran el costo más grande de
+   la campaña (hallazgo I3). Se resuelve la cuenta de cada insumo con
+   cuentaDeInsumo y se cuentan sus movimientos de aplicación.
+
+   Devuelve null si se puede borrar, o el impedimento en castellano si no. */
+function impedimentoBorrarCuenta(cuentas, gastos, ventas, insumos, movimientos, codigo){
   var hijas = hijasDe(cuentas, codigo);
   if(hijas.length) return "tiene "+hijas.length+" cuenta"+(hijas.length===1?"":"s")+" colgando";
+
   var nGastos = (gastos||[]).filter(function(g){ return cuentaDeGasto(g)===codigo; }).length;
   var nVentas = (ventas||[]).filter(function(v){ return cuentaDeVenta(v)===codigo; }).length;
-  if(nGastos && nVentas)
-    return "hay "+nGastos+" gasto"+(nGastos===1?"":"s")+" y "+nVentas+" venta"+(nVentas===1?"":"s")+" imputados";
-  if(nGastos) return "hay "+nGastos+" gasto"+(nGastos===1?"":"s")+" imputado"+(nGastos===1?"":"s");
-  if(nVentas) return "hay "+nVentas+" venta"+(nVentas===1?"":"s")+" imputada"+(nVentas===1?"":"s");
-  return null;
+  var idsInsumo = {};
+  (insumos||[]).forEach(function(i){ if(i && cuentaDeInsumo(i)===codigo) idsInsumo[i.id]=1; });
+  var nAplic = (movimientos||[]).filter(function(m){ return m && m.tipo==="aplicacion" && idsInsumo[m.insumoId]; }).length;
+
+  var categorias=[];
+  if(nGastos) categorias.push({n:nGastos, singular:"gasto", plural:"gastos", fem:false});
+  if(nVentas) categorias.push({n:nVentas, singular:"venta", plural:"ventas", fem:true});
+  if(nAplic)  categorias.push({n:nAplic, singular:"aplicación de insumos", plural:"aplicaciones de insumos", fem:true});
+  if(!categorias.length) return null;
+
+  var partes = categorias.map(function(c){ return c.n+" "+(c.n===1?c.singular:c.plural); });
+  if(categorias.length===1){
+    var c=categorias[0], plural=c.n>1;
+    return "hay "+partes[0]+" imputad"+(c.fem?"a":"o")+(plural?"s":"");
+  }
+  return "hay "+partes.slice(0,-1).join(", ")+" y "+partes[partes.length-1]+" imputados";
 }
 /* === modelo:fin === */
 
@@ -1666,7 +1733,6 @@ var TIPOS_OPERACION = {
   canje:     {nom:"Canje",      ayuda:"Grano entregado a cambio de insumos"}
 };
 var TIPOS_LABOR  = ["Siembra","Pulverización","Fertilización","Cosecha","Laboreo","Monitoreo"];
-var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
 
 /* ============================================================
    2 · ESTADO
@@ -2076,9 +2142,8 @@ function cargar(){
           for(var k in c){ f[k]=c[k]; }
           return f;
         });
-        E.cuentas.forEach(function(f){ marcar("cuentas", f); });
         guardarCache();
-        guardar();
+        guardarSiembra(E.cuentas);
       }
     })
     .catch(function(err){
@@ -2108,6 +2173,29 @@ function guardar(){
   return cadena.catch(function(err){
     avisar(navigator.onLine ? "No se pudo guardar: "+err.message
                             : "Sin señal: el cambio no se guardó. Probá de nuevo con conexión.");
+  });
+}
+
+/* La siembra del plan de cuentas se persiste aparte de la cola de guardar():
+   38 filas de golpe en el primer arranque son mucho más radio de falla que
+   cualquier otra escritura suelta, y sembrarPlan() por diseño nunca completa
+   un plan a medias —si una fila del medio rechaza, no se repara solo—. Si
+   esta siembra compartiera cola con otra escritura que hubiera quedado
+   pendiente, una falla acá se llevaría puesta esa otra escritura, o al
+   revés. Aislada, un fallo acá no le pega a nada más (hallazgo I2; el
+   defecto general de guardar() —una fila rechazada corta el resto de la
+   tanda— es preexistente y queda anotado aparte, no se toca acá). */
+function guardarSiembra(filas){
+  var cadena=Promise.resolve();
+  (filas||[]).forEach(function(f){
+    cadena=cadena.then(function(){
+      var g=aGuion(f); delete g.creado_en;
+      return sb.grabar(TABLAS.cuentas, g);
+    });
+  });
+  return cadena.catch(function(err){
+    avisar(navigator.onLine ? "No se pudo guardar el plan de cuentas: "+err.message
+                            : "Sin señal: el plan de cuentas no se guardó. Probá de nuevo con conexión.");
   });
 }
 
@@ -3145,11 +3233,10 @@ A.moverOrden=function(arg){
    destino de un gasto o una venta; el resto del plan es patrimonial. Y sólo
    las hojas: "5.1 · Costos directos" es un bucket que agrupa cuentas, no un
    destino de imputación, igual de raro que mandar un gasto a una cuenta
-   patrimonial. */
-function opcCuentas(){
-  return E.cuentas.filter(function(c){
-    return c.tipo==="resultado" && hijasDe(E.cuentas,c.codigo).length===0;
-  }).map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
+   patrimonial. El núcleo (opcionesCuenta) vive en el bloque del modelo: ahí
+   se prueba que el default se agregue aunque haya dejado de ser hoja. */
+function opcCuentas(defecto){
+  return opcionesCuenta(E.cuentas, defecto).map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
 }
 /* Para el select de cuenta padre del alta: todo el plan, no sólo las hojas
    de resultado — cualquier cuenta puede ser padre de otra. */
@@ -3168,12 +3255,13 @@ function opcCultivosDeCampania(){
 A.nuevaVenta=function(id){
   var V=id?E.ventas.filter(function(v){return v.id===id;})[0]:null;
   if(!campActiva){ avisar("Abrí una campaña antes de cargar ventas."); return; }
+  var cuentaDefault=cuentaDeVenta(V);
   abrirForm({titulo:V?"Editar venta":"Registrar venta de grano",
     nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
     valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
                precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
-               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaDeVenta(V)}
-            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaDeVenta(null)},
+               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaDefault}
+            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaDefault},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
             {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
              opciones:Object.keys(TIPOS_OPERACION).map(function(k){return {v:k,t:TIPOS_OPERACION[k].nom};})},
@@ -3185,7 +3273,7 @@ A.nuevaVenta=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día. Sólo si cobrás en pesos."},
             {k:"comprador",label:"Comprador",ancho:true,ph:"Acopio, exportador o corredor"},
-            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(),
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaDefault),
              hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
@@ -3229,11 +3317,12 @@ A.borrarVenta=function(id){
 A.nuevoGasto=function(id){
   var G=id?E.gastos.filter(function(g){return g.id===id;})[0]:null;
   if(!campActiva){ avisar("Abrí una campaña antes de cargar gastos."); return; }
+  var cuentaDefault=cuentaDeGasto(G);
   abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
     nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
     valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
-               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaDeGasto(G)}
-            :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaDeGasto(null)},
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaDefault}
+            :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaDefault},
     campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
              opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
             {k:"fecha",label:"Fecha",tipo:"date",req:true},
@@ -3244,7 +3333,7 @@ A.nuevoGasto=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día."},
             {k:"proveedor",label:"Proveedor",ph:"Quién lo cobró"},
-            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(),
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaDefault),
              hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
@@ -3297,7 +3386,7 @@ A.nuevaCuenta=function(){
 };
 A.borrarCuenta=function(id){
   var c=E.cuentas.filter(function(x){return x.id===id;})[0]; if(!c) return;
-  var imp=impedimentoBorrarCuenta(E.cuentas,E.gastos,E.ventas,c.codigo);
+  var imp=impedimentoBorrarCuenta(E.cuentas,E.gastos,E.ventas,E.insumos,E.movimientos,c.codigo);
   if(imp){ avisar("No se puede borrar "+c.codigo+": "+imp+"."); return; }
   confirmar("Eliminar cuenta",esc(c.codigo)+" · "+esc(c.nombre)+". No se puede deshacer.",function(){
     E.cuentas=E.cuentas.filter(function(x){return x.id!==id;}); marcarBaja("cuentas",id); avisar("Cuenta eliminada."); });
