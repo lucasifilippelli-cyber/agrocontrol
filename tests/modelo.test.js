@@ -1153,3 +1153,363 @@ test("aJSON conserva los null de filasSementera, no los convierte en 0", functio
   var vuelta = JSON.parse(M.aJSON(filas));
   assert.strictEqual(vuelta[0].kgHaEsperado, null);
 });
+
+test("el plan base cubre los cuatro tipos", function(){
+  var tipos = {};
+  M.PLAN_BASE.forEach(function(c){ tipos[c.tipo] = true; });
+  assert.ok(tipos.activo && tipos.pasivo && tipos.patrimonio && tipos.resultado,
+    "faltan tipos en el plan base");
+});
+
+test("ninguna cuenta del plan base apunta a un padre inexistente", function(){
+  var codigos = {};
+  M.PLAN_BASE.forEach(function(c){ codigos[c.codigo] = true; });
+  var huerfanas = M.PLAN_BASE.filter(function(c){ return c.padre && !codigos[c.padre]; });
+  /* JSON.stringify y no deepStrictEqual: el array sale de otro contexto de vm
+     y no es reference-equal, aunque tenga el mismo contenido. */
+  assert.strictEqual(JSON.stringify(huerfanas.map(function(c){ return c.codigo; })), JSON.stringify([]));
+});
+
+test("no hay códigos repetidos en el plan base", function(){
+  var vistos = {}, repetidos = [];
+  M.PLAN_BASE.forEach(function(c){
+    if(vistos[c.codigo]) repetidos.push(c.codigo);
+    vistos[c.codigo] = true;
+  });
+  assert.deepStrictEqual(repetidos, []);
+});
+
+test("cuentaPorCodigo encuentra y devuelve null si no está", function(){
+  var cs = [{codigo:"1.1.01", nombre:"Caja", tipo:"activo", padre:"1.1"}];
+  assert.strictEqual(M.cuentaPorCodigo(cs, "1.1.01").nombre, "Caja");
+  assert.strictEqual(M.cuentaPorCodigo(cs, "9.9.99"), null);
+});
+
+test("hijasDe devuelve sólo las cuentas de ese padre", function(){
+  var cs = [{codigo:"1.1.01", padre:"1.1"}, {codigo:"1.1.02", padre:"1.1"},
+            {codigo:"2.1.01", padre:"2.1"}];
+  assert.deepStrictEqual(M.hijasDe(cs, "1.1").map(function(c){ return c.codigo; }),
+                         ["1.1.01", "1.1.02"]);
+});
+
+test("el plan base trae amortización de maquinaria, retenciones sufridas y resultados acumulados", function(){
+  var amort = M.cuentaPorCodigo(M.PLAN_BASE, "1.2.03");
+  assert.ok(amort, "falta 1.2.03");
+  assert.strictEqual(amort.tipo, "activo");
+  assert.strictEqual(amort.padre, "1.2");
+
+  var retenciones = M.cuentaPorCodigo(M.PLAN_BASE, "1.1.05");
+  assert.ok(retenciones, "falta 1.1.05");
+  assert.strictEqual(retenciones.tipo, "activo");
+  assert.strictEqual(retenciones.padre, "1.1");
+
+  var acumulados = M.cuentaPorCodigo(M.PLAN_BASE, "3.1.03");
+  assert.ok(acumulados, "falta 3.1.03");
+  assert.strictEqual(acumulados.tipo, "patrimonio");
+  assert.strictEqual(acumulados.padre, "3.1");
+});
+
+/* ============================================================
+   Fix round 1 · I4: la amortización acumulada regulariza, no suma
+   ============================================================ */
+
+test("I4: la amortización acumulada de maquinaria queda marcada como regularizadora", function(){
+  var amort = M.cuentaPorCodigo(M.PLAN_BASE, "1.2.03");
+  assert.strictEqual(amort.regularizadora, true);
+});
+
+test("I4: el resto de las cuentas de activo no arrastra la marca de regularizadora", function(){
+  var otras = M.PLAN_BASE.filter(function(c){ return c.tipo === "activo" && c.codigo !== "1.2.03"; });
+  otras.forEach(function(c){
+    assert.ok(!c.regularizadora, c.codigo + " no debería estar marcada como regularizadora");
+  });
+});
+
+/* ============================================================
+   Fix round 1 · M1: el plan no salta niveles que sus propios
+   códigos anuncian — 3.1.0x cuelga de 3.1, 4.1.0x cuelga de 4.1
+   ============================================================ */
+
+test("M1: 3.1 existe y agrupa a capital y los resultados", function(){
+  var bucket = M.cuentaPorCodigo(M.PLAN_BASE, "3.1");
+  assert.ok(bucket, "falta la cuenta 3.1");
+  assert.strictEqual(bucket.padre, "3");
+  ["3.1.01", "3.1.02", "3.1.03"].forEach(function(cod){
+    assert.strictEqual(M.cuentaPorCodigo(M.PLAN_BASE, cod).padre, "3.1", cod + " tiene que colgar de 3.1");
+  });
+});
+
+test("M1: 4.1 existe y agrupa a los ingresos", function(){
+  var bucket = M.cuentaPorCodigo(M.PLAN_BASE, "4.1");
+  assert.ok(bucket, "falta la cuenta 4.1");
+  assert.strictEqual(bucket.padre, "4");
+  ["4.1.01", "4.1.02"].forEach(function(cod){
+    assert.strictEqual(M.cuentaPorCodigo(M.PLAN_BASE, cod).padre, "4.1", cod + " tiene que colgar de 4.1");
+  });
+});
+
+test("cada categoría de gasto cae en una cuenta del plan base", function(){
+  var codigos = {};
+  M.PLAN_BASE.forEach(function(c){ codigos[c.codigo] = true; });
+  M.CATEGORIAS_GASTO.forEach(function(cat){
+    var cod = M.cuentaDeGasto({categoria: cat});
+    assert.ok(codigos[cod], cat + " cae en " + cod + ", que no existe en el plan");
+  });
+});
+
+test("la cuenta cargada a mano pisa al default de la categoría", function(){
+  assert.strictEqual(M.cuentaDeGasto({categoria:"Cosecha", cuenta:"5.2.05"}), "5.2.05");
+});
+
+test("una categoría desconocida cae en Otros y no revienta", function(){
+  assert.strictEqual(M.cuentaDeGasto({categoria:"Algo que no existe"}), "5.2.05");
+});
+
+test("una venta cae en Venta de granos por defecto", function(){
+  assert.strictEqual(M.cuentaDeVenta({cultivo:"soja_1"}), "4.1.01");
+});
+
+test("la cuenta cargada a mano pisa al default de la venta", function(){
+  assert.strictEqual(M.cuentaDeVenta({cultivo:"soja_1", cuenta:"4.1.02"}), "4.1.02");
+});
+
+test("un gasto sin categoría no rompe", function(){
+  assert.strictEqual(M.cuentaDeGasto({}), "5.2.05");
+});
+
+test("las cuentas de agrupación de resultado no son imputables: sólo las hojas", function(){
+  var imputables = M.PLAN_BASE.filter(function(c){
+    return c.tipo === "resultado" && M.hijasDe(M.PLAN_BASE, c.codigo).length === 0;
+  }).map(function(c){ return c.codigo; });
+  ["4", "4.1", "5", "5.1", "5.2"].forEach(function(bucket){
+    assert.ok(imputables.indexOf(bucket) === -1, bucket + " es un bucket de agrupación y no debería ofrecerse");
+  });
+  assert.strictEqual(imputables.length, 13);
+});
+
+test("si la cuenta elegida en el formulario coincide con el default, no hace falta guardarla", function(){
+  assert.strictEqual(M.cuentaAGuardar("5.2.05", "5.2.05"), null);
+});
+
+test("si el usuario cambió la cuenta a mano, se persiste el código explícito", function(){
+  assert.strictEqual(M.cuentaAGuardar("5.2.04", "5.2.05"), "5.2.04");
+});
+
+test("con la cuenta vacía se siembra el plan entero", function(){
+  assert.strictEqual(M.sembrarPlan([]).length, M.PLAN_BASE.length);
+});
+
+test("si ya hay cuentas no se siembra nada", function(){
+  /* JSON.stringify y no deepStrictEqual: el array vacío sale de otro
+     contexto de vm y no es reference-equal, aunque tenga el mismo contenido. */
+  assert.strictEqual(JSON.stringify(M.sembrarPlan([{codigo:"1", nombre:"Activo"}])), JSON.stringify([]));
+});
+
+test("sembrar el plan no pisa una cuenta creada por el productor", function(){
+  var propias = [{codigo:"5.1.99", nombre:"Mi cuenta", tipo:"resultado", padre:"5.1"}];
+  assert.strictEqual(JSON.stringify(M.sembrarPlan(propias)), JSON.stringify([]));
+});
+
+/* ============================================================
+   Task 4 · impedimentoBorrarCuenta
+   La baja nunca cascadea: se avisa el impedimento en vez de fallar
+   o de borrar en cadena.
+
+   Firma post fix round 1: (cuentas, gastos, ventas, insumos,
+   movimientos, codigo) — I3 sumó el consumo de insumos.
+   ============================================================ */
+
+test("una cuenta hoja sin movimientos se puede borrar", function(){
+  var cuentas = [{codigo:"5.2.05", nombre:"Otros", tipo:"resultado", padre:"5.2"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], [], [], "5.2.05"), null);
+});
+
+test("con hijas, el impedimento dice cuántas cuelgan y no las cuenta a más de un nivel mal", function(){
+  var cuentas = [
+    {codigo:"5.1", nombre:"Costos directos", tipo:"resultado", padre:"5"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"},
+    {codigo:"5.1.02", nombre:"Fertilizantes", tipo:"resultado", padre:"5.1"},
+    {codigo:"5.1.03", nombre:"Fitosanitarios", tipo:"resultado", padre:"5.1"}
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], [], [], "5.1"), "tiene 3 cuentas colgando");
+});
+
+test("con una sola hija, el impedimento va en singular", function(){
+  var cuentas = [
+    {codigo:"5.1", nombre:"Costos directos", tipo:"resultado", padre:"5"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], [], [], "5.1"), "tiene 1 cuenta colgando");
+});
+
+test("con gastos imputados por código explícito, el impedimento cuenta esos gastos", function(){
+  var cuentas = [{codigo:"5.1.04", nombre:"Labores de terceros", tipo:"resultado", padre:"5.1"}];
+  var gastos = [
+    {categoria:"Otros", cuenta:"5.1.04"},
+    {categoria:"Otros", cuenta:"5.1.04"},
+    {categoria:"Cosecha"}   // cae en su propia cuenta por defecto, no en 5.1.04
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], [], [], "5.1.04"), "hay 2 gastos imputados");
+});
+
+test("un gasto que imputa por el default de la categoría también cuenta, aunque el campo cuenta esté en null", function(){
+  /* El caso real: los registros viejos no tienen cuenta cargada y resuelven
+     por categoría (ver cuentaDeGasto). Mirar sólo el campo crudo dejaría
+     borrar una cuenta que en los hechos sigue siendo el destino de gastos
+     existentes. */
+  var cuentas = [{codigo:"5.1.05", nombre:"Cosecha", tipo:"resultado", padre:"5.1"}];
+  var gastos = [{categoria:"Cosecha", cuenta:null}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], [], [], "5.1.05"), "hay 1 gasto imputado");
+});
+
+test("con una sola venta imputada, el impedimento va en femenino singular", function(){
+  var cuentas = [{codigo:"4.1.01", nombre:"Venta de granos", tipo:"resultado", padre:"4.1"}];
+  var ventas = [{cultivo:"soja_1", cuenta:null}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], ventas, [], [], "4.1.01"), "hay 1 venta imputada");
+});
+
+test("con gastos y ventas imputados a la vez, el impedimento menciona los dos", function(){
+  var cuentas = [{codigo:"4.1.02", nombre:"Otros ingresos", tipo:"resultado", padre:"4.1"}];
+  var gastos = [{categoria:"Otros", cuenta:"4.1.02"}];
+  var ventas = [{cultivo:"soja_1", cuenta:"4.1.02"}, {cultivo:"trigo", cuenta:"4.1.02"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, ventas, [], [], "4.1.02"),
+    "hay 1 gasto y 2 ventas imputados");
+});
+
+test("hijas manda antes que movimientos: si tiene las dos cosas, avisa primero de las hijas", function(){
+  var cuentas = [
+    {codigo:"5.1", nombre:"Costos directos", tipo:"resultado", padre:"5"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}
+  ];
+  var gastos = [{categoria:"Otros", cuenta:"5.1"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], [], [], "5.1"), "tiene 1 cuenta colgando");
+});
+
+test("una cuenta que nadie usa hoy en el plan base también se puede borrar", function(){
+  assert.strictEqual(M.impedimentoBorrarCuenta(M.PLAN_BASE, [], [], [], [], "5.2.05"), null);
+});
+
+/* ============================================================
+   Fix round 1 · I3: el costo de insumos no vive en `gastos` — las
+   órdenes lo asientan directo en `movimientos`, con tipo
+   "aplicacion" — así que 5.1.01/02/03 daban impedimento null
+   aunque fueran el costo más grande de la campaña.
+   ============================================================ */
+
+test("I3: cuentaDeInsumo mapea cada tipo del catálogo a su cuenta de costo directo", function(){
+  assert.strictEqual(M.cuentaDeInsumo({tipo:"Semilla"}), "5.1.01");
+  assert.strictEqual(M.cuentaDeInsumo({tipo:"Fertilizante"}), "5.1.02");
+  ["Herbicida", "Insecticida", "Fungicida", "Coadyuvante"].forEach(function(t){
+    assert.strictEqual(M.cuentaDeInsumo({tipo:t}), "5.1.03", t + " tiene que caer en Fitosanitarios");
+  });
+});
+
+test("I3: cuentaDeInsumo no inventa una cuenta para un tipo que no mapea", function(){
+  assert.strictEqual(M.cuentaDeInsumo({tipo:"Algo que no existe"}), null);
+  assert.strictEqual(M.cuentaDeInsumo(null), null);
+});
+
+test("I3: 5.1.01 Semilla deja de ser borrable en cuanto un insumo de ese tipo se aplicó en una orden", function(){
+  var cuentas = [{codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}];
+  var insumos = [{id:"i1", nombre:"DM 4670", tipo:"Semilla"}];
+  var movimientos = [{insumoId:"i1", tipo:"aplicacion", cantidad:-320}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], insumos, movimientos, "5.1.01"),
+    "hay 1 aplicación de insumos imputada");
+});
+
+test("I3: varias aplicaciones de insumos del mismo tipo se cuentan todas, en plural femenino", function(){
+  var cuentas = [{codigo:"5.1.03", nombre:"Fitosanitarios", tipo:"resultado", padre:"5.1"}];
+  var insumos = [{id:"i1", tipo:"Herbicida"}, {id:"i2", tipo:"Fungicida"}];
+  var movimientos = [
+    {insumoId:"i1", tipo:"aplicacion", cantidad:-10},
+    {insumoId:"i1", tipo:"aplicacion", cantidad:-5},
+    {insumoId:"i2", tipo:"aplicacion", cantidad:-2}
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], insumos, movimientos, "5.1.03"),
+    "hay 3 aplicaciones de insumos imputadas");
+});
+
+test("I3: tener el insumo en el catálogo sin que nunca se haya aplicado no bloquea la baja", function(){
+  /* Es justo el bug: antes de este fix, 5.1.01/02/03 daban null siempre,
+     porque nunca se contaba nada. Ahora dan null sólo cuando en efecto no
+     entró nada — no por sólo tener el insumo cargado. */
+  var cuentas = [{codigo:"5.1.02", nombre:"Fertilizantes", tipo:"resultado", padre:"5.1"}];
+  var insumos = [{id:"i1", tipo:"Fertilizante"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], insumos, [], "5.1.02"), null);
+});
+
+test("I3: un movimiento que no es de aplicación (por ejemplo una compra) no cuenta como imputado", function(){
+  var cuentas = [{codigo:"5.1.02", nombre:"Fertilizantes", tipo:"resultado", padre:"5.1"}];
+  var insumos = [{id:"i1", tipo:"Fertilizante"}];
+  var movimientos = [{insumoId:"i1", tipo:"compra", cantidad:500}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], insumos, movimientos, "5.1.02"), null);
+});
+
+test("I3: un gasto y una aplicación de insumos combinados se mencionan los dos", function(){
+  var cuentas = [{codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}];
+  var gastos = [{categoria:"Otros", cuenta:"5.1.01"}];
+  var insumos = [{id:"i1", tipo:"Semilla"}];
+  var movimientos = [{insumoId:"i1", tipo:"aplicacion", cantidad:-320}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], insumos, movimientos, "5.1.01"),
+    "hay 1 gasto y 1 aplicación de insumos imputados");
+});
+
+/* ============================================================
+   Fix round 1 · C1 / I1: opcionesCuenta — el select de cuenta no
+   puede dejar caer la selección al índice 0 cuando el default dejó
+   de ser hoja. El núcleo vive en el bloque del modelo para que
+   revertirlo a PLAN_BASE, o sacarle el filtro de hojas, tumbe un
+   test (I1: eran dos mutantes vivos).
+   ============================================================ */
+
+test("C1/I1: opcionesCuenta usa el array que le pasan, no PLAN_BASE", function(){
+  var cuentas = [{codigo:"9.9.01", nombre:"Cuenta de prueba", tipo:"resultado", padre:null}];
+  var out = M.opcionesCuenta(cuentas, null);
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].codigo, "9.9.01");
+});
+
+test("C1/I1: opcionesCuenta ofrece sólo hojas de resultado", function(){
+  var cuentas = [
+    {codigo:"5", nombre:"Costos y gastos", tipo:"resultado", padre:null},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5"},
+    {codigo:"1", nombre:"Activo", tipo:"activo", padre:null}
+  ];
+  var out = M.opcionesCuenta(cuentas, null).map(function(c){ return c.codigo; });
+  assert.deepStrictEqual(out, ["5.1.01"]);
+});
+
+test("C1/I1: opcionesCuenta ordena por código, porque E.cuentas no viene ordenada de la base", function(){
+  var cuentas = [
+    {codigo:"5.2.05", nombre:"Otros", tipo:"resultado", padre:"5.2"},
+    {codigo:"4.1.01", nombre:"Venta de granos", tipo:"resultado", padre:"4.1"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}
+  ];
+  var out = M.opcionesCuenta(cuentas, null).map(function(c){ return c.codigo; });
+  assert.deepStrictEqual(out, ["4.1.01", "5.1.01", "5.2.05"]);
+});
+
+test("C1: si el default dejó de ser hoja —le crearon una subcuenta— igual se ofrece, para que el <select> no caiga al índice 0", function(){
+  var cuentas = [
+    {codigo:"5.1.05", nombre:"Cosecha", tipo:"resultado", padre:"5.1"},
+    {codigo:"5.1.05.01", nombre:"Cosecha propia", tipo:"resultado", padre:"5.1.05"},
+    {codigo:"4.1.01", nombre:"Venta de granos", tipo:"resultado", padre:"4.1"}
+  ];
+  var out = M.opcionesCuenta(cuentas, "5.1.05").map(function(c){ return c.codigo; });
+  /* sin el fix, "5.1.05" no es hoja (tiene a "5.1.05.01" colgando) y
+     desaparece de las opciones */
+  assert.ok(out.indexOf("5.1.05") !== -1, "5.1.05 tiene que seguir ofrecida aunque ya no sea hoja");
+  assert.deepStrictEqual(out, ["4.1.01", "5.1.05", "5.1.05.01"]);
+});
+
+test("C1: si el default no existe más en el plan, no se inventa una cuenta fantasma", function(){
+  var cuentas = [{codigo:"4.1.01", nombre:"Venta de granos", tipo:"resultado", padre:"4.1"}];
+  var out = M.opcionesCuenta(cuentas, "9.9.99").map(function(c){ return c.codigo; });
+  assert.deepStrictEqual(out, ["4.1.01"]);
+});
+
+test("C1: si el default ya es una hoja normal, no se duplica en las opciones", function(){
+  var cuentas = [{codigo:"4.1.01", nombre:"Venta de granos", tipo:"resultado", padre:"4.1"}];
+  var out = M.opcionesCuenta(cuentas, "4.1.01");
+  assert.strictEqual(out.length, 1);
+});

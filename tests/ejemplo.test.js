@@ -7,9 +7,11 @@ var vm = require("node:vm");
    traerLluviaCampania) así que no vive en el bloque de modelo. Igual que
    clima.test.js hace con traerLluviaCampania, se extraen sólo las funciones
    necesarias del index.html contando llaves y se evalúan con dependencias
-   mockeadas. overridesDePerfil/armarOverrides/escribirOverrides se extraen
-   de verdad (no se mockean): son justo las que arman el merge, y el bug que
-   este archivo cubre está en cómo cargarEjemplo las usa, no en ellas. */
+   mockeadas. overridesDePerfil/armarOverrides/escribirOverrides/sembrarPlan
+   se extraen de verdad (no se mockean): son justo las que arman el merge (o,
+   en el caso de sembrarPlan, la siembra del plan de cuentas), y el bug que
+   este archivo cubre está en cómo cargarEjemplo las usa, no en ellas. uid()
+   sí se mockea: usa window.crypto, que no existe en este sandbox de vm. */
 function extraerFuncion(html, nombre){
   var ini = html.indexOf("function " + nombre + "(");
   assert.ok(ini > 0, "no encontré function " + nombre + " en index.html");
@@ -28,16 +30,24 @@ function extraerFuncion(html, nombre){
    se mandó a sb.actualizar. */
 function entorno(perfilPrevio){
   var html = fs.readFileSync(__dirname + "/../index.html", "utf8");
-  var src = ["overridesDePerfil", "escribirOverrides", "armarOverrides", "cargarEjemplo"]
+  /* guardarSiembra se extrae de verdad (no se mockea): fix round 2 la aisló
+     de la tanda compartida de marcar()/guardar(), igual que ya estaba
+     aislada en cargar(), y acá se prueba que cargarEjemplo la use en vez de
+     volver a meter las cuentas en cola. */
+  var src = ["overridesDePerfil", "escribirOverrides", "armarOverrides", "sembrarPlan",
+             "guardarSiembra", "cargarEjemplo"]
     .map(function(n){ return extraerFuncion(html, n); }).join("\n\n");
 
   var vacio = {establecimientos:[], lotes:[], campanias:[], cultivoLotes:[], tickets:[],
     insumos:[], ordenes:[], ordenInsumos:[], movimientos:[], monitoreo:[], ventas:[],
-    gastos:[], preciosForward:[]};
+    gastos:[], preciosForward:[], cuentas:[]};
   var actualizados = [];
+  var grabadosSiembra = [];
+  var nextId = 0;
 
   var ctx = {
     Promise: Promise,
+    navigator: {onLine: true},
     E: JSON.parse(JSON.stringify(vacio)),
     perfil: perfilPrevio,
     sesion: {user:{id:"demo-user"}},
@@ -46,16 +56,33 @@ function entorno(perfilPrevio){
     CLIMA: {pron:{}},
     localStorage: {removeItem:function(){}},
     marcar: function(){},
+    avisar: function(){},
     normalizar: function(){},
     guardar: function(){ return Promise.resolve(); },
     traerLluviaCampania: function(){ return Promise.resolve(); },
     traerPronostico: function(){ return Promise.resolve(); },
+    /* sembrarPlan es pura y no genera ids: en el index.html real quien la
+       llama le pone id:uid(). uid() usa window.crypto, así que acá se
+       mockea con un contador simple en vez de extraerla del archivo real. */
+    uid: function(){ return "cuenta-test-" + (nextId++); },
+    /* guardarSiembra necesita TABLAS.cuentas y aGuion (mockeado acá: no hace
+       falta la traducción real de columnas para probar el cableado). */
+    TABLAS: {cuentas: "cuentas"},
+    aGuion: function(f){ var g={}; for(var k in f){ g[k]=f[k]; } return g; },
     sb: {
       actualizar: function(tabla, id, campos){
         actualizados.push({tabla:tabla, id:id, campos:campos});
         return Promise.resolve();
+      },
+      grabar: function(tabla, fila){
+        grabadosSiembra.push({tabla:tabla, fila:fila});
+        return Promise.resolve();
       }
     },
+    /* PLAN_BASE no está en este sandbox (sembrarPlan se extrajo sola, sin
+       el resto del bloque de modelo), así que sembrarPlan necesita su
+       propia PLAN_BASE acá para no depender de todo el bloque. */
+    PLAN_BASE: [{codigo:"1", nombre:"Activo", tipo:"activo", padre:null}],
     semillaConIds: function(){
       return {
         establecimientos:[{id:"est-nuevo-la-constancia"}],
@@ -71,7 +98,8 @@ function entorno(perfilPrevio){
   return {
     ejecutar: function(){ return ctx.__f(); },
     ctx: ctx,
-    actualizados: function(){ return actualizados; }
+    actualizados: function(){ return actualizados; },
+    grabadosSiembra: function(){ return grabadosSiembra; }
   };
 }
 
@@ -106,5 +134,62 @@ test("cargarEjemplo sobre un perfil vacío (cuenta nueva, sin overrides todavía
 
   return env.ejecutar().then(function(){
     assert.strictEqual(JSON.stringify(env.ctx.perfil.rindes_base), JSON.stringify({"est-nuevo-la-constancia":{maiz_d:9200}}));
+  });
+});
+
+/* ============================================================
+   Task 4 · el plan de cuentas también se siembra con el ejemplo
+   No había ninguna aserción sobre esto: nada verificaba que
+   cargarEjemplo efectivamente sembrara el plan, con id en cada
+   fila.
+   ============================================================ */
+
+test("cargarEjemplo siembra tantas cuentas como trae el plan base, todas con id", function(){
+  var env = entorno(null);
+
+  return env.ejecutar().then(function(){
+    assert.strictEqual(env.ctx.E.cuentas.length, env.ctx.PLAN_BASE.length,
+      "tiene que sembrar tantas cuentas como trae el plan base");
+    env.ctx.E.cuentas.forEach(function(c){
+      assert.ok(c.id, "cada cuenta sembrada tiene que traer id");
+    });
+  });
+});
+
+/* ============================================================
+   Fix round 2 · cargarEjemplo aísla la siembra del plan
+   Antes las cuentas viajaban en la misma tanda compartida que
+   ventas, gastos y precios forward (mismo cableado que I2 ya había
+   arreglado en cargar()); ahora usan guardarSiembra() aparte, así
+   que un fallo puntual del plan no arrastra el resto del ejemplo,
+   ni al revés. Este test ejercita el cable, no el núcleo: revertir
+   cargarEjemplo a marcar()+guardar() para las cuentas lo tumba.
+   ============================================================ */
+
+test("fix round 2: cargarEjemplo persiste las cuentas con guardarSiembra, no con marcar()+guardar()", function(){
+  var env = entorno(null);
+  var marcados = [];
+  env.ctx.marcar = function(coleccion, fila){ marcados.push({coleccion:coleccion, id:fila.id}); };
+  /* La semilla mockeada no trae ventas ni gastos: se le agrega una de cada
+     una para verificar que esas dos sí siguen yendo por la cola compartida. */
+  var semillaOriginal = env.ctx.semillaConIds;
+  env.ctx.semillaConIds = function(){
+    var s = semillaOriginal();
+    s.ventas = [{id:"venta-1", campaniaId:s.campanias[0].id, cultivo:"soja_1"}];
+    s.gastos = [{id:"gasto-1", campaniaId:s.campanias[0].id, categoria:"Otros"}];
+    return s;
+  };
+
+  return env.ejecutar().then(function(){
+    var colecciones = marcados.map(function(m){ return m.coleccion; });
+    assert.strictEqual(colecciones.indexOf("cuentas"), -1,
+      "las cuentas no se tienen que marcar en la cola compartida");
+    assert.ok(colecciones.indexOf("ventas") !== -1 && colecciones.indexOf("gastos") !== -1,
+      "ventas y gastos sí siguen yendo por la cola compartida");
+
+    var grabadas = env.grabadosSiembra();
+    assert.strictEqual(grabadas.length, env.ctx.PLAN_BASE.length,
+      "guardarSiembra tiene que grabar cada cuenta sembrada");
+    grabadas.forEach(function(g){ assert.strictEqual(g.tabla, "cuentas"); });
   });
 });

@@ -1529,6 +1529,201 @@ function aCSV(filas){
 }
 
 function aJSON(filas){ return JSON.stringify(filas, null, 2); }
+
+/* Plan de cuentas estándar para actividad agropecuaria. Es criterio propio y
+   está PENDIENTE DE VALIDACIÓN por un contador: ver docs/finanzas.md. El
+   productor puede agregar cuentas desde la app. */
+var PLAN_BASE = [
+  {codigo:"1",       nombre:"Activo",                    tipo:"activo",     padre:null},
+  {codigo:"1.1",     nombre:"Activo corriente",          tipo:"activo",     padre:"1"},
+  {codigo:"1.1.01",  nombre:"Caja y bancos",             tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.02",  nombre:"Cuentas por cobrar",        tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.03",  nombre:"Bienes de cambio · granos", tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.04",  nombre:"Bienes de cambio · insumos",tipo:"activo",     padre:"1.1"},
+  {codigo:"1.1.05",  nombre:"Retenciones y percepciones sufridas", tipo:"activo", padre:"1.1"},
+  {codigo:"1.2",     nombre:"Activo no corriente",       tipo:"activo",     padre:"1"},
+  {codigo:"1.2.01",  nombre:"Maquinaria",                tipo:"activo",     padre:"1.2"},
+  {codigo:"1.2.02",  nombre:"Inmuebles rurales",         tipo:"activo",     padre:"1.2"},
+  /* Regularizadora de activo, saldo acreedor: resta, no suma. El modelo
+     todavía no tiene un marcador de signo genérico —se agrega recién acá,
+     que es la primera cuenta que lo necesita— para que cualquier derivación
+     futura de "activo = suma de las cuentas de tipo activo" no infle el
+     activo por el monto de la amortización. */
+  {codigo:"1.2.03",  nombre:"Amortización acumulada de maquinaria", tipo:"activo", padre:"1.2", regularizadora:true},
+
+  {codigo:"2",       nombre:"Pasivo",                    tipo:"pasivo",     padre:null},
+  {codigo:"2.1",     nombre:"Pasivo corriente",          tipo:"pasivo",     padre:"2"},
+  {codigo:"2.1.01",  nombre:"Cuentas por pagar",         tipo:"pasivo",     padre:"2.1"},
+  {codigo:"2.1.02",  nombre:"Deudas bancarias",          tipo:"pasivo",     padre:"2.1"},
+  {codigo:"2.1.03",  nombre:"Arrendamientos a pagar",    tipo:"pasivo",     padre:"2.1"},
+  {codigo:"2.1.04",  nombre:"Impuestos a pagar",         tipo:"pasivo",     padre:"2.1"},
+
+  {codigo:"3",       nombre:"Patrimonio neto",           tipo:"patrimonio", padre:null},
+  {codigo:"3.1",     nombre:"Capital y resultados",      tipo:"patrimonio", padre:"3"},
+  {codigo:"3.1.01",  nombre:"Capital",                   tipo:"patrimonio", padre:"3.1"},
+  {codigo:"3.1.02",  nombre:"Resultado de la campaña",   tipo:"patrimonio", padre:"3.1"},
+  {codigo:"3.1.03",  nombre:"Resultados acumulados",     tipo:"patrimonio", padre:"3.1"},
+
+  {codigo:"4",       nombre:"Ingresos",                  tipo:"resultado",  padre:null},
+  {codigo:"4.1",     nombre:"Ingresos operativos",       tipo:"resultado",  padre:"4"},
+  {codigo:"4.1.01",  nombre:"Venta de granos",           tipo:"resultado",  padre:"4.1"},
+  {codigo:"4.1.02",  nombre:"Otros ingresos",            tipo:"resultado",  padre:"4.1"},
+
+  {codigo:"5",       nombre:"Costos y gastos",           tipo:"resultado",  padre:null},
+  {codigo:"5.1",     nombre:"Costos directos",           tipo:"resultado",  padre:"5"},
+  {codigo:"5.1.01",  nombre:"Semilla",                   tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.02",  nombre:"Fertilizantes",             tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.03",  nombre:"Fitosanitarios",            tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.04",  nombre:"Labores de terceros",       tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.05",  nombre:"Cosecha",                   tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.1.06",  nombre:"Flete",                     tipo:"resultado",  padre:"5.1"},
+  {codigo:"5.2",     nombre:"Costos indirectos",         tipo:"resultado",  padre:"5"},
+  {codigo:"5.2.01",  nombre:"Arrendamiento",             tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.02",  nombre:"Honorarios",                tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.03",  nombre:"Estructura",                tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.04",  nombre:"Impuestos y comisiones",    tipo:"resultado",  padre:"5.2"},
+  {codigo:"5.2.05",  nombre:"Otros",                     tipo:"resultado",  padre:"5.2"}
+];
+
+function cuentaPorCodigo(cuentas, codigo){
+  if(!cuentas) return null;
+  for(var i = 0; i < cuentas.length; i++){
+    if(cuentas[i].codigo === codigo) return cuentas[i];
+  }
+  return null;
+}
+
+function hijasDe(cuentas, codigo){
+  if(!cuentas) return [];
+  return cuentas.filter(function(c){ return c.padre === codigo; });
+}
+
+var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
+                        "Estructura","Impuestos y comisiones","Otros"];
+
+/* De la categoría que el productor ya carga sale la cuenta, así nada de lo
+   cargado hasta hoy hay que recodificar a mano. Lo que se cargue explícito
+   en el campo `cuenta` pisa a este default. */
+var CUENTA_DE_CATEGORIA = {
+  "Labores de terceros":   "5.1.04",
+  "Cosecha":               "5.1.05",
+  "Flete":                 "5.1.06",
+  "Arrendamiento":         "5.2.01",
+  "Honorarios":            "5.2.02",
+  "Estructura":            "5.2.03",
+  "Impuestos y comisiones":"5.2.04",
+  "Otros":                 "5.2.05"
+};
+
+function cuentaDeGasto(g){
+  if(!g) return "5.2.05";
+  if(g.cuenta) return g.cuenta;
+  return CUENTA_DE_CATEGORIA[g.categoria] || "5.2.05";
+}
+
+function cuentaDeVenta(v){
+  if(!v) return "4.1.01";
+  if(v.cuenta) return v.cuenta;
+  return "4.1.01";
+}
+
+var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
+
+/* Igual que CUENTA_DE_CATEGORIA para los gastos: de qué tipo es el insumo
+   sale la cuenta de costo, sin que el productor tenga que recodificar nada.
+   Los cuatro fitosanitarios comparten cuenta porque el plan no los separa
+   (ver docs/finanzas.md, todavía pendiente de validación por un contador). */
+var CUENTA_DE_TIPO_INSUMO = {
+  "Semilla":     "5.1.01",
+  "Fertilizante":"5.1.02",
+  "Herbicida":   "5.1.03",
+  "Insecticida": "5.1.03",
+  "Fungicida":   "5.1.03",
+  "Coadyuvante": "5.1.03"
+};
+/* A diferencia de cuentaDeGasto/cuentaDeVenta, acá no hay campo `cuenta`
+   cargable a mano —el insumo no tiene ese override— así que un tipo que no
+   mapea devuelve null en vez de caer en un default inventado. */
+function cuentaDeInsumo(insumo){
+  if(!insumo) return null;
+  return CUENTA_DE_TIPO_INSUMO[insumo.tipo] || null;
+}
+
+/* Esta app no tiene cierre ni asiento firme: es herramienta de gestión, no
+   contabilidad formal. Por eso el default manda vivo. Si lo elegido en el
+   formulario coincide con el default de la categoría, no hace falta grabar
+   nada: se persiste null y el registro sigue el remapeo futuro de la
+   categoría. Sólo se graba un código explícito cuando el usuario lo cambió
+   a mano a otra cuenta distinta del default. */
+function cuentaAGuardar(elegida, defecto){
+  return (elegida === defecto) ? null : elegida;
+}
+
+/* Se siembra sólo cuando no hay ninguna cuenta. Nunca completa un plan
+   a medias: si el productor ya tiene cuentas propias, las suyas mandan y
+   agregar las que falten es decisión de él, no nuestra. */
+function sembrarPlan(cuentasExistentes){
+  if(cuentasExistentes && cuentasExistentes.length) return [];
+  return PLAN_BASE.slice();
+}
+
+/* Cuentas ofrecibles como destino de un gasto o una venta: sólo las hojas de
+   resultado. Si el código por defecto ya no está entre ellas —porque el
+   productor le creó una subcuenta desde esta misma pantalla y dejó de ser
+   hoja— se agrega igual. Dejarlo afuera hace que el <select> caiga solo al
+   índice 0 y persista una cuenta distinta a la pensada, sin ningún aviso
+   (hallazgo C1). Devuelve las cuentas ordenadas por código: PLAN_BASE traía
+   el orden gratis, E.cuentas viene de sb.leer sin `order`. */
+function opcionesCuenta(cuentas, defecto){
+  var hojas = (cuentas||[]).filter(function(c){
+    return c.tipo==="resultado" && hijasDe(cuentas,c.codigo).length===0;
+  });
+  if(defecto && !hojas.some(function(c){ return c.codigo===defecto; })){
+    var c = cuentaPorCodigo(cuentas, defecto);
+    if(c) hojas = hojas.concat([c]);
+  }
+  return hojas.slice().sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); });
+}
+
+/* La baja de una cuenta no cascadea nunca: se avisa el impedimento en
+   castellano y quien pidió borrar decide qué hacer.
+
+   Los gastos y las ventas se miran con cuentaDeGasto/cuentaDeVenta y no con
+   el campo crudo `cuenta`, porque los registros viejos lo traen en null y
+   resuelven por categoría — mirar sólo el campo crudo dejaría borrar una
+   cuenta que en los hechos sigue siendo el destino por defecto de gastos o
+   ventas existentes.
+
+   El consumo de insumos es distinto: no vive en `gastos` —las órdenes lo
+   asientan directo en `movimientos`, con tipo "aplicacion"— así que
+   5.1.01/02/03 daban impedimento null aunque fueran el costo más grande de
+   la campaña (hallazgo I3). Se resuelve la cuenta de cada insumo con
+   cuentaDeInsumo y se cuentan sus movimientos de aplicación.
+
+   Devuelve null si se puede borrar, o el impedimento en castellano si no. */
+function impedimentoBorrarCuenta(cuentas, gastos, ventas, insumos, movimientos, codigo){
+  var hijas = hijasDe(cuentas, codigo);
+  if(hijas.length) return "tiene "+hijas.length+" cuenta"+(hijas.length===1?"":"s")+" colgando";
+
+  var nGastos = (gastos||[]).filter(function(g){ return cuentaDeGasto(g)===codigo; }).length;
+  var nVentas = (ventas||[]).filter(function(v){ return cuentaDeVenta(v)===codigo; }).length;
+  var idsInsumo = {};
+  (insumos||[]).forEach(function(i){ if(i && cuentaDeInsumo(i)===codigo) idsInsumo[i.id]=1; });
+  var nAplic = (movimientos||[]).filter(function(m){ return m && m.tipo==="aplicacion" && idsInsumo[m.insumoId]; }).length;
+
+  var categorias=[];
+  if(nGastos) categorias.push({n:nGastos, singular:"gasto", plural:"gastos", fem:false});
+  if(nVentas) categorias.push({n:nVentas, singular:"venta", plural:"ventas", fem:true});
+  if(nAplic)  categorias.push({n:nAplic, singular:"aplicación de insumos", plural:"aplicaciones de insumos", fem:true});
+  if(!categorias.length) return null;
+
+  var partes = categorias.map(function(c){ return c.n+" "+(c.n===1?c.singular:c.plural); });
+  if(categorias.length===1){
+    var c=categorias[0], plural=c.n>1;
+    return "hay "+partes[0]+" imputad"+(c.fem?"a":"o")+(plural?"s":"");
+  }
+  return "hay "+partes.slice(0,-1).join(", ")+" y "+partes[partes.length-1]+" imputados";
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -1537,10 +1732,7 @@ var TIPOS_OPERACION = {
   futuro:    {nom:"Futuro",     ayuda:"Posición tomada en el mercado a término"},
   canje:     {nom:"Canje",      ayuda:"Grano entregado a cambio de insumos"}
 };
-var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
-                        "Estructura","Impuestos y comisiones","Otros"];
 var TIPOS_LABOR  = ["Siembra","Pulverización","Fertilización","Cosecha","Laboreo","Monitoreo"];
-var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
 
 /* ============================================================
    2 · ESTADO
@@ -1893,11 +2085,12 @@ var TABLAS = {
   cultivoLotes:"cultivo_lotes", tickets:"tickets", insumos:"insumos",
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
-  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward"
+  telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
+  cuentas:"cuentas"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[],climaSeries:[],preciosForward:[]};
+           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -1936,6 +2129,22 @@ function cargar(){
       perfil=((res[claves.length]||[])[0])||{nombre:"",empresa:""};
       if(!E.telegramCuentas) E.telegramCuentas=[];
       normalizar(); guardarCache(); cargandoDatos=false;
+      /* Se siembra sólo acá, con los datos recién bajados con éxito: si
+         E.cuentas vino vacía es que el productor todavía no tiene ninguna
+         cuenta propia. No se hace en el catch de abajo —ahí no hay
+         conexión, y sin conexión no se escribe—, y no se encadena en el
+         return para no demorar el arranque: guardar() ya atrapa sus
+         propios errores y avisa, así que corre en segundo plano sin
+         reintentos en cadena si falla. */
+      if(!E.cuentas.length){
+        E.cuentas=sembrarPlan(E.cuentas).map(function(c){
+          var f={id:uid()};
+          for(var k in c){ f[k]=c[k]; }
+          return f;
+        });
+        guardarCache();
+        guardarSiembra(E.cuentas);
+      }
     })
     .catch(function(err){
       cargandoDatos=false;
@@ -1967,6 +2176,29 @@ function guardar(){
   });
 }
 
+/* La siembra del plan de cuentas se persiste aparte de la cola de guardar():
+   40 filas de golpe en el primer arranque son mucho más radio de falla que
+   cualquier otra escritura suelta, y sembrarPlan() por diseño nunca completa
+   un plan a medias —si una fila del medio rechaza, no se repara solo—. Si
+   esta siembra compartiera cola con otra escritura que hubiera quedado
+   pendiente, una falla acá se llevaría puesta esa otra escritura, o al
+   revés. Aislada, un fallo acá no le pega a nada más (hallazgo I2; el
+   defecto general de guardar() —una fila rechazada corta el resto de la
+   tanda— es preexistente y queda anotado aparte, no se toca acá). */
+function guardarSiembra(filas){
+  var cadena=Promise.resolve();
+  (filas||[]).forEach(function(f){
+    cadena=cadena.then(function(){
+      var g=aGuion(f); delete g.creado_en;
+      return sb.grabar(TABLAS.cuentas, g);
+    });
+  });
+  return cadena.catch(function(err){
+    avisar(navigator.onLine ? "No se pudo guardar el plan de cuentas: "+err.message
+                            : "Sin señal: el plan de cuentas no se guardó. Probá de nuevo con conexión.");
+  });
+}
+
 /* Datos de ejemplo: los ids cortos de la semilla se cambian por UUID y se
    reescriben las referencias, para que la base los acepte. */
 function semillaConIds(){
@@ -1995,7 +2227,25 @@ function semillaConIds(){
 }
 function cargarEjemplo(){
   var s=semillaConIds();
-  /* orden de inserción: primero lo que otros referencian */
+  /* El plan de cuentas no tiene ids cortos que remapear —no lo referencia
+     nada de la semilla—, así que se siembra acá mismo en vez de en
+     semillaConIds(). sembrarPlan es pura y no puede generar ids: se los
+     pone quien la llama, igual que nid() hace con el resto de la semilla. */
+  s.cuentas=sembrarPlan(E.cuentas).map(function(c){
+    var f={id:uid()};
+    for(var k in c){ f[k]=c[k]; }
+    return f;
+  });
+  /* Las cuentas se aplican y se persisten aparte del resto de la semilla,
+     con guardarSiembra() en vez de marcar()+guardar() — mismo motivo que en
+     cargar() (hallazgo I2): son muchas filas de golpe y un fallo ahí no
+     tiene que arrastrar las ventas, los gastos o los precios forward de la
+     tanda compartida, ni al revés. No hace falta que corra antes en el
+     orden de inserción: el código de cuenta es texto, no hay FK que
+     resolver (ver supabase/migrations/0010_plan_de_cuentas.sql). */
+  E.cuentas=(E.cuentas||[]).concat(s.cuentas);
+  guardarSiembra(s.cuentas);
+  /* orden de inserción del resto: primero lo que otros referencian */
   var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes",
              "ordenInsumos","movimientos","monitoreo","ventas","gastos","preciosForward"];
   orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
@@ -2987,6 +3237,21 @@ A.moverOrden=function(arg){
   avisar("Movido al "+fecha(p[1])+".");
 };
 /* ---------- ventas y gastos ---------- */
+/* Sólo las cuentas de resultado (ingresos y costos) tienen sentido como
+   destino de un gasto o una venta; el resto del plan es patrimonial. Y sólo
+   las hojas: "5.1 · Costos directos" es un bucket que agrupa cuentas, no un
+   destino de imputación, igual de raro que mandar un gasto a una cuenta
+   patrimonial. El núcleo (opcionesCuenta) vive en el bloque del modelo: ahí
+   se prueba que el default se agregue aunque haya dejado de ser hoja. */
+function opcCuentas(defecto){
+  return opcionesCuenta(E.cuentas, defecto).map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
+}
+/* Para el select de cuenta padre del alta: todo el plan, no sólo las hojas
+   de resultado — cualquier cuenta puede ser padre de otra. */
+function opcCuentasPadre(){
+  return E.cuentas.slice().sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); })
+    .map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
+}
 function opcCultivosDeCampania(){
   var vistos={}, out=[];
   clsDeCampania(campActiva).forEach(function(cl){
@@ -2998,12 +3263,22 @@ function opcCultivosDeCampania(){
 A.nuevaVenta=function(id){
   var V=id?E.ventas.filter(function(v){return v.id===id;})[0]:null;
   if(!campActiva){ avisar("Abrí una campaña antes de cargar ventas."); return; }
+  /* Vacío por defecto, nunca el código resuelto: abrirForm no reconstruye
+     las opciones cuando cambia otro campo del formulario, así que si acá se
+     precargara "4.1.01" y esa cuenta se borrara o dejara de ser hoja, el
+     <select> caería al índice 0 y grabaría una cuenta ajena en silencio
+     (hallazgo C1, camino 2). Con el vacío de primera opción y sin marcar
+     ningún <option> como selected, el propio <select> cae ahí solo — no a
+     una cuenta cualquiera— y cuentaAGuardar/guardar() ya saben leer eso
+     como "resolvé por default". Sólo se precarga el código real cuando la
+     fila ya trae uno explícito, para poder editarlo. */
+  var cuentaExplicita=V?(V.cuenta||""):"";
   abrirForm({titulo:V?"Editar venta":"Registrar venta de grano",
     nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
     valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
                precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
-               fechaEntrega:V.fechaEntrega,nota:V.nota}
-            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible"},
+               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaExplicita}
+            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaExplicita},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
             {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
              opciones:Object.keys(TIPOS_OPERACION).map(function(k){return {v:k,t:TIPOS_OPERACION[k].nom};})},
@@ -3015,6 +3290,9 @@ A.nuevaVenta=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día. Sólo si cobrás en pesos."},
             {k:"comprador",label:"Comprador",ancho:true,ph:"Acopio, exportador o corredor"},
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
+             vacio:"La que corresponde por defecto (Venta de granos)",
+             hint:"Se resuelve sola. Elegí una sólo si querés imputar esta venta a otra cuenta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
       var tn=num(d.toneladas), pu=num(d.precioTn);
@@ -3044,7 +3322,10 @@ A.nuevaVenta=function(id){
       var b={campaniaId:campActiva,cultivo:d.cultivo,fecha:d.fecha,tipoOperacion:d.tipoOperacion,
              toneladas:parseFloat(d.toneladas),precioTn:parseFloat(d.precioTn),moneda:d.moneda,
              tipoCambio:parseFloat(d.tipoCambio)||null,comprador:d.comprador,
-             fechaEntrega:d.fechaEntrega||null,nota:d.nota};
+             fechaEntrega:d.fechaEntrega||null,nota:d.nota,
+             /* d.cuenta="" es la opción vacía (auto): se persiste null y
+                se resuelve por default al leer, con cuentaDeVenta. */
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeVenta(null)):null};
       if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
       else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
     }});
@@ -3057,11 +3338,23 @@ A.borrarVenta=function(id){
 A.nuevoGasto=function(id){
   var G=id?E.gastos.filter(function(g){return g.id===id;})[0]:null;
   if(!campActiva){ avisar("Abrí una campaña antes de cargar gastos."); return; }
+  /* Vacío por defecto, nunca el código resuelto de la categoría con la que
+     se abrió el formulario: abrirForm no reconstruye las opciones cuando
+     cambia la categoría elegida —sólo repinta el panel—, así que si acá se
+     precargara ese código, quedaría clavado aunque el productor eligiera
+     otra categoría, y se grabaría explícito por no coincidir más con el
+     default (7 de 8 categorías terminaban imputadas a "Otros", el default
+     de abrir sin categoría todavía elegida). Con el vacío como opción de
+     primera y sin nada preseleccionado, la cuenta se resuelve recién al
+     guardar, con la categoría que de verdad quedó elegida (hallazgo
+     "el problema más grande", ronda 2). Sólo se precarga un código real
+     cuando la fila ya trae uno explícito, para poder editarlo. */
+  var cuentaExplicita=G?(G.cuenta||""):"";
   abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
     nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
     valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
-               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor}
-            :{fecha:hoyISO(),moneda:"USD"},
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaExplicita}
+            :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaExplicita},
     campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
              opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
             {k:"fecha",label:"Fecha",tipo:"date",req:true},
@@ -3072,6 +3365,9 @@ A.nuevoGasto=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día."},
             {k:"proveedor",label:"Proveedor",ph:"Quién lo cobró"},
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
+             vacio:"La que corresponde a la categoría",
+             hint:"Se resuelve sola según la categoría. Elegí una sólo si querés imputar este gasto a otra cuenta."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
       var usd=aUSD(d.monto,d.moneda,d.tipoCambio);
@@ -3092,7 +3388,11 @@ A.nuevoGasto=function(id){
     guardar:function(d){
       var b={campaniaId:campActiva,cultivoLoteId:d.cultivoLoteId||null,fecha:d.fecha,categoria:d.categoria,
              descripcion:d.descripcion,monto:parseFloat(d.monto),moneda:d.moneda,
-             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor};
+             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor,
+             /* d.cuenta="" es la opción vacía (auto): se persiste null y
+                se resuelve por default al leer, con la categoría que de
+                verdad quedó elegida en este guardado. */
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria})):null};
       if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
       else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
     }});
@@ -3101,6 +3401,31 @@ A.borrarGasto=function(id){
   var g=E.gastos.filter(function(x){return x.id===id;})[0];
   confirmar("Eliminar gasto",esc(g.categoria)+" de "+nf(g.monto,0)+" "+esc(g.moneda)+" del "+fecha(g.fecha)+".",function(){
     E.gastos=E.gastos.filter(function(x){return x.id!==id;}); marcarBaja("gastos",id); avisar("Gasto eliminado."); });
+};
+
+/* ---------- plan de cuentas ---------- */
+A.nuevaCuenta=function(){
+  abrirForm({titulo:"Nueva cuenta",
+    nota:"El código es el que ordena el árbol: si tiene cuenta padre, sumale un nivel al código de ésta, como 5.1.07.",
+    campos:[{k:"codigo",label:"Código",req:true,ph:"5.1.07"},
+            {k:"tipo",label:"Tipo",tipo:"select",req:true,opciones:TIPOS_CUENTA},
+            {k:"nombre",label:"Nombre",req:true,ancho:true,ph:"Semilla de cobertura"},
+            {k:"padre",label:"Cuenta padre",tipo:"select",opciones:opcCuentasPadre(),
+             vacio:"Sin padre — cuenta de primer nivel",ancho:true}],
+    validar:function(d){
+      if(cuentaPorCodigo(E.cuentas,d.codigo)) return {codigo:"Ya existe una cuenta con el código "+d.codigo+"."};
+    },
+    guardar:function(d){
+      var nc={id:uid(),codigo:d.codigo,nombre:d.nombre,tipo:d.tipo,padre:d.padre||null};
+      E.cuentas.push(nc); marcar("cuentas",nc); avisar("Cuenta "+d.codigo+" creada.");
+    }});
+};
+A.borrarCuenta=function(id){
+  var c=E.cuentas.filter(function(x){return x.id===id;})[0]; if(!c) return;
+  var imp=impedimentoBorrarCuenta(E.cuentas,E.gastos,E.ventas,E.insumos,E.movimientos,c.codigo);
+  if(imp){ avisar("No se puede borrar "+c.codigo+": "+imp+"."); return; }
+  confirmar("Eliminar cuenta",esc(c.codigo)+" · "+esc(c.nombre)+". No se puede deshacer.",function(){
+    E.cuentas=E.cuentas.filter(function(x){return x.id!==id;}); marcarBaja("cuentas",id); avisar("Cuenta eliminada."); });
 };
 
 /* ---------- precios forward ---------- */
@@ -4049,8 +4374,8 @@ function vistaInicio(){
     {v:"lotes", ico:"lotes", nom:"Lotes",
      dice:"El padrón con su superficie, sus ambientes y qué tiene asignado.",
      dato:oc?nf(oc.libre,1)+" <span>ha libres de "+nf(oc.total,1)+"</span>":E.lotes.length+" <span>lotes</span>"},
-    {v:"finanzas", ico:"finanzas", nom:"Finanzas",
-     dice:"Ventas de grano, gastos y resultado por lote, todo llevado a dólares.",
+    {v:"finanzas", ico:"finanzas", nom:"Finanzas y Contabilidad",
+     dice:"Ventas de grano, gastos, resultado por lote y el plan de cuentas, todo llevado a dólares.",
      dato:ec&&Math.abs(ec.resultado)>0.01
           ?'<span style="color:'+(ec.resultado>=0?"var(--ok)":"var(--alerta)")+'">'+(ec.resultado>=0?"":"−")+nf(Math.abs(ec.porHa))+' USD/ha</span>'
           :"Sin movimientos"},
@@ -4086,11 +4411,46 @@ function vistaInicio(){
   }).join("")+'</div>';
 }
 
+var TIPOS_CUENTA = [
+  {v:"activo",     t:"Activo"},
+  {v:"pasivo",     t:"Pasivo"},
+  {v:"patrimonio", t:"Patrimonio neto"},
+  {v:"resultado",  t:"Resultado"}
+];
+
+/* El plan de cuentas es una pantalla de trabajo, no de consulta: el dueño se
+   sienta acá con el contador. Por eso siempre se muestra entero —agrupado
+   por tipo, con la jerarquía a la vista vía panel-vivo/panel-fila— sin
+   importar si ya hay ventas o gastos cargados. */
+function filaCuenta(c, prof){
+  return '<div class="panel-fila"><span style="padding-left:'+(prof*16)+'px">'+
+    esc(c.codigo)+' · '+esc(c.nombre)+'</span>'+
+    '<button type="button" class="btn peligro mini" data-a="borrarCuenta" data-arg="'+c.id+'">×</button></div>';
+}
+function nodoCuenta(cuentas, c, prof){
+  var hijas = hijasDe(cuentas, c.codigo).slice().sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); });
+  return filaCuenta(c, prof)+hijas.map(function(h){ return nodoCuenta(cuentas, h, prof+1); }).join("");
+}
+function bloqueCuentas(){
+  var cuentas = E.cuentas||[];
+  var grupos = TIPOS_CUENTA.map(function(t){
+    var raices = cuentas.filter(function(c){ return c.tipo===t.v && !c.padre; })
+                        .sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); });
+    if(!raices.length) return '';
+    return '<div class="panel-vivo"><h4>'+esc(t.t)+'</h4>'+
+      raices.map(function(c){ return nodoCuenta(cuentas, c, 0); }).join("")+'</div>';
+  }).join("");
+  return '<div class="bloque"><div class="bloque-cab"><h2>Plan de cuentas</h2>'+
+    '<div class="aclara">'+cuentas.length+' cuenta'+(cuentas.length===1?"":"s")+'</div></div>'+
+    '<div class="bloque-cuerpo">'+grupos+'</div></div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
-  var cab='<div class="cabecera"><div><h1>Finanzas</h1>'+
-    '<div class="sub">Ventas, gastos y resultado de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
-    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
+  var cab='<div class="cabecera"><div><h1>Finanzas y Contabilidad</h1>'+
+    '<div class="sub">Ventas, gastos, resultado y el plan de cuentas de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
+    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevaCuenta">+ Cuenta</button>'+
+    '<button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
     '<button class="btn sec" data-a="nuevoPrecioForward">+ Precio forward</button>'+
     '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
 
@@ -4104,7 +4464,7 @@ function vistaFinanzas(){
                      .sort(function(a,b){return (b.fechaCarga||"").localeCompare(a.fechaCarga||"");});
 
   if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length)
-    return cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
+    return cab+bloqueCuentas()+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
       'Registrá las ventas de grano y los gastos que no son insumos —contratistas, fletes, arrendamiento— '+
       'y acá vas a ver el resultado por lote y por cultivo.<br><br>'+
       '<button class="btn" data-a="nuevaVenta">+ Registrar una venta</button></p></div>';
@@ -4238,7 +4598,7 @@ function vistaFinanzas(){
       }).join("")+'</tbody></table></div>'
      :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos;
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloqueCuentas();
 }
 
 function vistaClima(){

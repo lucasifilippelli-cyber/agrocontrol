@@ -21,8 +21,13 @@ patrimonio, resultado— y cuenta padre para agrupar.
 
 **Viene con un plan por defecto ya cargado**, razonable para actividad
 agropecuaria: bienes de cambio separando granos de insumos, arrendamientos,
-labores de terceros, ventas por cultivo. **El productor puede crear cuentas
+labores de terceros, amortización acumulada, y retenciones y percepciones
+sufridas separadas de las cuentas por cobrar. **El productor puede crear cuentas
 nuevas.**
+
+**El cultivo no es una cuenta, es una dimensión.** Cada venta ya guarda su
+cultivo, y de ahí sale el resultado por cultivo y por lote. Abrir una cuenta por
+cultivo daría dos fuentes de verdad para el mismo número.
 
 **Nada se recodifica a mano:** cada gasto y cada venta lleva su cuenta, y el
 valor por defecto sale de la categoría que ya se carga hoy. Lo existente sigue
