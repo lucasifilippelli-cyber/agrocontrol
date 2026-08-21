@@ -1237,3 +1237,21 @@ test("la cuenta cargada a mano pisa al default de la venta", function(){
 test("un gasto sin categoría no rompe", function(){
   assert.strictEqual(M.cuentaDeGasto({}), "5.2.05");
 });
+
+test("las cuentas de agrupación de resultado no son imputables: sólo las hojas", function(){
+  var imputables = M.PLAN_BASE.filter(function(c){
+    return c.tipo === "resultado" && M.hijasDe(M.PLAN_BASE, c.codigo).length === 0;
+  }).map(function(c){ return c.codigo; });
+  ["4", "5", "5.1", "5.2"].forEach(function(bucket){
+    assert.ok(imputables.indexOf(bucket) === -1, bucket + " es un bucket de agrupación y no debería ofrecerse");
+  });
+  assert.strictEqual(imputables.length, 13);
+});
+
+test("si la cuenta elegida en el formulario coincide con el default, no hace falta guardarla", function(){
+  assert.strictEqual(M.cuentaAGuardar("5.2.05", "5.2.05"), null);
+});
+
+test("si el usuario cambió la cuenta a mano, se persiste el código explícito", function(){
+  assert.strictEqual(M.cuentaAGuardar("5.2.04", "5.2.05"), "5.2.04");
+});

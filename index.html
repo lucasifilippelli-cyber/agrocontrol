@@ -1619,6 +1619,16 @@ function cuentaDeVenta(v){
   if(v.cuenta) return v.cuenta;
   return "4.1.01";
 }
+
+/* Esta app no tiene cierre ni asiento firme: es herramienta de gestión, no
+   contabilidad formal. Por eso el default manda vivo. Si lo elegido en el
+   formulario coincide con el default de la categoría, no hace falta grabar
+   nada: se persiste null y el registro sigue el remapeo futuro de la
+   categoría. Sólo se graba un código explícito cuando el usuario lo cambió
+   a mano a otra cuenta distinta del default. */
+function cuentaAGuardar(elegida, defecto){
+  return (elegida === defecto) ? null : elegida;
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -3077,10 +3087,14 @@ A.moverOrden=function(arg){
 };
 /* ---------- ventas y gastos ---------- */
 /* Sólo las cuentas de resultado (ingresos y costos) tienen sentido como
-   destino de un gasto o una venta; el resto del plan es patrimonial. */
+   destino de un gasto o una venta; el resto del plan es patrimonial. Y sólo
+   las hojas: "5.1 · Costos directos" es un bucket que agrupa cuentas, no un
+   destino de imputación, igual de raro que mandar un gasto a una cuenta
+   patrimonial. */
 function opcCuentas(){
-  return PLAN_BASE.filter(function(c){ return c.tipo==="resultado"; })
-    .map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
+  return PLAN_BASE.filter(function(c){
+    return c.tipo==="resultado" && hijasDe(PLAN_BASE,c.codigo).length===0;
+  }).map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
 }
 function opcCultivosDeCampania(){
   var vistos={}, out=[];
@@ -3110,7 +3124,7 @@ A.nuevaVenta=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día. Sólo si cobrás en pesos."},
             {k:"comprador",label:"Comprador",ancho:true,ph:"Acopio, exportador o corredor"},
-            {k:"cuenta",label:"Cuenta contable",tipo:"select",req:true,opciones:opcCuentas(),
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(),
              hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
@@ -3141,7 +3155,7 @@ A.nuevaVenta=function(id){
       var b={campaniaId:campActiva,cultivo:d.cultivo,fecha:d.fecha,tipoOperacion:d.tipoOperacion,
              toneladas:parseFloat(d.toneladas),precioTn:parseFloat(d.precioTn),moneda:d.moneda,
              tipoCambio:parseFloat(d.tipoCambio)||null,comprador:d.comprador,
-             fechaEntrega:d.fechaEntrega||null,nota:d.nota,cuenta:d.cuenta||null};
+             fechaEntrega:d.fechaEntrega||null,nota:d.nota,cuenta:cuentaAGuardar(d.cuenta,cuentaDeVenta(null))};
       if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
       else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
     }});
@@ -3169,7 +3183,7 @@ A.nuevoGasto=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día."},
             {k:"proveedor",label:"Proveedor",ph:"Quién lo cobró"},
-            {k:"cuenta",label:"Cuenta contable",tipo:"select",req:true,opciones:opcCuentas(),
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(),
              hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
@@ -3191,7 +3205,8 @@ A.nuevoGasto=function(id){
     guardar:function(d){
       var b={campaniaId:campActiva,cultivoLoteId:d.cultivoLoteId||null,fecha:d.fecha,categoria:d.categoria,
              descripcion:d.descripcion,monto:parseFloat(d.monto),moneda:d.moneda,
-             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor,cuenta:d.cuenta||null};
+             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor,
+             cuenta:cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria}))};
       if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
       else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
     }});
