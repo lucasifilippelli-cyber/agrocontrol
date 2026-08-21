@@ -119,3 +119,42 @@ test("cargarEjemplo sobre un perfil vacío (cuenta nueva, sin overrides todavía
     assert.strictEqual(JSON.stringify(env.ctx.perfil.rindes_base), JSON.stringify({"est-nuevo-la-constancia":{maiz_d:9200}}));
   });
 });
+
+/* ============================================================
+   Task 4 · el plan de cuentas también se siembra con el ejemplo
+   No había ninguna aserción sobre esto: nada verificaba que
+   cargarEjemplo efectivamente sembrara el plan, con id en cada
+   fila, ni que el orden de inserción pusiera las cuentas antes que
+   las ventas y los gastos que las referencian por código.
+   ============================================================ */
+
+test("cargarEjemplo siembra tantas cuentas como trae el plan base, todas con id, antes de marcar ventas y gastos", function(){
+  var env = entorno(null);
+  var marcados = [];
+  env.ctx.marcar = function(coleccion, fila){ marcados.push({coleccion:coleccion, id:fila.id}); };
+  /* La semilla mockeada no trae ventas ni gastos: se le agrega una de cada
+     una para poder verificar el orden real de marcado. */
+  var semillaOriginal = env.ctx.semillaConIds;
+  env.ctx.semillaConIds = function(){
+    var s = semillaOriginal();
+    s.ventas = [{id:"venta-1", campaniaId:s.campanias[0].id, cultivo:"soja_1"}];
+    s.gastos = [{id:"gasto-1", campaniaId:s.campanias[0].id, categoria:"Otros"}];
+    return s;
+  };
+
+  return env.ejecutar().then(function(){
+    assert.strictEqual(env.ctx.E.cuentas.length, env.ctx.PLAN_BASE.length,
+      "tiene que sembrar tantas cuentas como trae el plan base");
+    env.ctx.E.cuentas.forEach(function(c){
+      assert.ok(c.id, "cada cuenta sembrada tiene que traer id");
+    });
+
+    var colecciones = marcados.map(function(m){ return m.coleccion; });
+    var iCuentas = colecciones.indexOf("cuentas");
+    var iVentas  = colecciones.indexOf("ventas");
+    var iGastos  = colecciones.indexOf("gastos");
+    assert.ok(iCuentas >= 0 && iVentas >= 0 && iGastos >= 0, "las tres colecciones se tienen que haber marcado");
+    assert.ok(iCuentas < iVentas, "las cuentas se marcan antes que las ventas que las referencian");
+    assert.ok(iCuentas < iGastos, "las cuentas se marcan antes que los gastos que las referencian");
+  });
+});

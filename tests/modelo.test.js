@@ -1270,3 +1270,79 @@ test("sembrar el plan no pisa una cuenta creada por el productor", function(){
   var propias = [{codigo:"5.1.99", nombre:"Mi cuenta", tipo:"resultado", padre:"5.1"}];
   assert.strictEqual(JSON.stringify(M.sembrarPlan(propias)), JSON.stringify([]));
 });
+
+/* ============================================================
+   Task 4 · impedimentoBorrarCuenta
+   La baja nunca cascadea: se avisa el impedimento en vez de fallar
+   o de borrar en cadena.
+   ============================================================ */
+
+test("una cuenta hoja sin movimientos se puede borrar", function(){
+  var cuentas = [{codigo:"5.2.05", nombre:"Otros", tipo:"resultado", padre:"5.2"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], "5.2.05"), null);
+});
+
+test("con hijas, el impedimento dice cuántas cuelgan y no las cuenta a más de un nivel mal", function(){
+  var cuentas = [
+    {codigo:"5.1", nombre:"Costos directos", tipo:"resultado", padre:"5"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"},
+    {codigo:"5.1.02", nombre:"Fertilizantes", tipo:"resultado", padre:"5.1"},
+    {codigo:"5.1.03", nombre:"Fitosanitarios", tipo:"resultado", padre:"5.1"}
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], "5.1"), "tiene 3 cuentas colgando");
+});
+
+test("con una sola hija, el impedimento va en singular", function(){
+  var cuentas = [
+    {codigo:"5.1", nombre:"Costos directos", tipo:"resultado", padre:"5"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], [], "5.1"), "tiene 1 cuenta colgando");
+});
+
+test("con gastos imputados por código explícito, el impedimento cuenta esos gastos", function(){
+  var cuentas = [{codigo:"5.1.04", nombre:"Labores de terceros", tipo:"resultado", padre:"5.1"}];
+  var gastos = [
+    {categoria:"Otros", cuenta:"5.1.04"},
+    {categoria:"Otros", cuenta:"5.1.04"},
+    {categoria:"Cosecha"}   // cae en su propia cuenta por defecto, no en 5.1.04
+  ];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], "5.1.04"), "hay 2 gastos imputados");
+});
+
+test("un gasto que imputa por el default de la categoría también cuenta, aunque el campo cuenta esté en null", function(){
+  /* El caso real: los registros viejos no tienen cuenta cargada y resuelven
+     por categoría (ver cuentaDeGasto). Mirar sólo el campo crudo dejaría
+     borrar una cuenta que en los hechos sigue siendo el destino de gastos
+     existentes. */
+  var cuentas = [{codigo:"5.1.05", nombre:"Cosecha", tipo:"resultado", padre:"5.1"}];
+  var gastos = [{categoria:"Cosecha", cuenta:null}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], "5.1.05"), "hay 1 gasto imputado");
+});
+
+test("con una sola venta imputada, el impedimento va en femenino singular", function(){
+  var cuentas = [{codigo:"4.1.01", nombre:"Venta de granos", tipo:"resultado", padre:"4"}];
+  var ventas = [{cultivo:"soja_1", cuenta:null}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, [], ventas, "4.1.01"), "hay 1 venta imputada");
+});
+
+test("con gastos y ventas imputados a la vez, el impedimento menciona los dos", function(){
+  var cuentas = [{codigo:"4.1.02", nombre:"Otros ingresos", tipo:"resultado", padre:"4"}];
+  var gastos = [{categoria:"Otros", cuenta:"4.1.02"}];
+  var ventas = [{cultivo:"soja_1", cuenta:"4.1.02"}, {cultivo:"trigo", cuenta:"4.1.02"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, ventas, "4.1.02"),
+    "hay 1 gasto y 2 ventas imputados");
+});
+
+test("hijas manda antes que movimientos: si tiene las dos cosas, avisa primero de las hijas", function(){
+  var cuentas = [
+    {codigo:"5.1", nombre:"Costos directos", tipo:"resultado", padre:"5"},
+    {codigo:"5.1.01", nombre:"Semilla", tipo:"resultado", padre:"5.1"}
+  ];
+  var gastos = [{categoria:"Otros", cuenta:"5.1"}];
+  assert.strictEqual(M.impedimentoBorrarCuenta(cuentas, gastos, [], "5.1"), "tiene 1 cuenta colgando");
+});
+
+test("una cuenta que nadie usa hoy en el plan base también se puede borrar", function(){
+  assert.strictEqual(M.impedimentoBorrarCuenta(M.PLAN_BASE, [], [], "5.2.05"), null);
+});

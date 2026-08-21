@@ -1637,6 +1637,26 @@ function sembrarPlan(cuentasExistentes){
   if(cuentasExistentes && cuentasExistentes.length) return [];
   return PLAN_BASE.slice();
 }
+
+/* La baja de una cuenta no cascadea nunca: se avisa el impedimento en
+   castellano y quien pidió borrar decide qué hacer. Los movimientos
+   imputados se miran con cuentaDeGasto/cuentaDeVenta y no con el campo
+   crudo `cuenta`, porque los registros viejos lo traen en null y resuelven
+   por categoría — mirar sólo el campo crudo dejaría borrar una cuenta que en
+   los hechos sigue siendo el destino por defecto de gastos o ventas
+   existentes. Devuelve null si se puede borrar, o el impedimento en
+   castellano si no. */
+function impedimentoBorrarCuenta(cuentas, gastos, ventas, codigo){
+  var hijas = hijasDe(cuentas, codigo);
+  if(hijas.length) return "tiene "+hijas.length+" cuenta"+(hijas.length===1?"":"s")+" colgando";
+  var nGastos = (gastos||[]).filter(function(g){ return cuentaDeGasto(g)===codigo; }).length;
+  var nVentas = (ventas||[]).filter(function(v){ return cuentaDeVenta(v)===codigo; }).length;
+  if(nGastos && nVentas)
+    return "hay "+nGastos+" gasto"+(nGastos===1?"":"s")+" y "+nVentas+" venta"+(nVentas===1?"":"s")+" imputados";
+  if(nGastos) return "hay "+nGastos+" gasto"+(nGastos===1?"":"s")+" imputado"+(nGastos===1?"":"s");
+  if(nVentas) return "hay "+nVentas+" venta"+(nVentas===1?"":"s")+" imputada"+(nVentas===1?"":"s");
+  return null;
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -3127,9 +3147,15 @@ A.moverOrden=function(arg){
    destino de imputación, igual de raro que mandar un gasto a una cuenta
    patrimonial. */
 function opcCuentas(){
-  return PLAN_BASE.filter(function(c){
-    return c.tipo==="resultado" && hijasDe(PLAN_BASE,c.codigo).length===0;
+  return E.cuentas.filter(function(c){
+    return c.tipo==="resultado" && hijasDe(E.cuentas,c.codigo).length===0;
   }).map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
+}
+/* Para el select de cuenta padre del alta: todo el plan, no sólo las hojas
+   de resultado — cualquier cuenta puede ser padre de otra. */
+function opcCuentasPadre(){
+  return E.cuentas.slice().sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); })
+    .map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
 }
 function opcCultivosDeCampania(){
   var vistos={}, out=[];
@@ -3250,6 +3276,31 @@ A.borrarGasto=function(id){
   var g=E.gastos.filter(function(x){return x.id===id;})[0];
   confirmar("Eliminar gasto",esc(g.categoria)+" de "+nf(g.monto,0)+" "+esc(g.moneda)+" del "+fecha(g.fecha)+".",function(){
     E.gastos=E.gastos.filter(function(x){return x.id!==id;}); marcarBaja("gastos",id); avisar("Gasto eliminado."); });
+};
+
+/* ---------- plan de cuentas ---------- */
+A.nuevaCuenta=function(){
+  abrirForm({titulo:"Nueva cuenta",
+    nota:"El código es el que ordena el árbol: si tiene cuenta padre, sumale un nivel al código de ésta, como 5.1.07.",
+    campos:[{k:"codigo",label:"Código",req:true,ph:"5.1.07"},
+            {k:"tipo",label:"Tipo",tipo:"select",req:true,opciones:TIPOS_CUENTA},
+            {k:"nombre",label:"Nombre",req:true,ancho:true,ph:"Semilla de cobertura"},
+            {k:"padre",label:"Cuenta padre",tipo:"select",opciones:opcCuentasPadre(),
+             vacio:"Sin padre — cuenta de primer nivel",ancho:true}],
+    validar:function(d){
+      if(cuentaPorCodigo(E.cuentas,d.codigo)) return {codigo:"Ya existe una cuenta con el código "+d.codigo+"."};
+    },
+    guardar:function(d){
+      var nc={id:uid(),codigo:d.codigo,nombre:d.nombre,tipo:d.tipo,padre:d.padre||null};
+      E.cuentas.push(nc); marcar("cuentas",nc); avisar("Cuenta "+d.codigo+" creada.");
+    }});
+};
+A.borrarCuenta=function(id){
+  var c=E.cuentas.filter(function(x){return x.id===id;})[0]; if(!c) return;
+  var imp=impedimentoBorrarCuenta(E.cuentas,E.gastos,E.ventas,c.codigo);
+  if(imp){ avisar("No se puede borrar "+c.codigo+": "+imp+"."); return; }
+  confirmar("Eliminar cuenta",esc(c.codigo)+" · "+esc(c.nombre)+". No se puede deshacer.",function(){
+    E.cuentas=E.cuentas.filter(function(x){return x.id!==id;}); marcarBaja("cuentas",id); avisar("Cuenta eliminada."); });
 };
 
 /* ---------- precios forward ---------- */
@@ -4198,8 +4249,8 @@ function vistaInicio(){
     {v:"lotes", ico:"lotes", nom:"Lotes",
      dice:"El padrón con su superficie, sus ambientes y qué tiene asignado.",
      dato:oc?nf(oc.libre,1)+" <span>ha libres de "+nf(oc.total,1)+"</span>":E.lotes.length+" <span>lotes</span>"},
-    {v:"finanzas", ico:"finanzas", nom:"Finanzas",
-     dice:"Ventas de grano, gastos y resultado por lote, todo llevado a dólares.",
+    {v:"finanzas", ico:"finanzas", nom:"Finanzas y Contabilidad",
+     dice:"Ventas de grano, gastos, resultado por lote y el plan de cuentas, todo llevado a dólares.",
      dato:ec&&Math.abs(ec.resultado)>0.01
           ?'<span style="color:'+(ec.resultado>=0?"var(--ok)":"var(--alerta)")+'">'+(ec.resultado>=0?"":"−")+nf(Math.abs(ec.porHa))+' USD/ha</span>'
           :"Sin movimientos"},
@@ -4235,11 +4286,46 @@ function vistaInicio(){
   }).join("")+'</div>';
 }
 
+var TIPOS_CUENTA = [
+  {v:"activo",     t:"Activo"},
+  {v:"pasivo",     t:"Pasivo"},
+  {v:"patrimonio", t:"Patrimonio neto"},
+  {v:"resultado",  t:"Resultado"}
+];
+
+/* El plan de cuentas es una pantalla de trabajo, no de consulta: el dueño se
+   sienta acá con el contador. Por eso siempre se muestra entero —agrupado
+   por tipo, con la jerarquía a la vista vía panel-vivo/panel-fila— sin
+   importar si ya hay ventas o gastos cargados. */
+function filaCuenta(c, prof){
+  return '<div class="panel-fila"><span style="padding-left:'+(prof*16)+'px">'+
+    esc(c.codigo)+' · '+esc(c.nombre)+'</span>'+
+    '<button type="button" class="btn peligro mini" data-a="borrarCuenta" data-arg="'+c.id+'">×</button></div>';
+}
+function nodoCuenta(cuentas, c, prof){
+  var hijas = hijasDe(cuentas, c.codigo).slice().sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); });
+  return filaCuenta(c, prof)+hijas.map(function(h){ return nodoCuenta(cuentas, h, prof+1); }).join("");
+}
+function bloqueCuentas(){
+  var cuentas = E.cuentas||[];
+  var grupos = TIPOS_CUENTA.map(function(t){
+    var raices = cuentas.filter(function(c){ return c.tipo===t.v && !c.padre; })
+                        .sort(function(a,b){ return a.codigo<b.codigo?-1:(a.codigo>b.codigo?1:0); });
+    if(!raices.length) return '';
+    return '<div class="panel-vivo"><h4>'+esc(t.t)+'</h4>'+
+      raices.map(function(c){ return nodoCuenta(cuentas, c, 0); }).join("")+'</div>';
+  }).join("");
+  return '<div class="bloque"><div class="bloque-cab"><h2>Plan de cuentas</h2>'+
+    '<div class="aclara">'+cuentas.length+' cuenta'+(cuentas.length===1?"":"s")+'</div></div>'+
+    '<div class="bloque-cuerpo">'+grupos+'</div></div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
-  var cab='<div class="cabecera"><div><h1>Finanzas</h1>'+
-    '<div class="sub">Ventas, gastos y resultado de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
-    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
+  var cab='<div class="cabecera"><div><h1>Finanzas y Contabilidad</h1>'+
+    '<div class="sub">Ventas, gastos, resultado y el plan de cuentas de '+esc(c.nombre)+'. Todo en dólares, al cambio del día de cada operación.</div></div>'+
+    '<div class="cabecera-acc"><button class="btn sec" data-a="nuevaCuenta">+ Cuenta</button>'+
+    '<button class="btn sec" data-a="nuevoGasto">+ Gasto</button>'+
     '<button class="btn sec" data-a="nuevoPrecioForward">+ Precio forward</button>'+
     '<button class="btn" data-a="nuevaVenta">+ Venta</button></div></div>';
 
@@ -4253,7 +4339,7 @@ function vistaFinanzas(){
                      .sort(function(a,b){return (b.fechaCarga||"").localeCompare(a.fechaCarga||"");});
 
   if(!ventas.length && !gastos.length && ec.costos<0.01 && !preciosForward.length)
-    return cab+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
+    return cab+bloqueCuentas()+'<div class="bloque"><p class="vacio"><b>Todavía no hay nada cargado en '+esc(c.nombre)+'.</b>'+
       'Registrá las ventas de grano y los gastos que no son insumos —contratistas, fletes, arrendamiento— '+
       'y acá vas a ver el resultado por lote y por cultivo.<br><br>'+
       '<button class="btn" data-a="nuevaVenta">+ Registrar una venta</button></p></div>';
@@ -4387,7 +4473,7 @@ function vistaFinanzas(){
       }).join("")+'</tbody></table></div>'
      :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos;
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloqueCuentas();
 }
 
 function vistaClima(){
