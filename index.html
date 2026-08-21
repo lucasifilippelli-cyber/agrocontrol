@@ -1725,9 +1725,11 @@ function impedimentoBorrarCuenta(cuentas, gastos, ventas, insumos, movimientos, 
   return "hay "+partes.slice(0,-1).join(", ")+" y "+partes[partes.length-1]+" imputados";
 }
 
-/* Copia de num() (más abajo en el archivo, fuera de este bloque): el arnés
-   de tests evalúa sólo lo que hay entre modelo:inicio y modelo:fin, así que
-   costoPendienteDe necesita su propia coerción numérica acá adentro. */
+/* num() vivía más abajo en el archivo, fuera de este bloque, y el arnés de
+   tests sólo evalúa lo que hay entre modelo:inicio y modelo:fin. Se traslada
+   acá adentro —no se duplica— porque las declaraciones de función se
+   hoistean en todo el <script>, así que los otros usos de num() en el resto
+   del archivo siguen viendo la misma (y única) definición. */
 function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
 /* La primera capa del costo que falta, y la única que no hay que cargar: las
    órdenes programadas ya tienen su mezcla con dosis por hectárea. Las
@@ -2618,7 +2620,6 @@ function nombreEstab(id){ var e=estabDeLote(id); return e?e.nombre:""; }
 /* ---------- stock: la existencia sale de los movimientos ----------
    Nunca se guarda un número de stock: se suma el libro. Así el saldo y su
    historia no pueden discrepar, que era el problema de tener las dos cosas. */
-function num(v){ return typeof v==="number"?v:(parseFloat(v)||0); }
 function movimientosDe(insumoId, estId){
   return E.movimientos.filter(function(m){
     return m.insumoId===insumoId && (!estId||m.establecimientoId===estId);
