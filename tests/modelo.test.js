@@ -1255,3 +1255,18 @@ test("si la cuenta elegida en el formulario coincide con el default, no hace fal
 test("si el usuario cambió la cuenta a mano, se persiste el código explícito", function(){
   assert.strictEqual(M.cuentaAGuardar("5.2.04", "5.2.05"), "5.2.04");
 });
+
+test("con la cuenta vacía se siembra el plan entero", function(){
+  assert.strictEqual(M.sembrarPlan([]).length, M.PLAN_BASE.length);
+});
+
+test("si ya hay cuentas no se siembra nada", function(){
+  /* JSON.stringify y no deepStrictEqual: el array vacío sale de otro
+     contexto de vm y no es reference-equal, aunque tenga el mismo contenido. */
+  assert.strictEqual(JSON.stringify(M.sembrarPlan([{codigo:"1", nombre:"Activo"}])), JSON.stringify([]));
+});
+
+test("sembrar el plan no pisa una cuenta creada por el productor", function(){
+  var propias = [{codigo:"5.1.99", nombre:"Mi cuenta", tipo:"resultado", padre:"5.1"}];
+  assert.strictEqual(JSON.stringify(M.sembrarPlan(propias)), JSON.stringify([]));
+});

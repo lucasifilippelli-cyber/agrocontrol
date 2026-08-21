@@ -7,9 +7,11 @@ var vm = require("node:vm");
    traerLluviaCampania) así que no vive en el bloque de modelo. Igual que
    clima.test.js hace con traerLluviaCampania, se extraen sólo las funciones
    necesarias del index.html contando llaves y se evalúan con dependencias
-   mockeadas. overridesDePerfil/armarOverrides/escribirOverrides se extraen
-   de verdad (no se mockean): son justo las que arman el merge, y el bug que
-   este archivo cubre está en cómo cargarEjemplo las usa, no en ellas. */
+   mockeadas. overridesDePerfil/armarOverrides/escribirOverrides/sembrarPlan
+   se extraen de verdad (no se mockean): son justo las que arman el merge (o,
+   en el caso de sembrarPlan, la siembra del plan de cuentas), y el bug que
+   este archivo cubre está en cómo cargarEjemplo las usa, no en ellas. uid()
+   sí se mockea: usa window.crypto, que no existe en este sandbox de vm. */
 function extraerFuncion(html, nombre){
   var ini = html.indexOf("function " + nombre + "(");
   assert.ok(ini > 0, "no encontré function " + nombre + " en index.html");
@@ -28,13 +30,14 @@ function extraerFuncion(html, nombre){
    se mandó a sb.actualizar. */
 function entorno(perfilPrevio){
   var html = fs.readFileSync(__dirname + "/../index.html", "utf8");
-  var src = ["overridesDePerfil", "escribirOverrides", "armarOverrides", "cargarEjemplo"]
+  var src = ["overridesDePerfil", "escribirOverrides", "armarOverrides", "sembrarPlan", "cargarEjemplo"]
     .map(function(n){ return extraerFuncion(html, n); }).join("\n\n");
 
   var vacio = {establecimientos:[], lotes:[], campanias:[], cultivoLotes:[], tickets:[],
     insumos:[], ordenes:[], ordenInsumos:[], movimientos:[], monitoreo:[], ventas:[],
-    gastos:[], preciosForward:[]};
+    gastos:[], preciosForward:[], cuentas:[]};
   var actualizados = [];
+  var nextId = 0;
 
   var ctx = {
     Promise: Promise,
@@ -50,12 +53,20 @@ function entorno(perfilPrevio){
     guardar: function(){ return Promise.resolve(); },
     traerLluviaCampania: function(){ return Promise.resolve(); },
     traerPronostico: function(){ return Promise.resolve(); },
+    /* sembrarPlan es pura y no genera ids: en el index.html real quien la
+       llama le pone id:uid(). uid() usa window.crypto, así que acá se
+       mockea con un contador simple en vez de extraerla del archivo real. */
+    uid: function(){ return "cuenta-test-" + (nextId++); },
     sb: {
       actualizar: function(tabla, id, campos){
         actualizados.push({tabla:tabla, id:id, campos:campos});
         return Promise.resolve();
       }
     },
+    /* PLAN_BASE no está en este sandbox (sembrarPlan se extrajo sola, sin
+       el resto del bloque de modelo), así que sembrarPlan necesita su
+       propia PLAN_BASE acá para no depender de todo el bloque. */
+    PLAN_BASE: [{codigo:"1", nombre:"Activo", tipo:"activo", padre:null}],
     semillaConIds: function(){
       return {
         establecimientos:[{id:"est-nuevo-la-constancia"}],

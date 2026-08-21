@@ -1629,6 +1629,14 @@ function cuentaDeVenta(v){
 function cuentaAGuardar(elegida, defecto){
   return (elegida === defecto) ? null : elegida;
 }
+
+/* Se siembra sólo cuando no hay ninguna cuenta. Nunca completa un plan
+   a medias: si el productor ya tiene cuentas propias, las suyas mandan y
+   agregar las que falten es decisión de él, no nuestra. */
+function sembrarPlan(cuentasExistentes){
+  if(cuentasExistentes && cuentasExistentes.length) return [];
+  return PLAN_BASE.slice();
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -2035,6 +2043,23 @@ function cargar(){
       perfil=((res[claves.length]||[])[0])||{nombre:"",empresa:""};
       if(!E.telegramCuentas) E.telegramCuentas=[];
       normalizar(); guardarCache(); cargandoDatos=false;
+      /* Se siembra sólo acá, con los datos recién bajados con éxito: si
+         E.cuentas vino vacía es que el productor todavía no tiene ninguna
+         cuenta propia. No se hace en el catch de abajo —ahí no hay
+         conexión, y sin conexión no se escribe—, y no se encadena en el
+         return para no demorar el arranque: guardar() ya atrapa sus
+         propios errores y avisa, así que corre en segundo plano sin
+         reintentos en cadena si falla. */
+      if(!E.cuentas.length){
+        E.cuentas=sembrarPlan(E.cuentas).map(function(c){
+          var f={id:uid()};
+          for(var k in c){ f[k]=c[k]; }
+          return f;
+        });
+        E.cuentas.forEach(function(f){ marcar("cuentas", f); });
+        guardarCache();
+        guardar();
+      }
     })
     .catch(function(err){
       cargandoDatos=false;
@@ -2094,9 +2119,19 @@ function semillaConIds(){
 }
 function cargarEjemplo(){
   var s=semillaConIds();
-  /* orden de inserción: primero lo que otros referencian */
+  /* El plan de cuentas no tiene ids cortos que remapear —no lo referencia
+     nada de la semilla—, así que se siembra acá mismo en vez de en
+     semillaConIds(). sembrarPlan es pura y no puede generar ids: se los
+     pone quien la llama, igual que nid() hace con el resto de la semilla. */
+  s.cuentas=sembrarPlan(E.cuentas).map(function(c){
+    var f={id:uid()};
+    for(var k in c){ f[k]=c[k]; }
+    return f;
+  });
+  /* orden de inserción: primero lo que otros referencian; cuentas antes de
+     ventas y gastos porque esas dos la referencian */
   var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes",
-             "ordenInsumos","movimientos","monitoreo","ventas","gastos","preciosForward"];
+             "ordenInsumos","movimientos","monitoreo","cuentas","ventas","gastos","preciosForward"];
   orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
   campActiva=(s.campanias.filter(function(c){return c.estado==="curso";})[0]||s.campanias[0]).id;
   var otraCampania=s.campanias.filter(function(c){return c.id!==campActiva;})[0];
