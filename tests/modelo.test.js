@@ -1191,3 +1191,20 @@ test("hijasDe devuelve sólo las cuentas de ese padre", function(){
   assert.deepStrictEqual(M.hijasDe(cs, "1.1").map(function(c){ return c.codigo; }),
                          ["1.1.01", "1.1.02"]);
 });
+
+test("el plan base trae amortización de maquinaria, retenciones sufridas y resultados acumulados", function(){
+  var amort = M.cuentaPorCodigo(M.PLAN_BASE, "1.2.03");
+  assert.ok(amort, "falta 1.2.03");
+  assert.strictEqual(amort.tipo, "activo");
+  assert.strictEqual(amort.padre, "1.2");
+
+  var retenciones = M.cuentaPorCodigo(M.PLAN_BASE, "1.1.05");
+  assert.ok(retenciones, "falta 1.1.05");
+  assert.strictEqual(retenciones.tipo, "activo");
+  assert.strictEqual(retenciones.padre, "1.1");
+
+  var acumulados = M.cuentaPorCodigo(M.PLAN_BASE, "3.1.03");
+  assert.ok(acumulados, "falta 3.1.03");
+  assert.strictEqual(acumulados.tipo, "patrimonio");
+  assert.strictEqual(acumulados.padre, "3");
+});
