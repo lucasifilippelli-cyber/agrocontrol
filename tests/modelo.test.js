@@ -1208,3 +1208,32 @@ test("el plan base trae amortización de maquinaria, retenciones sufridas y resu
   assert.strictEqual(acumulados.tipo, "patrimonio");
   assert.strictEqual(acumulados.padre, "3");
 });
+
+test("cada categoría de gasto cae en una cuenta del plan base", function(){
+  var codigos = {};
+  M.PLAN_BASE.forEach(function(c){ codigos[c.codigo] = true; });
+  M.CATEGORIAS_GASTO.forEach(function(cat){
+    var cod = M.cuentaDeGasto({categoria: cat});
+    assert.ok(codigos[cod], cat + " cae en " + cod + ", que no existe en el plan");
+  });
+});
+
+test("la cuenta cargada a mano pisa al default de la categoría", function(){
+  assert.strictEqual(M.cuentaDeGasto({categoria:"Cosecha", cuenta:"5.2.05"}), "5.2.05");
+});
+
+test("una categoría desconocida cae en Otros y no revienta", function(){
+  assert.strictEqual(M.cuentaDeGasto({categoria:"Algo que no existe"}), "5.2.05");
+});
+
+test("una venta cae en Venta de granos por defecto", function(){
+  assert.strictEqual(M.cuentaDeVenta({cultivo:"soja_1"}), "4.1.01");
+});
+
+test("la cuenta cargada a mano pisa al default de la venta", function(){
+  assert.strictEqual(M.cuentaDeVenta({cultivo:"soja_1", cuenta:"4.1.02"}), "4.1.02");
+});
+
+test("un gasto sin categoría no rompe", function(){
+  assert.strictEqual(M.cuentaDeGasto({}), "5.2.05");
+});

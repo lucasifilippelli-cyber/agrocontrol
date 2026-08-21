@@ -1590,6 +1590,35 @@ function hijasDe(cuentas, codigo){
   if(!cuentas) return [];
   return cuentas.filter(function(c){ return c.padre === codigo; });
 }
+
+var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
+                        "Estructura","Impuestos y comisiones","Otros"];
+
+/* De la categoría que el productor ya carga sale la cuenta, así nada de lo
+   cargado hasta hoy hay que recodificar a mano. Lo que se cargue explícito
+   en el campo `cuenta` pisa a este default. */
+var CUENTA_DE_CATEGORIA = {
+  "Labores de terceros":   "5.1.04",
+  "Cosecha":               "5.1.05",
+  "Flete":                 "5.1.06",
+  "Arrendamiento":         "5.2.01",
+  "Honorarios":            "5.2.02",
+  "Estructura":            "5.2.03",
+  "Impuestos y comisiones":"5.2.04",
+  "Otros":                 "5.2.05"
+};
+
+function cuentaDeGasto(g){
+  if(!g) return "5.2.05";
+  if(g.cuenta) return g.cuenta;
+  return CUENTA_DE_CATEGORIA[g.categoria] || "5.2.05";
+}
+
+function cuentaDeVenta(v){
+  if(!v) return "4.1.01";
+  if(v.cuenta) return v.cuenta;
+  return "4.1.01";
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -1598,8 +1627,6 @@ var TIPOS_OPERACION = {
   futuro:    {nom:"Futuro",     ayuda:"Posición tomada en el mercado a término"},
   canje:     {nom:"Canje",      ayuda:"Grano entregado a cambio de insumos"}
 };
-var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
-                        "Estructura","Impuestos y comisiones","Otros"];
 var TIPOS_LABOR  = ["Siembra","Pulverización","Fertilización","Cosecha","Laboreo","Monitoreo"];
 var TIPOS_INSUMO = ["Semilla","Fertilizante","Herbicida","Insecticida","Fungicida","Coadyuvante"];
 
@@ -3049,6 +3076,12 @@ A.moverOrden=function(arg){
   avisar("Movido al "+fecha(p[1])+".");
 };
 /* ---------- ventas y gastos ---------- */
+/* Sólo las cuentas de resultado (ingresos y costos) tienen sentido como
+   destino de un gasto o una venta; el resto del plan es patrimonial. */
+function opcCuentas(){
+  return PLAN_BASE.filter(function(c){ return c.tipo==="resultado"; })
+    .map(function(c){ return {v:c.codigo,t:c.codigo+" · "+c.nombre}; });
+}
 function opcCultivosDeCampania(){
   var vistos={}, out=[];
   clsDeCampania(campActiva).forEach(function(cl){
@@ -3064,8 +3097,8 @@ A.nuevaVenta=function(id){
     nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
     valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
                precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
-               fechaEntrega:V.fechaEntrega,nota:V.nota}
-            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible"},
+               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaDeVenta(V)}
+            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaDeVenta(null)},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
             {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
              opciones:Object.keys(TIPOS_OPERACION).map(function(k){return {v:k,t:TIPOS_OPERACION[k].nom};})},
@@ -3077,6 +3110,8 @@ A.nuevaVenta=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día. Sólo si cobrás en pesos."},
             {k:"comprador",label:"Comprador",ancho:true,ph:"Acopio, exportador o corredor"},
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",req:true,opciones:opcCuentas(),
+             hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
       var tn=num(d.toneladas), pu=num(d.precioTn);
@@ -3106,7 +3141,7 @@ A.nuevaVenta=function(id){
       var b={campaniaId:campActiva,cultivo:d.cultivo,fecha:d.fecha,tipoOperacion:d.tipoOperacion,
              toneladas:parseFloat(d.toneladas),precioTn:parseFloat(d.precioTn),moneda:d.moneda,
              tipoCambio:parseFloat(d.tipoCambio)||null,comprador:d.comprador,
-             fechaEntrega:d.fechaEntrega||null,nota:d.nota};
+             fechaEntrega:d.fechaEntrega||null,nota:d.nota,cuenta:d.cuenta||null};
       if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
       else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
     }});
@@ -3122,8 +3157,8 @@ A.nuevoGasto=function(id){
   abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
     nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
     valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
-               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor}
-            :{fecha:hoyISO(),moneda:"USD"},
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaDeGasto(G)}
+            :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaDeGasto(null)},
     campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
              opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
             {k:"fecha",label:"Fecha",tipo:"date",req:true},
@@ -3134,6 +3169,8 @@ A.nuevoGasto=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día."},
             {k:"proveedor",label:"Proveedor",ph:"Quién lo cobró"},
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",req:true,opciones:opcCuentas(),
+             hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
       var usd=aUSD(d.monto,d.moneda,d.tipoCambio);
@@ -3154,7 +3191,7 @@ A.nuevoGasto=function(id){
     guardar:function(d){
       var b={campaniaId:campActiva,cultivoLoteId:d.cultivoLoteId||null,fecha:d.fecha,categoria:d.categoria,
              descripcion:d.descripcion,monto:parseFloat(d.monto),moneda:d.moneda,
-             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor};
+             tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor,cuenta:d.cuenta||null};
       if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
       else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
     }});
