@@ -1864,7 +1864,7 @@ test("el escenario real no proyecta kilos: kgEsperados es null", function(){
   var e = M.escenarioReal(datos, "c1");
   assert.strictEqual(e.cultivos[0].kg, 300000);
   assert.strictEqual(e.cultivos[0].kgEsperados, null);
-  assert.strictEqual(e.cultivos[0].ha, 100);
+  assert.strictEqual(e.cultivos[0].haSembrada, 100);
   assert.strictEqual(e.cultivos[0].cultivoLoteId, "cl1");
 });
 
@@ -1882,7 +1882,10 @@ test("el proyectado usa los kilos reales del lote que ya se cosechó", function(
 test("el proyectado toma los kilos esperados de la sementera y los valúa al forward", function(){
   var datos = datosVacios({
     cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"}]});
-  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}], cultivos:[{cultivo:"soja_1", precio:300}]};
+  /* Con el mes de entrega que la Sementera ya calcula al lado del precio, el
+     cobro del grano por vender también queda ubicado en el calendario. */
+  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}],
+                   cultivos:[{cultivo:"soja_1", precio:300, mesEntrega:"2026-05-01"}]};
   var e = M.escenarioProyectado(datos, "c1", sementera);
   assert.strictEqual(e.cultivos[0].kgEsperados, 350000);
   assert.strictEqual(e.cultivos[0].precioUSDt, 300);
@@ -1972,7 +1975,8 @@ test("el simulado devuelve exactamente la misma forma que los otros dos", functi
   var real = M.escenarioReal(datosVacios(), "c1");
   assert.deepStrictEqual(Object.keys(sim).sort(), Object.keys(real).sort());
   assert.deepStrictEqual(Object.keys(sim.cultivos[0]).sort(),
-    ["cultivo","cultivoLoteId","loteId","ha","kg","kgEsperados","precioUSDt","ingresoUSD"].sort());
+    ["cultivo","cultivoLoteId","loteId","haSembrada","haCosechada","kg","kgEsperados",
+     "precioUSDt","precioEstimado","ingresoUSD"].sort());
   assert.deepStrictEqual(Object.keys(sim.costos[0]).sort(),
     ["cultivoLoteId","categoria","cuenta","montoUSD","fechaPago"].sort());
   assert.deepStrictEqual(Object.keys(sim.cobros[0]).sort(),
@@ -2076,6 +2080,8 @@ test("el escenario real de 2025/26 reproduce también el ingreso y el costo lote
   /* Lo directo: insumos aplicados más gastos con lote. Los indirectos no se
      prorratean en el escenario —van con cultivoLoteId null— porque el
      prorrateo es decisión del indicador, no del escenario. */
+  var haPorLote = {};
+  esc.cultivos.forEach(function(c){ haPorLote[c.cultivoLoteId] = c.haCosechada || c.haSembrada; });
   var directoPorLote = {};
   esc.costos.forEach(function(c){
     if(c.cultivoLoteId == null) return;
@@ -2088,6 +2094,10 @@ test("el escenario real de 2025/26 reproduce también el ingreso y el costo lote
       "ingreso del lote " + x.cl.id);
     assert.strictEqual(centavos(directoPorLote[x.cl.id] || 0),
       centavos(x.insumos + x.gastosDirectos), "costo directo del lote " + x.cl.id);
+    /* La superficie es la que decide los dólares por hectárea, la métrica
+       que la spec nombra como la que importa. El escenario lleva las dos y
+       el consumidor elige: acá se elige igual que economiaCampania. */
+    assert.strictEqual(haPorLote[x.cl.id], x.ha, "superficie del lote " + x.cl.id);
   });
 });
 
@@ -2106,4 +2116,243 @@ test("los cobros del escenario real suman todas las ventas de la campaña", func
   var cobrado = esc.cobros.reduce(function(a, c){ return a + c.montoUSD; }, 0);
   assert.strictEqual(centavos(cobrado), centavos(esperado));
   assert.strictEqual(esc.cobros.filter(function(c){ return c.fechaCobro == null; }).length, 0);
+});
+
+/* ============================================================
+   Fix ronda 1
+   Cinco hallazgos de diseño de la revisión, más los huecos de
+   cobertura que salieron de la mutación.
+   ============================================================ */
+
+/* I1: el escenario ponía siempre haSembrada, y economiaCampania usa
+   haCosechada || haSembrada. Difieren en 5 de los 15 lotes de la semilla,
+   hasta 7,6 %, y los dólares por hectárea son justo la métrica que la spec
+   nombra como la que importa. Ahora van las dos superficies y elige el
+   indicador: decisión explícita del consumidor, no descuido del proveedor. */
+test("la fila del cultivo lleva las dos superficies, la sembrada y la cosechada", function(){
+  var datos = datosVacios({cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"maiz_d",
+                                          haSembrada:148.6, haCosechada:145.3, rindeDeclarado:10500}]});
+  var e = M.escenarioReal(datos, "c1");
+  assert.strictEqual(e.cultivos[0].haSembrada, 148.6);
+  assert.strictEqual(e.cultivos[0].haCosechada, 145.3);
+});
+
+test("un lote sembrado y todavía sin cosechar lleva la cosechada en cero, no la sembrada", function(){
+  var datos = datosVacios({cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"maiz_d",
+                                          haSembrada:148.6, fechaSiembra:"2025-12-15"}]});
+  var e = M.escenarioReal(datos, "c1");
+  assert.strictEqual(e.cultivos[0].haSembrada, 148.6);
+  assert.strictEqual(e.cultivos[0].haCosechada, 0);
+});
+
+/* I3: incierto mezclaba tres fallas que ablandan cosas distintas. Un monto
+   desconocido ablanda la mirada económica; una fecha desconocida ablanda
+   sólo la curva financiera. Con un solo boolean, un gasto sin fecha
+   despachaba en "todavía no sé" un resultado de campaña perfectamente
+   firme. */
+test("una fecha de pago desconocida ablanda la curva financiera, no el resultado económico", function(){
+  var datos = datosVacios({gastos:[{campaniaId:"c1", categoria:"Cosecha", monto:1000, moneda:"USD"}]});
+  var e = M.escenarioReal(datos, "c1");
+  assert.strictEqual(e.costos[0].montoUSD, 1000);
+  assert.strictEqual(e.costos[0].fechaPago, null);
+  assert.strictEqual(e.inciertoEconomico, false);
+  assert.strictEqual(e.inciertoFinanciero, true);
+  assert.strictEqual(e.incierto, true);
+});
+
+test("un monto desconocido ablanda la mirada económica aunque la fecha se sepa", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100}],
+    ordenes:[{id:"o1", cultivoLoteId:"cl1", estado:"completada", fechaCierre:"2026-01-20"}],
+    movimientos:[{id:"m1", insumoId:"i1", tipo:"aplicacion", ordenId:"o1",
+                  fecha:"2026-01-20", cantidad:-200}],
+    insumos:[{id:"i1", tipo:"Herbicida"}]});
+  var e = M.escenarioReal(datos, "c1");
+  assert.strictEqual(e.costos[0].montoUSD, null);
+  assert.notStrictEqual(e.costos[0].fechaPago, null);
+  assert.strictEqual(e.inciertoEconomico, true);
+  assert.strictEqual(e.inciertoFinanciero, false);
+});
+
+test("incierto sigue siendo la suma de las dos miradas", function(){
+  var e = M.escenarioReal(datosVacios(), "c1");
+  assert.strictEqual(e.incierto, false);
+  assert.strictEqual(e.inciertoEconomico, false);
+  assert.strictEqual(e.inciertoFinanciero, false);
+});
+
+/* I5: faltaEsperado cerraba la rama del cultivo entero. Un lote todavía sin
+   sembrar —el estado normal durante meses— le borraba el ingreso al hermano
+   sembrado, que era perfectamente calculable. */
+test("un lote sin sembrar no le borra el ingreso al hermano que sí se sembró", function(){
+  var datos = datosVacios({cultivoLotes:[
+    {id:"clA", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"},
+    {id:"clB", campaniaId:"c1", cultivo:"soja_1", haSembrada:0}]});
+  var sementera = {filas:[{id:"clA", tn:{esperada:350}}],
+                   cultivos:[{cultivo:"soja_1", precio:300, mesEntrega:"2026-05-01"}]};
+  var e = M.escenarioProyectado(datos, "c1", sementera);
+  assert.strictEqual(e.cultivos[0].kgEsperados, 350000);
+  assert.strictEqual(e.cultivos[0].ingresoUSD, 105000);
+  assert.strictEqual(e.cultivos[1].kgEsperados, null);
+  assert.strictEqual(e.cultivos[1].ingresoUSD, null);
+  assert.strictEqual(e.inciertoEconomico, true);
+});
+
+/* I4: la fecha de entrega ya existía. sementeraDeCampania calcula
+   g.mesEntrega en el mismo objeto del que sale g.precio, y fechaCobroDe ya
+   prefiere la entrega sobre la fecha de la venta. El proyectado puede
+   generar sus cobros esperados sin columna nueva. */
+test("el proyectado genera el cobro de lo que falta vender, con su fecha de entrega", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:100, precioTn:250, moneda:"USD"}]});
+  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}],
+                   cultivos:[{cultivo:"soja_1", precio:300, mesEntrega:"2026-05-01"}]};
+  var e = M.escenarioProyectado(datos, "c1", sementera);
+  assert.strictEqual(e.cobros.length, 2);
+  var esperado = e.cobros[1];
+  assert.strictEqual(esperado.cultivo, "soja_1");
+  assert.strictEqual(esperado.montoUSD, 250 * 300);
+  assert.strictEqual(esperado.fechaCobro, M.fechaCobroDe({fechaEntrega:"2026-05-01"}));
+  assert.strictEqual(e.inciertoFinanciero, false);
+});
+
+/* La spec lo pide explícito: las dos miradas sobre el mismo escenario tienen
+   que cerrar entre sí. */
+test("en el proyectado, los cobros suman exactamente el ingreso proyectado", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"},
+                  {id:"cl2", campaniaId:"c1", cultivo:"maiz_d", haSembrada:120, fechaSiembra:"2025-12-15"}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:100, precioTn:250, moneda:"USD"}]});
+  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}, {id:"cl2", tn:{esperada:1200}}],
+                   cultivos:[{cultivo:"soja_1", precio:300, mesEntrega:"2026-05-01"},
+                             {cultivo:"maiz_d", precio:180, mesEntrega:"2026-07-01"}]};
+  var e = M.escenarioProyectado(datos, "c1", sementera);
+  var ingresos = e.cultivos.reduce(function(a, c){ return a + c.ingresoUSD; }, 0);
+  var cobros = e.cobros.reduce(function(a, c){ return a + c.montoUSD; }, 0);
+  assert.strictEqual(Math.round(ingresos * 100) / 100, Math.round(cobros * 100) / 100);
+});
+
+test("sin mes de entrega no se inventa una fecha de cobro para lo que falta vender", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"}]});
+  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}], cultivos:[{cultivo:"soja_1", precio:300}]};
+  var e = M.escenarioProyectado(datos, "c1", sementera);
+  assert.strictEqual(e.cobros.length, 1);
+  assert.strictEqual(e.cobros[0].fechaCobro, null);
+  assert.strictEqual(e.inciertoFinanciero, true);
+  assert.strictEqual(e.inciertoEconomico, false);
+});
+
+/* Vender forward más de lo que se espera cosechar es normal acá: lo que
+   falta vender se frena en cero, nunca genera un ingreso negativo. */
+test("vender más de lo que se espera cosechar no descuenta ingreso", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:150, precioTn:300, moneda:"USD"}]});
+  var sementera = {filas:[{id:"cl1", tn:{esperada:100}}],
+                   cultivos:[{cultivo:"soja_1", precio:300, mesEntrega:"2026-05-01"}]};
+  var e = M.escenarioProyectado(datos, "c1", sementera);
+  assert.strictEqual(e.cultivos[0].ingresoUSD, 45000);
+  assert.strictEqual(e.cobros.length, 1);
+});
+
+/* Sin precio forward, lo que falta vender se valúa al precio ya realizado en
+   esta misma campaña. Es evidencia de mercado, no un invento, pero es una
+   extrapolación y no puede salir con la misma cara que un forward cerrado:
+   se marca, igual que rindeAncla marca el ancla propia y percentilesDeVentana
+   marca la estimación gruesa. */
+test("sin forward, lo que falta vender se valúa al precio ya realizado y queda marcado", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:100, precioTn:250, moneda:"USD"}]});
+  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}],
+                   cultivos:[{cultivo:"soja_1", mesEntrega:"2026-05-01"}]};
+  var e = M.escenarioProyectado(datos, "c1", sementera);
+  assert.strictEqual(e.cultivos[0].precioUSDt, 250);
+  assert.strictEqual(e.cultivos[0].precioEstimado, true);
+  assert.strictEqual(e.cultivos[0].ingresoUSD, 25000 + 250 * 250);
+});
+
+test("con forward cerrado, el precio no queda marcado como estimado", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, fechaSiembra:"2025-11-01"}]});
+  var sementera = {filas:[{id:"cl1", tn:{esperada:350}}],
+                   cultivos:[{cultivo:"soja_1", precio:300, mesEntrega:"2026-05-01"}]};
+  assert.strictEqual(M.escenarioProyectado(datos, "c1", sementera).cultivos[0].precioEstimado, false);
+});
+
+test("el escenario real nunca marca el precio como estimado: lo que muestra ya se cobró", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, haCosechada:100, rindeDeclarado:3000}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:300, precioTn:250, moneda:"USD"}]});
+  assert.strictEqual(M.escenarioReal(datos, "c1").cultivos[0].precioEstimado, false);
+});
+
+/* Hueco de la mutación: se podía tirar la conversión de moneda entera de
+   ventasDeCampania y los 252 seguían en verde, porque las ocho ventas de la
+   semilla están en dólares. Es hueco puro sobre el camino de la plata. */
+test("una venta en pesos se lleva a dólares al tipo de cambio de la operación", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, haCosechada:100, rindeDeclarado:3000}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:100,
+             precioTn:426000, moneda:"ARS", tipoCambio:1420}]});
+  var e = M.escenarioReal(datos, "c1");
+  assert.strictEqual(e.cobros[0].montoUSD, 30000);
+  assert.strictEqual(e.cultivos[0].ingresoUSD, 30000);
+  assert.strictEqual(e.cultivos[0].precioUSDt, 300);
+});
+
+test("una venta en pesos y otra en dólares conviven en el mismo precio realizado", function(){
+  var datos = datosVacios({
+    cultivoLotes:[{id:"cl1", campaniaId:"c1", cultivo:"soja_1", haSembrada:100, haCosechada:100, rindeDeclarado:2000}],
+    ventas:[{campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-01", toneladas:100,
+             precioTn:426000, moneda:"ARS", tipoCambio:1420},
+            {campaniaId:"c1", cultivo:"soja_1", fecha:"2026-05-10", toneladas:100,
+             precioTn:200, moneda:"USD"}]});
+  var e = M.escenarioReal(datos, "c1");
+  assert.strictEqual(e.cultivos[0].ingresoUSD, 50000);
+  assert.strictEqual(e.cultivos[0].precioUSDt, 250);
+});
+
+/* I2: la tabla presupuestos ahora sí tiene fecha y días de pago (migración
+   0015), así que este camino es el real y no una rama muerta. */
+test("el presupuesto usa su propio plazo de pago cuando el productor lo carga", function(){
+  var datos = datosVacios({
+    presupuestos:[{campaniaId:"c1", categoria:"Cosecha", monto:20000, moneda:"USD",
+                   fecha:"2026-04-01", diasPago:0}]});
+  var e = M.escenarioProyectado(datos, "c1", null);
+  assert.strictEqual(e.costos[0].fechaPago, "2026-04-01");
+  assert.strictEqual(e.inciertoFinanciero, false);
+});
+
+/* La reconciliación proyectada sobre la campaña de verdad: la mirada
+   económica y la financiera tienen que cerrar entre sí también acá, con los
+   ocho cultivos, sus forwards reales y sus ventas hechas. */
+test("el proyectado de 2025/26 cierra la mirada financiera contra la económica", function(){
+  var ctx = entornoFinanzas();
+  var cultivosSementera = ["maiz_d","maiz_t","soja_1","soja_2","trigo","cebada","girasol","sorgo"]
+    .map(function(k){
+      var mes = ctx.mesEntregaDe(k, "2025-07-01");
+      return { cultivo:k, mesEntrega:mes, precio:ctx.forwardDe(ctx.E.preciosForward, k, mes) };
+    });
+  var datos = {cultivoLotes:ctx.E.cultivoLotes, tickets:ctx.E.tickets, gastos:ctx.E.gastos,
+               ventas:ctx.E.ventas, ordenes:ctx.E.ordenes, ordenInsumos:ctx.E.ordenInsumos,
+               insumos:ctx.E.insumos, movimientos:ctx.E.movimientos, presupuestos:[]};
+  var esc = ctx.escenarioProyectado(datos, "c2526", {filas:[], cultivos:cultivosSementera});
+
+  assert.strictEqual(esc.inciertoEconomico, false,
+    "los ocho cultivos de 2025/26 tienen forward cargado: nada debería quedar sin valuar");
+  assert.strictEqual(esc.inciertoFinanciero, false,
+    "todas las ventas tienen fecha y todos los cultivos tienen mes de entrega");
+
+  var ingresos = esc.cultivos.reduce(function(a, c){ return a + c.ingresoUSD; }, 0);
+  var cobros = esc.cobros.reduce(function(a, c){ return a + c.montoUSD; }, 0);
+  assert.strictEqual(centavos(ingresos), centavos(cobros));
+
+  /* Y tiene que dar más que el real: queda grano sin vender, y valuarlo es
+     justo lo que la mirada proyectada agrega. */
+  var real = ctx.escenarioReal(datos, "c2526");
+  var ingresoReal = real.cultivos.reduce(function(a, c){ return a + c.ingresoUSD; }, 0);
+  assert.ok(ingresos > ingresoReal, "el proyectado tiene que valuar el grano todavía no vendido");
 });
