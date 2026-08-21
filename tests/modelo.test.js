@@ -1616,3 +1616,66 @@ test("una categoría sin presupuesto no aporta", function(){
   var gastos=[{campaniaId:"c1", categoria:"Flete", monto:500, moneda:"USD"}];
   assert.strictEqual(M.presupuestoPendiente([], gastos, "c1").total, 0);
 });
+
+/* Plazos de pago y de cobro: la tercera capa de la mirada financiera.
+   Sin fecha, la curva financiera no existe — se puede saber si la campaña
+   da, pero no si va a haber plata en marzo. */
+test("cada categoría de gasto tiene un plazo por defecto", function(){
+  M.CATEGORIAS_GASTO.forEach(function(cat){
+    assert.strictEqual(typeof M.PLAZOS_POR_DEFECTO.gasto[cat], "number", cat + " sin plazo");
+  });
+});
+
+test("la fecha de pago sale de la fecha del gasto más su plazo", function(){
+  assert.strictEqual(M.fechaPagoDe({fecha:"2026-03-01", categoria:"Cosecha"}),
+                     M.sumarDias("2026-03-01", M.PLAZOS_POR_DEFECTO.gasto["Cosecha"]));
+});
+
+test("el plazo cargado a mano pisa al default", function(){
+  assert.strictEqual(M.fechaPagoDe({fecha:"2026-03-01", categoria:"Cosecha", diasPago:0}),
+                     "2026-03-01");
+});
+
+test("un plazo de cero es un plazo, no un vacío", function(){
+  var conCero=M.fechaPagoDe({fecha:"2026-03-01", categoria:"Insumos", diasPago:0});
+  assert.strictEqual(conCero, "2026-03-01");
+});
+
+test("la fecha de cobro de una venta usa la de entrega si existe", function(){
+  assert.strictEqual(M.fechaCobroDe({fecha:"2026-02-01", fechaEntrega:"2026-05-01"}),
+                     M.sumarDias("2026-05-01", M.PLAZOS_POR_DEFECTO.venta));
+});
+
+test("sin fecha de entrega, la de cobro sale de la fecha de la venta", function(){
+  assert.strictEqual(M.fechaCobroDe({fecha:"2026-02-01"}),
+                     M.sumarDias("2026-02-01", M.PLAZOS_POR_DEFECTO.venta));
+});
+
+test("una fecha inválida devuelve null y no revienta", function(){
+  assert.strictEqual(M.fechaPagoDe({categoria:"Cosecha"}), null);
+});
+
+/* El costo de insumos no es una fila de gastos: sale del movimiento que
+   asienta el cierre de la orden. Sin fechaPagoInsumo, el componente más
+   pesado del costo se queda sin fecha de pago. */
+test("la fecha de pago de un insumo cuenta desde el cierre de la orden", function(){
+  var mov = {fecha:"2026-01-10"}, orden = {fechaCierre:"2026-02-15"};
+  assert.strictEqual(M.fechaPagoInsumo(mov, orden),
+                     M.sumarDias("2026-02-15", M.PLAZOS_POR_DEFECTO.insumo));
+});
+
+test("sin cierre de orden, la fecha de pago del insumo cae a la fecha del movimiento", function(){
+  var mov = {fecha:"2026-01-10"};
+  assert.strictEqual(M.fechaPagoInsumo(mov, null),
+                     M.sumarDias("2026-01-10", M.PLAZOS_POR_DEFECTO.insumo));
+});
+
+test("el plazo cargado a mano en el movimiento pisa al default del insumo", function(){
+  var mov = {fecha:"2026-01-10", diasPago:0}, orden = {fechaCierre:"2026-02-15"};
+  assert.strictEqual(M.fechaPagoInsumo(mov, orden), "2026-02-15");
+});
+
+test("sin fecha de cierre ni de movimiento, la fecha de pago del insumo es null", function(){
+  assert.strictEqual(M.fechaPagoInsumo({}, {}), null);
+  assert.strictEqual(M.fechaPagoInsumo(null, null), null);
+});

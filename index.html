@@ -1784,6 +1784,60 @@ function presupuestoPendiente(presupuestos, gastos, campaniaId){
   });
   return { porCategoria: por, total: Math.round(total * 100) / 100 };
 }
+/* La tercera capa de la mirada financiera: sin fecha de pago o de cobro se
+   puede saber si la campaña da, pero no si va a haber plata en marzo. Los
+   plazos son criterio propio de la zona y están pendientes de validación por
+   un contador, igual que KY/KC y el plan de cuentas (ver docs/finanzas.md).
+   El productor los pisa en cada gasto o venta, y puede cambiar estos valores. */
+var PLAZOS_POR_DEFECTO = {
+  gasto: {
+    "Labores de terceros":    30,
+    "Cosecha":                30,
+    "Flete":                  30,
+    "Arrendamiento":          90,
+    "Honorarios":             30,
+    "Estructura":              0,
+    "Impuestos y comisiones":  0,
+    "Otros":                  30
+  },
+  venta: 30,
+  insumo: 90
+};
+
+function sumarDias(iso, dias){
+  if(!iso) return null;
+  var t = Date.parse(iso + "T12:00:00Z");
+  if(isNaN(t)) return null;
+  return new Date(t + dias * 864e5).toISOString().slice(0, 10);
+}
+
+function fechaPagoDe(g){
+  if(!g || !g.fecha) return null;
+  var d = (g.diasPago != null) ? g.diasPago
+        : (PLAZOS_POR_DEFECTO.gasto[g.categoria] != null
+             ? PLAZOS_POR_DEFECTO.gasto[g.categoria] : 30);
+  return sumarDias(g.fecha, d);
+}
+
+function fechaCobroDe(v){
+  if(!v) return null;
+  var base = v.fechaEntrega || v.fecha;
+  if(!base) return null;
+  var d = (v.diasCobro != null) ? v.diasCobro : PLAZOS_POR_DEFECTO.venta;
+  return sumarDias(base, d);
+}
+
+/* El costo de insumos no es un gasto: sale del movimiento que asienta el cierre
+   de la orden. La fecha de pago se cuenta desde ese cierre. Sin esto, el
+   componente más pesado del costo no tendría fecha y la curva financiera
+   mentiría justo donde más importa. */
+function fechaPagoInsumo(movimiento, orden){
+  var base = (orden && orden.fechaCierre) || (movimiento && movimiento.fecha);
+  if(!base) return null;
+  var d = (movimiento && movimiento.diasPago != null)
+            ? movimiento.diasPago : PLAZOS_POR_DEFECTO.insumo;
+  return sumarDias(base, d);
+}
 /* === modelo:fin === */
 
 var TIPOS_OPERACION = {
@@ -3332,7 +3386,7 @@ A.nuevaVenta=function(id){
     nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
     valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
                precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
-               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaExplicita}
+               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaExplicita,diasCobro:V.diasCobro}
             :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaExplicita},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
             {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
@@ -3348,6 +3402,8 @@ A.nuevaVenta=function(id){
             {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
              vacio:"La que corresponde por defecto (Venta de granos)",
              hint:"Se resuelve sola. Elegí una sólo si querés imputar esta venta a otra cuenta."},
+            {k:"diasCobro",label:"Días de cobro",tipo:"number",paso:"1",min:"0",
+             hint:"Vacío usa el plazo habitual de la venta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
       var tn=num(d.toneladas), pu=num(d.precioTn);
@@ -3380,7 +3436,11 @@ A.nuevaVenta=function(id){
              fechaEntrega:d.fechaEntrega||null,nota:d.nota,
              /* d.cuenta="" es la opción vacía (auto): se persiste null y
                 se resuelve por default al leer, con cuentaDeVenta. */
-             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeVenta(null)):null};
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeVenta(null)):null,
+             /* Mismo criterio que la cuenta: si lo cargado a mano coincide
+                con el plazo habitual, se persiste null y el registro sigue
+                el remapeo futuro de PLAZOS_POR_DEFECTO.venta. */
+             diasCobro:d.diasCobro?cuentaAGuardar(parseInt(d.diasCobro,10),PLAZOS_POR_DEFECTO.venta):null};
       if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
       else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
     }});
@@ -3408,7 +3468,8 @@ A.nuevoGasto=function(id){
   abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
     nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
     valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
-               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaExplicita}
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaExplicita,
+               diasPago:G.diasPago}
             :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaExplicita},
     campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
              opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
@@ -3423,6 +3484,8 @@ A.nuevoGasto=function(id){
             {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
              vacio:"La que corresponde a la categoría",
              hint:"Se resuelve sola según la categoría. Elegí una sólo si querés imputar este gasto a otra cuenta."},
+            {k:"diasPago",label:"Días de pago",tipo:"number",paso:"1",min:"0",
+             hint:"Vacío usa el plazo habitual de la categoría."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
       var usd=importeUSD({monto:d.monto, moneda:d.moneda, tipoCambio:d.tipoCambio});
@@ -3447,7 +3510,12 @@ A.nuevoGasto=function(id){
              /* d.cuenta="" es la opción vacía (auto): se persiste null y
                 se resuelve por default al leer, con la categoría que de
                 verdad quedó elegida en este guardado. */
-             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria})):null};
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria})):null,
+             /* Mismo criterio que la cuenta: si lo cargado a mano coincide
+                con el plazo habitual de la categoría, se persiste null y el
+                registro sigue el remapeo futuro de PLAZOS_POR_DEFECTO. */
+             diasPago:d.diasPago?cuentaAGuardar(parseInt(d.diasPago,10),
+               PLAZOS_POR_DEFECTO.gasto[d.categoria]!=null?PLAZOS_POR_DEFECTO.gasto[d.categoria]:30):null};
       if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
       else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
     }});
