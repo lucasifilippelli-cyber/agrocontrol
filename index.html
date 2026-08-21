@@ -2177,7 +2177,7 @@ function guardar(){
 }
 
 /* La siembra del plan de cuentas se persiste aparte de la cola de guardar():
-   38 filas de golpe en el primer arranque son mucho más radio de falla que
+   40 filas de golpe en el primer arranque son mucho más radio de falla que
    cualquier otra escritura suelta, y sembrarPlan() por diseño nunca completa
    un plan a medias —si una fila del medio rechaza, no se repara solo—. Si
    esta siembra compartiera cola con otra escritura que hubiera quedado
@@ -2236,10 +2236,18 @@ function cargarEjemplo(){
     for(var k in c){ f[k]=c[k]; }
     return f;
   });
-  /* orden de inserción: primero lo que otros referencian; cuentas antes de
-     ventas y gastos porque esas dos la referencian */
+  /* Las cuentas se aplican y se persisten aparte del resto de la semilla,
+     con guardarSiembra() en vez de marcar()+guardar() — mismo motivo que en
+     cargar() (hallazgo I2): son muchas filas de golpe y un fallo ahí no
+     tiene que arrastrar las ventas, los gastos o los precios forward de la
+     tanda compartida, ni al revés. No hace falta que corra antes en el
+     orden de inserción: el código de cuenta es texto, no hay FK que
+     resolver (ver supabase/migrations/0010_plan_de_cuentas.sql). */
+  E.cuentas=(E.cuentas||[]).concat(s.cuentas);
+  guardarSiembra(s.cuentas);
+  /* orden de inserción del resto: primero lo que otros referencian */
   var orden=["establecimientos","campanias","insumos","lotes","cultivoLotes","tickets","ordenes",
-             "ordenInsumos","movimientos","monitoreo","cuentas","ventas","gastos","preciosForward"];
+             "ordenInsumos","movimientos","monitoreo","ventas","gastos","preciosForward"];
   orden.forEach(function(k){ E[k]=(E[k]||[]).concat(s[k]); s[k].forEach(function(f){ marcar(k,f); }); });
   campActiva=(s.campanias.filter(function(c){return c.estado==="curso";})[0]||s.campanias[0]).id;
   var otraCampania=s.campanias.filter(function(c){return c.id!==campActiva;})[0];
@@ -3255,13 +3263,22 @@ function opcCultivosDeCampania(){
 A.nuevaVenta=function(id){
   var V=id?E.ventas.filter(function(v){return v.id===id;})[0]:null;
   if(!campActiva){ avisar("Abrí una campaña antes de cargar ventas."); return; }
-  var cuentaDefault=cuentaDeVenta(V);
+  /* Vacío por defecto, nunca el código resuelto: abrirForm no reconstruye
+     las opciones cuando cambia otro campo del formulario, así que si acá se
+     precargara "4.1.01" y esa cuenta se borrara o dejara de ser hoja, el
+     <select> caería al índice 0 y grabaría una cuenta ajena en silencio
+     (hallazgo C1, camino 2). Con el vacío de primera opción y sin marcar
+     ningún <option> como selected, el propio <select> cae ahí solo — no a
+     una cuenta cualquiera— y cuentaAGuardar/guardar() ya saben leer eso
+     como "resolvé por default". Sólo se precarga el código real cuando la
+     fila ya trae uno explícito, para poder editarlo. */
+  var cuentaExplicita=V?(V.cuenta||""):"";
   abrirForm({titulo:V?"Editar venta":"Registrar venta de grano",
     nota:"La venta va por cultivo, no por lote: el grano de varios lotes viaja junto. El resultado por lote se reparte después según cuánto puso cada uno.",
     valores:V?{cultivo:V.cultivo,fecha:V.fecha,tipoOperacion:V.tipoOperacion,toneladas:V.toneladas,
                precioTn:V.precioTn,moneda:V.moneda,tipoCambio:V.tipoCambio,comprador:V.comprador,
-               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaDefault}
-            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaDefault},
+               fechaEntrega:V.fechaEntrega,nota:V.nota,cuenta:cuentaExplicita}
+            :{fecha:hoyISO(),moneda:"USD",tipoOperacion:"disponible",cuenta:cuentaExplicita},
     campos:[{k:"cultivo",label:"Cultivo",tipo:"select",req:true,opciones:opcCultivosDeCampania()},
             {k:"tipoOperacion",label:"Tipo de operación",tipo:"select",req:true,
              opciones:Object.keys(TIPOS_OPERACION).map(function(k){return {v:k,t:TIPOS_OPERACION[k].nom};})},
@@ -3273,8 +3290,9 @@ A.nuevaVenta=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día. Sólo si cobrás en pesos."},
             {k:"comprador",label:"Comprador",ancho:true,ph:"Acopio, exportador o corredor"},
-            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaDefault),
-             hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
+             vacio:"La que corresponde por defecto (Venta de granos)",
+             hint:"Se resuelve sola. Elegí una sólo si querés imputar esta venta a otra cuenta."},
             {k:"nota",label:"Nota",ancho:true,ph:"Nº de contrato, condiciones."}],
     panel:function(d){
       var tn=num(d.toneladas), pu=num(d.precioTn);
@@ -3304,7 +3322,10 @@ A.nuevaVenta=function(id){
       var b={campaniaId:campActiva,cultivo:d.cultivo,fecha:d.fecha,tipoOperacion:d.tipoOperacion,
              toneladas:parseFloat(d.toneladas),precioTn:parseFloat(d.precioTn),moneda:d.moneda,
              tipoCambio:parseFloat(d.tipoCambio)||null,comprador:d.comprador,
-             fechaEntrega:d.fechaEntrega||null,nota:d.nota,cuenta:cuentaAGuardar(d.cuenta,cuentaDeVenta(null))};
+             fechaEntrega:d.fechaEntrega||null,nota:d.nota,
+             /* d.cuenta="" es la opción vacía (auto): se persiste null y
+                se resuelve por default al leer, con cuentaDeVenta. */
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeVenta(null)):null};
       if(V){ Object.keys(b).forEach(function(k){V[k]=b[k];}); marcar("ventas",V); avisar("Venta actualizada."); }
       else { b.id=uid(); E.ventas.push(b); marcar("ventas",b); avisar("Venta registrada."); }
     }});
@@ -3317,12 +3338,23 @@ A.borrarVenta=function(id){
 A.nuevoGasto=function(id){
   var G=id?E.gastos.filter(function(g){return g.id===id;})[0]:null;
   if(!campActiva){ avisar("Abrí una campaña antes de cargar gastos."); return; }
-  var cuentaDefault=cuentaDeGasto(G);
+  /* Vacío por defecto, nunca el código resuelto de la categoría con la que
+     se abrió el formulario: abrirForm no reconstruye las opciones cuando
+     cambia la categoría elegida —sólo repinta el panel—, así que si acá se
+     precargara ese código, quedaría clavado aunque el productor eligiera
+     otra categoría, y se grabaría explícito por no coincidir más con el
+     default (7 de 8 categorías terminaban imputadas a "Otros", el default
+     de abrir sin categoría todavía elegida). Con el vacío como opción de
+     primera y sin nada preseleccionado, la cuenta se resuelve recién al
+     guardar, con la categoría que de verdad quedó elegida (hallazgo
+     "el problema más grande", ronda 2). Sólo se precarga un código real
+     cuando la fila ya trae uno explícito, para poder editarlo. */
+  var cuentaExplicita=G?(G.cuenta||""):"";
   abrirForm({titulo:G?"Editar gasto":"Registrar gasto",
     nota:"Los insumos ya se costean solos con los trabajos completados. Acá va todo lo demás. Si no lo podés atribuir a un cultivo, dejalo sin asignar y se reparte por hectárea.",
     valores:G?{cultivoLoteId:G.cultivoLoteId||"",fecha:G.fecha,categoria:G.categoria,descripcion:G.descripcion,
-               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaDefault}
-            :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaDefault},
+               monto:G.monto,moneda:G.moneda,tipoCambio:G.tipoCambio,proveedor:G.proveedor,cuenta:cuentaExplicita}
+            :{fecha:hoyISO(),moneda:"USD",cuenta:cuentaExplicita},
     campos:[{k:"categoria",label:"Categoría",tipo:"select",req:true,
              opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
             {k:"fecha",label:"Fecha",tipo:"date",req:true},
@@ -3333,8 +3365,9 @@ A.nuevoGasto=function(id){
             {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
              hint:"Pesos por dólar ese día."},
             {k:"proveedor",label:"Proveedor",ph:"Quién lo cobró"},
-            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaDefault),
-             hint:"Sale sola de la categoría. Cambiala sólo si querés imputarla a otra cuenta."},
+            {k:"cuenta",label:"Cuenta contable",tipo:"select",opciones:opcCuentas(cuentaExplicita||null),
+             vacio:"La que corresponde a la categoría",
+             hint:"Se resuelve sola según la categoría. Elegí una sólo si querés imputar este gasto a otra cuenta."},
             {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se pagó."}],
     panel:function(d){
       var usd=aUSD(d.monto,d.moneda,d.tipoCambio);
@@ -3356,7 +3389,10 @@ A.nuevoGasto=function(id){
       var b={campaniaId:campActiva,cultivoLoteId:d.cultivoLoteId||null,fecha:d.fecha,categoria:d.categoria,
              descripcion:d.descripcion,monto:parseFloat(d.monto),moneda:d.moneda,
              tipoCambio:parseFloat(d.tipoCambio)||null,proveedor:d.proveedor,
-             cuenta:cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria}))};
+             /* d.cuenta="" es la opción vacía (auto): se persiste null y
+                se resuelve por default al leer, con la categoría que de
+                verdad quedó elegida en este guardado. */
+             cuenta:d.cuenta?cuentaAGuardar(d.cuenta,cuentaDeGasto({categoria:d.categoria})):null};
       if(G){ Object.keys(b).forEach(function(k){G[k]=b[k];}); marcar("gastos",G); avisar("Gasto actualizado."); }
       else { b.id=uid(); E.gastos.push(b); marcar("gastos",b); avisar("Gasto registrado."); }
     }});
