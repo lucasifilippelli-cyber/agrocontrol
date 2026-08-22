@@ -1,7 +1,12 @@
 /* AGROCONTROL · service worker
    La app queda guardada en el teléfono. El clima siempre se pide a la red:
    nunca se sirve un pronóstico viejo desde la caché. */
-var CACHE = "agrocontrol-v3";
+/* v4: hasta la v3 se guardaba en la caché cualquier respuesta, incluso un 500
+   o un 404. Un error pasajero de Vercel —o una carga justo en medio de un
+   despliegue— reemplazaba la copia buena de la app por la página de error, y
+   eso era lo que quedaba para abrir sin señal. Al subir la versión, cualquier
+   caché ya envenenada se borra sola en el activate. */
+var CACHE = "agrocontrol-v4";
 var SHELL = [
   "./", "./index.html", "./manifest.webmanifest", "./icon-192-v2.png", "./icon-512-v2.png",
   "./fuentes/IBMPlexMono-400-latin.woff2",
@@ -41,8 +46,12 @@ self.addEventListener("fetch", function(ev){
   if (url.origin === self.location.origin) {
     ev.respondWith(
       fetch(req).then(function(res){
-        var copia = res.clone();
-        caches.open(CACHE).then(function(c){ c.put(req, copia); }).catch(function(){});
+        /* sólo se guarda lo que sirve: una respuesta con error no puede
+           terminar siendo la que se abre sin señal */
+        if (res && res.ok && res.status === 200) {
+          var copia = res.clone();
+          caches.open(CACHE).then(function(c){ c.put(req, copia); }).catch(function(){});
+        }
         return res;
       }).catch(function(){
         return caches.match(req).then(function(m){ return m || caches.match("./index.html"); });

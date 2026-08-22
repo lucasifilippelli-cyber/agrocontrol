@@ -477,6 +477,9 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .portada-error{margin-top:14px;padding:10px 13px;border-left:3px solid var(--alerta);background:var(--alerta-bg);font-size:13px;color:var(--tierra);border-radius:0 3px 3px 0}
 .portada-ok{margin-top:14px;padding:10px 13px;border-left:3px solid var(--ok);background:var(--ok-bg);font-size:13px;color:var(--tierra);border-radius:0 3px 3px 0}
 .portada-pie{margin-top:20px;font-size:12px;color:var(--tierra-3);text-align:center;line-height:1.5}
+.pendientes{display:flex;align-items:center;gap:6px;background:var(--ojo);color:#241800;border:0;
+  font-family:var(--sans);font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.pendientes:hover{filter:brightness(1.07)}
 .cuenta{display:flex;align-items:center;gap:9px}
 .cuenta-nombre{font-size:12.5px;color:var(--tope-fg);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cuenta button{background:none;border:1px solid var(--tope-borde);color:var(--tope-tenue);font-family:var(--sans);font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:3px;cursor:pointer}
@@ -570,6 +573,19 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .cabecera{border-bottom-color:var(--tierra)}
 .sem{border-radius:8px}
 .tope{border-bottom:1px solid #17532F}
+/* En un teléfono el tope no entraba: la marca entera, la etiqueta de la
+   campaña y el selector ya sumaban más que el ancho de la pantalla, y lo que
+   venía después —Salir, y ahora el cartel de pendientes— se iba afuera sin
+   forma de llegar. Queda el ícono, el selector se achica, y lo que hay que
+   ver entra. */
+@media (max-width:720px){
+  .tope{gap:10px;padding:0 12px}
+  .marca{font-size:0;gap:0}
+  .tope-der{gap:8px;min-width:0;flex:1 1 auto;justify-content:flex-end}
+  .tope-der label{display:none}
+  .tope-der select{max-width:none;min-width:0;flex:0 1 auto}
+  .pendientes{padding:6px 9px}
+}
 @media (max-width:900px){
   .nav{background:#0F3320}
   .nav a{margin:0;border-radius:0}
@@ -641,6 +657,7 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
   <div class="tope-der">
     <label for="sel-camp">Campaña</label>
     <select id="sel-camp"></select>
+    <button type="button" class="pendientes oculto" id="pendientes" data-a="reintentar"></button>
     <div class="cuenta"><span class="cuenta-nombre" id="cuenta-nombre"></span>
       <button type="button" data-a="salir">Salir</button></div>
   </div>
@@ -2286,6 +2303,7 @@ var SB_KEY = "sb_publishable_TDaLmB7FDpLsfSNDrb98-Q_UfEMOY58";
 var CLAVE_CACHE = "agrocontrol.cache.v1",
     CLAVE_SESION = "agrocontrol.sesion.v1",
     CLAVE_CLIMA = "agrocontrol.clima.v1",
+    CLAVE_COLA = "agrocontrol.cola.v1",
     CLAVE_HISTORIA = "agrocontrol.historia.v2";  /* v2: la Task 5 fix round 1 le agregó .eto; v1 no la tiene y el caché no vence solo */
 
 var E = null, campActiva = null, vistaActual = "inicio", loteAbierto = null;
@@ -2339,9 +2357,16 @@ function traducirError(txt, estado){
 }
 function pedir(ruta, opciones){
   return fetch(SB_URL+ruta, opciones).then(function(r){
-    if(!r.ok) return r.text().then(function(t){ throw new Error(traducirError(t,r.status)); });
+    if(!r.ok) return r.text().then(function(t){
+      var e=new Error(traducirError(t,r.status)); e.estado=r.status; throw e;
+    });
     if(r.status===204) return null;
     return r.text().then(function(t){ return t?JSON.parse(t):null; });
+  }, function(){
+    /* La red no llegó a contestar. No es lo mismo que un rechazo de la base:
+       de esta se vuelve sola cuando hay señal, y esa diferencia es la que
+       decide si una escritura pendiente se reintenta o se descarta. */
+    var e=new Error("sin conexión"); e.esRed=true; throw e;
   });
 }
 var sb={
@@ -2394,7 +2419,7 @@ var auth={
   salir:function(){
     var p=sesion?pedir("/auth/v1/logout",{method:"POST",headers:encabezados(true)}).catch(function(){}):Promise.resolve();
     return p.then(function(){
-      guardarSesion(null); perfil=null; E=null;
+      guardarSesion(null); perfil=null; E=null; olvidarCola();
       try{ localStorage.removeItem(CLAVE_CACHE); }catch(e){}
     });
   }
@@ -2694,27 +2719,103 @@ function cargar(){
     });
 }
 
-/* Cada acción marca lo que tocó; guardar() lo manda todo junto. */
-var cola=[];
-function marcar(coleccion, fila){ cola.push({op:"grabar", t:TABLAS[coleccion], fila:fila}); }
-function marcarBaja(coleccion, id){ cola.push({op:"borrar", t:TABLAS[coleccion], id:id}); }
+/* Cada acción marca lo que tocó; guardar() lo manda todo junto.
+
+   La cola se escribe en el teléfono apenas se marca algo y recién se limpia
+   cuando la base aceptó la fila. Antes se vaciaba al empezar el intento: sin
+   señal el cambio se perdía, la app avisaba que no se había guardado y la
+   pantalla lo seguía mostrando igual —porque guardarCache() ya lo había
+   escrito— hasta que volvía la conexión y cargar() lo borraba sin decir
+   nada. En el campo, sin señal es el caso normal, no la excepción. */
+var cola=[], subiendo=null, otraVuelta=false;
+
+function idUsuario(){ return (sesion&&sesion.user&&sesion.user.id)||null; }
+
+function guardarCola(){
+  try{
+    if(cola.length) localStorage.setItem(CLAVE_COLA,JSON.stringify({u:idUsuario(),items:cola}));
+    else localStorage.removeItem(CLAVE_COLA);
+  }catch(e){}
+}
+function leerCola(){
+  try{
+    var c=JSON.parse(localStorage.getItem(CLAVE_COLA)||"null");
+    /* La cola lleva el dueño puesto: en un mismo teléfono entran dos
+       productores distintos y lo que dejó uno pendiente no se sube nunca a
+       la cuenta del otro. */
+    if(c&&c.items&&c.items.length&&c.u===idUsuario()) cola=c.items.slice();
+    else if(c) olvidarCola();
+  }catch(e){}
+  return cola.length;
+}
+function olvidarCola(){
+  cola=[];
+  try{ localStorage.removeItem(CLAVE_COLA); }catch(e){}
+}
+function sacarDeCola(o){ var i=cola.indexOf(o); if(i>=0) cola.splice(i,1); }
+function frasePendientes(){ return cola.length===1 ? "1 cambio" : (cola.length+" cambios"); }
+
+function marcar(coleccion, fila){ cola.push({op:"grabar", t:TABLAS[coleccion], fila:fila}); guardarCola(); }
+function marcarBaja(coleccion, id){ cola.push({op:"borrar", t:TABLAS[coleccion], id:id}); guardarCola(); }
+
+function mandarUno(o){
+  if(o.op==="borrar") return sb.borrar(o.t,o.id);
+  var f=aGuion(o.fila); delete f.creado_en;
+  return sb.grabar(o.t,f);
+}
+
+/* De qué fallas se vuelve solo, y de cuáles no.
+
+   Quedarse sin señal, un error pasajero de la base, una sesión que hay que
+   renovar: ninguna tiene que ver con lo que dice la fila, así que más tarde
+   la misma fila entra igual y lo único sensato es esperar. Un rechazo por el
+   contenido —una fecha imposible, una columna que no existe— no se arregla
+   nunca: esa fila hay que soltarla, porque si se reintenta para siempre tapa
+   para siempre todo lo que venga atrás. La que más importa de la lista es la
+   sesión vencida: es el caso más probable justo al arrancar, y tratarla como
+   rechazo tiraría a la basura lo que se cargó en el campo. */
+function seReintenta(err){
+  if(!err) return false;
+  if(err.esRed) return true;
+  if(!err.estado) return false;
+  if(err.estado===401||err.estado===403) return true;   /* se renueva la sesión y vuelve */
+  if(err.estado===408||err.estado===429) return true;
+  return err.estado>=500;
+}
+
+/* Sube lo pendiente de a una y en orden. Cuando una fila se queda esperando,
+   las que siguen esperan con ella: el orden importa, grabar y después borrar
+   no es lo mismo que al revés. */
+function subirCola(callado){
+  if(subiendo){ otraVuelta=true; return subiendo; }
+  if(!cola.length){ guardarCola(); pintarPendientes(); return Promise.resolve(); }
+  var espera=null, rechazo=null, cadena=Promise.resolve();
+  cola.slice().forEach(function(o){
+    cadena=cadena.then(function(){
+      if(espera) return;
+      return mandarUno(o).then(function(){ sacarDeCola(o); }, function(err){
+        if(seReintenta(err)){ espera=err; return; }
+        sacarDeCola(o); rechazo=err.message;
+      });
+    });
+  });
+  subiendo=cadena.then(function(){
+    subiendo=null; guardarCola(); pintarPendientes();
+    if(rechazo) avisar("No se pudo guardar: "+rechazo);
+    else if(espera&&cola.length&&!callado){
+      avisar(espera.esRed ? "Sin señal: "+frasePendientes()+" sin subir. Se suben solos cuando vuelva."
+                          : "Todavía no se pudo subir: "+frasePendientes()+" pendientes. Se reintenta solo.");
+    }
+    /* Se marcó algo mientras subíamos: va en la vuelta siguiente. */
+    if(otraVuelta&&!espera){ otraVuelta=false; return subirCola(callado); }
+    otraVuelta=false;
+  });
+  return subiendo;
+}
 
 function guardar(){
   guardarCache();
-  if(!cola.length) return Promise.resolve();
-  var lote=cola.slice(); cola=[];
-  var cadena=Promise.resolve();
-  lote.forEach(function(o){
-    cadena=cadena.then(function(){
-      if(o.op==="borrar") return sb.borrar(o.t,o.id);
-      var f=aGuion(o.fila); delete f.creado_en;
-      return sb.grabar(o.t,f);
-    });
-  });
-  return cadena.catch(function(err){
-    avisar(navigator.onLine ? "No se pudo guardar: "+err.message
-                            : "Sin señal: el cambio no se guardó. Probá de nuevo con conexión.");
-  });
+  return subirCola();
 }
 
 /* La siembra del plan de cuentas se persiste aparte de la cola de guardar():
@@ -4264,8 +4365,28 @@ A.cargarEjemplo=function(){
   avisar("Cargando los datos de ejemplo…");
   cargarEjemplo().then(function(){ pintar(); avisar("Listo. Cuatro campos y quince lotes de ejemplo."); });
 };
+/* El cartel es la contracara de la cola: mientras haya algo sin subir tiene
+   que estar a la vista. Un pendiente que no se ve es un pendiente que el
+   productor da por guardado. */
+function pintarPendientes(){
+  var b=document.getElementById("pendientes"); if(!b) return;
+  if(!cola.length){ b.classList.add("oculto"); b.textContent=""; return; }
+  b.classList.remove("oculto");
+  b.textContent="↑ "+cola.length+" sin subir";
+  b.title="Todavía no llegaron a la nube. Tocá para intentar ahora.";
+}
+
+A.reintentar=function(){
+  if(!cola.length) return;
+  var habia=cola.length;
+  subirCola().then(function(){
+    if(!cola.length) avisar(habia===1?"Listo: el cambio ya está guardado.":"Listo: los "+habia+" cambios ya están guardados.");
+  });
+};
+
 A.salir=function(){
-  confirmar("Cerrar sesión","Tus datos quedan guardados en la nube. Volvés a verlos entrando con el mismo mail.",function(){
+  var pend=cola.length ? " Ojo: tenés "+frasePendientes()+" sin subir y se pierden si salís ahora." : "";
+  confirmar("Cerrar sesión","Tus datos quedan guardados en la nube. Volvés a verlos entrando con el mismo mail."+pend,function(){
     auth.salir().then(function(){ modoPortada="entrar"; mensajePortada=null; pintar(); });
   });
   $("dlg-ok").textContent="Cerrar sesión";
@@ -5919,7 +6040,10 @@ function pintarPortada(){
       if(r&&r.access_token){
         guardarSesion(conVencimiento(r));
         mensajePortada=null;
-        return cargar().then(arrancarApp);
+        /* Puede haber quedado algo sin subir de la última sesión de esta
+           misma cuenta: sube antes de bajar, o cargar() lo pisaría. */
+        leerCola();
+        return subirCola(true).then(cargar).then(arrancarApp);
       }
       /* la cuenta quedó creada pero hace falta confirmar el mail */
       modoPortada="entrar";
@@ -5966,6 +6090,7 @@ function pintar(){
   $("app").classList.remove("oculto");
   if(!E) E=JSON.parse(JSON.stringify(vacio));
   $("cuenta-nombre").textContent=(perfil&&perfil.nombre)?perfil.nombre:((sesion.user&&sesion.user.email)||"");
+  pintarPendientes();
   var sel=$("sel-camp");
   sel.innerHTML=E.campanias.map(function(c){
     return '<option value="'+c.id+'"'+(c.id===campActiva?" selected":"")+'>'+esc(c.nombre)+' — '+(c.estado==="curso"?"en curso":"cerrada")+'</option>';}).join("");
@@ -6024,12 +6149,16 @@ document.addEventListener("mousemove",function(ev){
   globo.style.left=x+"px"; globo.style.top=y+"px";
 });
 
+/* Volvió la señal: lo que quedó pendiente se sube solo, sin que nadie toque nada. */
+window.addEventListener("online",function(){ subirCola(); });
+
 leerSesion();
 if(!sesion){
   pintar();
 } else {
   /* La sesión guardada casi siempre está vencida: se renueva antes de pedir nada. */
   leerCache();
+  leerCola();
   pintar();
   var guardada=sesion;
   auth.renovar()
@@ -6041,6 +6170,10 @@ if(!sesion){
       if(guardada && guardada.vence_en && guardada.vence_en > Date.now()){ sesion=guardada; return; }
       throw new Error("sesión vencida");
     })
+    /* Primero sube lo que quedó pendiente y después baja: al revés,
+       cargar() reemplaza E entero y el cambio desaparecería de la pantalla
+       sin haber llegado nunca a la base. */
+    .then(function(){ return subirCola(true); })
     .then(function(){ return cargar(); })
     .then(arrancarApp)
     .catch(function(){

@@ -36,10 +36,13 @@ compilación. Se edita y se recarga. El resto del repo: `sw.js`,
   se despliegan.
 - **ES5 dentro de `index.html`**: `var` y `function`, sin flechas, sin `let`, sin
   `const`, sin template literals.
-- **Instalable y offline.** El service worker cachea la app entera y es
-  *network-first* para el mismo origen, así que una actualización llega en la
-  próxima carga con señal sin tocar la versión de caché. Nunca cachea el
-  pronóstico.
+- **Instalable y offline, también para escribir.** El service worker cachea la
+  app entera y es *network-first* para el mismo origen, así que una
+  actualización llega en la próxima carga con señal sin tocar la versión de
+  caché. Nunca cachea el pronóstico, y **sólo guarda respuestas que salieron
+  bien**: un 500 pasajero no puede quedar como la copia que se abre sin señal.
+  Lo que se carga sin señal **queda en una cola en el teléfono** y sube solo
+  cuando vuelve. Ver "La cola de escritura" más abajo.
 - **`null` significa "todavía no sé" y NUNCA se muestra como cero.** Es la regla
   más importante del proyecto. Ver "El patrón de defecto" más abajo.
 - **El rendimiento se deriva, no se guarda.** Cartas de porte → descuento de
@@ -133,7 +136,7 @@ defecto crítico.**
 node --test          # sin ruta: en Node 24, pasarle un directorio no descubre nada
 ```
 
-**272 tests.** El arnés lee `index.html`, extrae el bloque entre
+**294 tests.** El arnés lee `index.html`, extrae el bloque entre
 `/* === modelo:inicio === */` y `/* === modelo:fin === */`, y lo evalúa aislado
 con `vm`. Por eso **toda función testeable tiene que vivir dentro de ese
 bloque**, y por eso las funciones del modelo reciben sus datos por argumento.
@@ -235,8 +238,16 @@ de "aporte de napa" por ambiente es el parche declarado.
 - **Los números vuelven de PostgREST como números**, no como texto.
 - **Queda un aviso de seguridad menor**: la protección contra contraseñas
   filtradas está desactivada.
-- **`guardar()` descarta el resto de la tanda ante el primer rechazo** y no tiene
-  reintento ni cola offline. La siembra del plan de cuentas se aisló por eso.
+- **La cola de escritura.** `marcar()` la escribe en `localStorage` en el acto y
+  `subirCola()` la vacía de a una y en orden; recién se limpia lo que la base
+  aceptó. `seReintenta(err)` decide el destino de cada falla: sin señal, 5xx,
+  401/403 y 408/429 **esperan** —la misma fila va a entrar más tarde—; un
+  rechazo por el contenido se **suelta**, porque reintentarlo taparía para
+  siempre todo lo que viene atrás. La cola lleva el `user_id` puesto: **lo que
+  dejó pendiente un productor no se sube nunca a la cuenta del otro**. Al
+  arrancar sube antes de bajar, porque `cargar()` reemplaza `E` entero. El
+  cartel del tope es la contracara: mientras haya algo sin subir, se ve.
+  La siembra del plan de cuentas sigue aislada de la cola, por lo suyo (I2).
 - **`economiaCampania` tiene un agujero contable, desplegado hoy**: un cultivo
   con ventas y cero producción cargada reparte ingreso 0 y esa plata desaparece.
   **El escenario no lo reprodujo a propósito.** Merece tarea propia.
