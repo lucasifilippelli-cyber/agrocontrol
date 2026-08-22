@@ -78,9 +78,16 @@ Cuando `diasPendientes` es cero la ventana ya pasó entera, no hay nada supuesto
 y los tres escenarios convergen: ahí se muestra sólo el agua real. Es el estado
 en el que el número deja de ser una proyección.
 
-**Los milímetros son por ambiente**, igual que el rinde: cada ambiente tiene su
-capacidad de agua útil y su propio balance. Suben por la misma cadena que hoy usa
-`f.normal` y se ponderan por hectárea, igual que los rindes.
+**Los milímetros son del lote, no del ambiente.** La lluvia que cae y la ventana
+crítica son las mismas para todo el lote: lo que cambia entre ambientes es la
+capacidad de agua útil, que afecta el rinde pero no el agua. Así que los tres
+ambientes de un lote declaran los mismos milímetros y distinto rinde.
+
+A nivel cultivo sí se ponderan por hectárea, igual que el rinde, **y ahí es un
+promedio**: dos lotes del mismo cultivo sembrados con un mes de diferencia
+tienen ventanas críticas distintas, y el agua de una no es comparable con la de
+la otra. El número del cultivo sirve para tener una idea; el exacto está en la
+ficha de cada lote, y la pantalla lo dice.
 
 ## El escenario propio
 
