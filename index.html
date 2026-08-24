@@ -4313,6 +4313,44 @@ A.rindesBase=function(estId){
     }});
 };
 
+/* El factor se carga como porcentaje —65— y se guarda como número —0,65—.
+   El tope de 300 % es el mismo check que tiene la columna en la base: si sólo
+   estuviera allá, la fila la rechazaría la base, y una fila rechazada por su
+   contenido se suelta de la cola y no se reintenta. Vale más frenarla acá,
+   donde se puede explicar. */
+A.nuevoEscenario=function(id){
+  var X=id?(E.escenariosLluvia||[]).filter(function(x){return x.id===id;})[0]:null;
+  abrirForm({titulo:X?"Editar escenario":"Cargar escenario de lluvia",
+    nota:"Un escenario es cuánto llueve comparado con un año normal, y sirve para todos los cultivos: escala la mediana histórica de la ventana crítica de cada uno. No cambia el límite de lo que podés comprometer, que se sigue midiendo contra el escenario pesimista.",
+    valores:X?{nombre:X.nombre,pct:Math.round(X.factor*1000)/10}:{pct:100},
+    campos:[{k:"nombre",label:"Nombre",tipo:"text",req:true,hint:"Cómo lo vas a reconocer: «Año Niña», «Como 2022/23»."},
+            {k:"pct",label:"Lluvia, en % de un año normal",tipo:"number",paso:"1",min:"1",max:"300",req:true,
+             hint:"100 es un año normal. 65 es un tercio menos de agua; 130, un tercio más."}],
+    guardar:function(d){
+      var pct=parseFloat(d.pct);
+      if(!isFinite(pct)||pct<=0||pct>300){ avisar("La lluvia tiene que estar entre 1 y 300 % de lo normal."); return false; }
+      var b={nombre:String(d.nombre).trim(), factor:Math.round(pct*10)/1000};
+      if(!b.nombre){ avisar("Poné un nombre para reconocerlo."); return false; }
+      if(!E.escenariosLluvia) E.escenariosLluvia=[];
+      var repe=E.escenariosLluvia.filter(function(x){ return x.nombre===b.nombre && (!X||x.id!==X.id); });
+      if(repe.length){ avisar("Ya tenés un escenario con ese nombre."); return false; }
+      if(X){ X.nombre=b.nombre; X.factor=b.factor; marcar("escenariosLluvia",X); avisar("Escenario actualizado."); }
+      else { b.id=uid(); E.escenariosLluvia.push(b); marcar("escenariosLluvia",b); avisar("Escenario cargado."); }
+    }});
+};
+A.borrarEscenario=function(id){
+  var x=(E.escenariosLluvia||[]).filter(function(e){return e.id===id;})[0]; if(!x) return;
+  confirmar("Eliminar escenario",esc(x.nombre)+" · "+nf(x.factor*100,0)+" % de lo normal.",function(){
+    E.escenariosLluvia=E.escenariosLluvia.filter(function(e){return e.id!==id;});
+    /* Si se estaba mirando algún cultivo con este escenario, la vista vuelve a
+       la estadística: dejar el número puesto con el escenario borrado sería un
+       rinde propio sin premisa que lo explique. */
+    Object.keys(semEscenario).forEach(function(c){
+      if(semEscenario[c] && semEscenario[c].factor === x.factor) delete semEscenario[c];
+    });
+    marcarBaja("escenariosLluvia",id); avisar("Escenario eliminado."); });
+};
+
 A.nuevoPrecioForward=function(id){
   var P=id?E.preciosForward.filter(function(x){return x.id===id;})[0]:null;
   abrirForm({titulo:P?"Editar precio forward":"Cargar precio forward",
@@ -5780,6 +5818,30 @@ function semDetalleLote(f){
    el partido no está en la serie oficial, y el que corrige la mediana que
    mezcla campos bien llevados con flojos. Muestra el oficial al lado para que
    se vea contra qué se está comparando. */
+/* Los escenarios de lluvia con nombre. Un nombre y un factor sobre la mediana
+   histórica: se define una vez y sirve para cualquier cultivo, porque escala la
+   mediana de la ventana que a cada uno le toca. */
+function bloqueEscenarios(){
+  var lista = E.escenariosLluvia || [];
+  return '<div class="bloque"><div class="bloque-cab"><h2>Escenarios de lluvia</h2>'+
+    '<div class="aclara">Años con nombre para mirar cualquier cultivo contra ellos, arriba en cada tarjeta</div></div>'+
+    '<div class="bloque-cuerpo">'+
+    (lista.length
+      ? '<div class="scroll-x"><table class="tabla"><thead><tr><th>Nombre</th>'+
+        '<th class="der">Lluvia</th><th class="der">Acciones</th></tr></thead><tbody>'+
+        lista.map(function(e){
+          return '<tr><td><span class="lote-nom">'+esc(e.nombre)+'</span></td>'+
+            '<td class="der num">'+nf(e.factor*100,0)+' % de lo normal</td>'+
+            '<td class="der"><span class="acc"><button class="btn sec mini" data-a="nuevoEscenario" data-arg="'+esc(e.id)+'">Editar</button>'+
+            '<button class="btn peligro mini" data-a="borrarEscenario" data-arg="'+esc(e.id)+'">×</button></span></td></tr>';
+        }).join("")+'</tbody></table></div>'
+      : '<div class="sem-nose"><b>Todavía no cargaste ninguno</b>'+
+        'Un escenario es un nombre y cuánto llueve comparado con un año normal: '+
+        '&laquo;a\u00f1o Ni\u00f1a, 65 %&raquo;. Sirve para todos los cultivos a la vez.</div>')+
+    '<div style="margin-top:12px"><button type="button" class="btn sec" data-a="nuevoEscenario">Cargar un escenario</button></div>'+
+    '</div></div>';
+}
+
 function bloqueRindesBase(){
   var ov = overridesDePerfil(perfil), cultivos = Object.keys(VENTANAS);
   if(!E.establecimientos.length) return "";
@@ -5981,7 +6043,7 @@ function vistaSementera(){
       'El módulo proyecta el rinde de los lotes ya sembrados: en cuanto registres una siembra con su fecha '+
       'y su superficie, acá vas a ver cuánto puede rendir cada uno y cuánto podés comprometer sin pasarte.'+
       '<br><br><button class="btn" data-a="asignarCultivo">+ Planificar cultivo</button></p></div>'+
-      bloqueRindesBase()+'</div>';
+      bloqueEscenarios()+bloqueRindesBase()+'</div>';
 
   var ficha = '<div class="ficha">'+
     '<div><div class="eyebrow">Superficie en pie</div><div class="v">'+nf(s.ha,1)+'<span class="u">ha</span></div>'+
@@ -6066,7 +6128,7 @@ function vistaSementera(){
     '<div class="aclara">Tocá un lote para ver su ficha y la cuenta del modelo abierta</div></div>'+
     '<div class="bloque-cuerpo">'+s.filas.map(semDetalleLote).join("")+'</div></div>';
 
-  return '<div class="pantalla">'+cab+ficha+alarma+aviso+bloqueDescargas()+tarjetas+lotes+bloqueRindesBase()+
+  return '<div class="pantalla">'+cab+ficha+alarma+aviso+bloqueDescargas()+tarjetas+lotes+bloqueEscenarios()+bloqueRindesBase()+
     '<p class="pie">El rinde esperado por agua responde sólo al balance hídrico: FAO-33 sobre la ventana crítica de cada cultivo, '+
     'con el rinde mediano del partido como referencia. No modela enfermedades, granizo, malezas, plagas, nitrógeno ni fecha de siembra fuera de la ventana óptima, '+
     'y tampoco el aporte de napa salvo el que cargues a mano por ambiente.</p></div>'+
