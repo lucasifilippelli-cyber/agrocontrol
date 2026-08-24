@@ -84,10 +84,18 @@ capacidad de agua útil, que afecta el rinde pero no el agua. Así que los tres
 ambientes de un lote declaran los mismos milímetros y distinto rinde.
 
 A nivel cultivo sí se ponderan por hectárea, igual que el rinde, **y ahí es un
-promedio**: dos lotes del mismo cultivo sembrados con un mes de diferencia
-tienen ventanas críticas distintas, y el agua de una no es comparable con la de
-la otra. El número del cultivo sirve para tener una idea; el exacto está en la
-ficha de cada lote, y la pantalla lo dice.
+promedio**: los lotes de un mismo cultivo pueden estar en campos distintos, y
+sobre cada campo llueve distinto. El número del cultivo sirve para tener una
+idea; el exacto está en la ficha de cada lote, y la pantalla lo dice.
+
+**Lo que NO los separa es la fecha de siembra.** `ventanaCritica` calcula la
+ventana a partir del inicio de la campaña, no de cuándo se sembró cada lote, así
+que todos los lotes de un cultivo comparten ventana. Un maíz sembrado el 25 de
+septiembre y uno del 20 de octubre florecen en momentos distintos y el modelo
+los mira en la misma ventana. Es una limitación preexistente, ya declarada en el
+pie de la pantalla —"no modela … fecha de siembra fuera de la ventana óptima"—,
+y esta pieza no la cambia. Queda anotada acá porque es de las cosas que el socio
+tiene que ver.
 
 ## El escenario propio
 
@@ -221,3 +229,7 @@ Después:
 - **Si el escenario propio debería poder mover el límite de compromiso** en algún
   caso. Acá se decidió que no, nunca. Si en la operación real hay un caso donde
   sí, hay que saberlo antes de que alguien lo descubra vendiendo.
+- **Que la ventana crítica no se corra con la fecha de siembra.** Es de antes de
+  esta pieza y no se toca acá, pero apareció implementándola y es de las cosas
+  que un agrónomo mira distinto: en un año de siembras escalonadas, el modelo
+  pone a todos los lotes del cultivo en la misma ventana.

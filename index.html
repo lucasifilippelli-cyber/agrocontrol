@@ -1409,6 +1409,12 @@ function filaSementera(o){
 
   var iaSuma = 0, iaHa = 0, haCon = 0, todos = true;
   var acum = { pesimista:0, esperado:0, optimista:0 };
+  /* El agua es del lote, no del ambiente: la lluvia que cae y la ventana
+     crítica son las mismas para todos: lo que cambia entre ambientes es cuánta
+     agua retienen. Así que el primer ambiente que la declara vale para el lote
+     entero. Acumularla como se acumulan los rindes daría el doble y sugeriría
+     que varía. El rinde propio sí se acumula ponderado, como los otros tres. */
+  var acumPropio = 0, mmPropio = null, todosPropio = true;
   for(var i = 0; i < amb.length; i++){
     var a = amb[i], napa = (a.napa == null ? 0 : a.napa);
     var cau = a.cau + napa, au0 = a.cau * AU0_FRACCION + napa;
@@ -1426,9 +1432,13 @@ function filaSementera(o){
     }
 
     var e = escenariosVentana({ serie:serie, ventana:ventana, desdeCampaniaISO:c.desde,
-      cau:cau, au0:au0, kc:kc, historiaLarga:hist, rBase:ancla.kgHa, ky:ky });
+      cau:cau, au0:au0, kc:kc, historiaLarga:hist, rBase:ancla.kgHa, ky:ky,
+      propio:o.propio });
     a.kgHa = e;
     if(e) f.normal = !!e.normal;
+    if(e && !f.mm) f.mm = { caidos:e.mmCaidos, pendiente:e.mmPendiente, dias:e.diasPendientes };
+    if(e && e.propio){ acumPropio += e.propio.kgHa * a.ha; mmPropio = e.propio.mm; }
+    else todosPropio = false;
     if(!e) todos = false;
     else {
       acum.pesimista += e.pesimista * a.ha;
@@ -1443,6 +1453,19 @@ function filaSementera(o){
      promedio de la parte que sí se pudo calcular es un rinde parcial
      presentado como si fuera el del lote. */
   if(!todos || haCon <= 0){ f.falta = "ventana"; f.normal = false; return f; }
+
+  /* Si un solo ambiente no pudo calcular el propio, el lote entero queda sin
+     él: mismo criterio que ya rige para kgHa, porque un promedio de la parte
+     que sí se pudo calcular es un rinde parcial presentado como si fuera el
+     del lote. */
+  /* Se llama escenarioPropio y no propio a propósito: de acá para arriba
+     convive con la marca del ancla —f.ancla.propio, g.propio— que significa
+     otra cosa, "el rinde de referencia lo cargó el productor". Dos cosas
+     distintas con el mismo nombre en el mismo objeto es exactamente el tipo
+     de confusión que este proyecto ya pagó caro. */
+  f.escenarioPropio = (o.propio && todosPropio && haCon > 0)
+    ? { kgHa: Math.round(acumPropio / haCon), mm: mmPropio }
+    : null;
 
   f.kgHa = { pesimista:Math.round(acum.pesimista / haCon),
              esperado: Math.round(acum.esperado  / haCon),
@@ -1482,9 +1505,10 @@ function sementeraDeCampania(o){
     if(!g){
       g = mapa[f.cultivo] = { cultivo:f.cultivo, ha:0, lotes:0, conDato:0, sinDato:0,
         kgHa:null, tn:null, tnVendidas:0, comp:null,
-        mesEntrega:null, precio:null, valor:null,
+        mesEntrega:null, precio:null, valor:null, mm:null, escenarioPropio:null,
         propio:false, napa:false, normal:false, filas:[] };
-      acum[f.cultivo] = { p:0, e:0, o:0, ha:0 };
+      acum[f.cultivo] = { p:0, e:0, o:0, ha:0,
+        mmC:0, mmP:[0,0,0], mmD:0, mmHa:0, prop:0, propMm:0, propHa:0, todoProp:true };
       cultivos.push(g);
     }
     g.filas.push(f); g.lotes++; g.ha = Math.round((g.ha + f.ha) * 10) / 10;
@@ -1498,6 +1522,23 @@ function sementeraDeCampania(o){
       a.e += f.kgHa.esperado  * f.ha;
       a.o += f.kgHa.optimista * f.ha;
       a.ha += f.ha;
+      /* Acá sí se pondera el agua, y acá sí es un promedio: dos lotes del
+         mismo cultivo sembrados con un mes de diferencia tienen ventanas
+         críticas distintas, y el agua de una no es comparable con la de la
+         otra. El número exacto está en la ficha de cada lote. */
+      if(f.mm){
+        a.mmC += f.mm.caidos * f.ha;
+        a.mmP[0] += f.mm.pendiente[0] * f.ha;
+        a.mmP[1] += f.mm.pendiente[1] * f.ha;
+        a.mmP[2] += f.mm.pendiente[2] * f.ha;
+        a.mmD += f.mm.dias * f.ha;
+        a.mmHa += f.ha;
+      }
+      if(f.escenarioPropio){
+        a.prop += f.escenarioPropio.kgHa * f.ha;
+        a.propMm += f.escenarioPropio.mm * f.ha;
+        a.propHa += f.ha;
+      } else a.todoProp = false;
     } else g.sinDato++;
   });
 
@@ -1509,6 +1550,19 @@ function sementeraDeCampania(o){
     if(a.ha > 0){
       g.kgHa = { pesimista:Math.round(a.p / a.ha), esperado:Math.round(a.e / a.ha),
                  optimista:Math.round(a.o / a.ha) };
+      if(a.mmHa > 0){
+        g.mm = { caidos:Math.round(a.mmC / a.mmHa * 10) / 10,
+                 pendiente:[ Math.round(a.mmP[0] / a.mmHa * 10) / 10,
+                             Math.round(a.mmP[1] / a.mmHa * 10) / 10,
+                             Math.round(a.mmP[2] / a.mmHa * 10) / 10 ],
+                 dias: Math.round(a.mmD / a.mmHa) };
+      }
+      /* Si un solo lote del cultivo no tiene escenario propio, el cultivo
+         queda sin él: mismo criterio que rige para el lote y sus ambientes. */
+      g.escenarioPropio = (a.todoProp && a.propHa > 0)
+        ? { kgHa: Math.round(a.prop / a.propHa),
+            mm: Math.round(a.propMm / a.propHa * 10) / 10 }
+        : null;
       g.tn = { pesimista:Math.round(a.p / 100) / 10, esperada:Math.round(a.e / 100) / 10,
                optimista:Math.round(a.o / 100) / 10 };
     }
