@@ -1959,6 +1959,97 @@ function precioDelMes(forwards, cultivo, finMesISO){
            arrastrado: c[0].fechaCarga.slice(0,7) !== finMesISO.slice(0,7) };
 }
 
+/* Cuánto valía el patrimonio del cultivo a fin de cada mes, y cuánto se había
+   puesto hasta ahí. Serie mensual desde el inicio de campaña.
+
+   Todo se corta por fecha: los tickets, las ventas, los movimientos de stock y
+   los gastos que ya habían ocurrido a fin de cada mes. Nada de lo que pasó
+   después entra en la foto de ese mes.
+
+   El costo acumulado NO es patrimonio y por eso va aparte del total: puesto al
+   lado responde la única pregunta que importa, si lo que está parado vale más
+   que lo que se puso.
+
+   Ver docs/valuaciones.md. */
+function valuacionMensual(o){
+  var c = o.campania || {};
+  var meses = mesesEntre(c.desde, o.hastaISO);
+  var cls = (o.cultivoLotes || []).filter(function(cl){ return cl.campaniaId === c.id; });
+  var insPorId = {}; (o.insumos || []).forEach(function(i){ insPorId[i.id] = i; });
+  var clDeOrden = {}; (o.ordenes || []).forEach(function(x){ if(x.cultivoLoteId) clDeOrden[x.id] = x.cultivoLoteId; });
+  var clPorId = {}; cls.forEach(function(cl){ clPorId[cl.id] = cl; });
+
+  function centavos(n){ return Math.round(n * 100) / 100; }
+
+  return meses.map(function(mesISO){
+    var fin = finDeMes(mesISO);
+
+    /* Cosechado y todavía no vendido, por cultivo. Los kilos son de balanza:
+       lo único incierto es a cuánto se venden. */
+    var kgPorCultivo = {};
+    (o.tickets || []).forEach(function(t){
+      var cl = clPorId[t.cultivoLoteId]; if(!cl) return;
+      if(!t.fecha || t.fecha > fin) return;
+      var recibo = (CULTIVOS[cl.cultivo] || {}).recibo;
+      kgPorCultivo[cl.cultivo] = (kgPorCultivo[cl.cultivo] || 0) + kgSecos(t.kgNetos, t.humedad, recibo);
+    });
+    (o.ventas || []).forEach(function(v){
+      if(v.campaniaId !== c.id || !v.fecha || v.fecha > fin) return;
+      kgPorCultivo[v.cultivo] = (kgPorCultivo[v.cultivo] || 0) - num(v.toneladas) * 1000;
+    });
+
+    var tn = 0, usdCos = 0, faltaPrecio = false, arrastre = false;
+    Object.keys(kgPorCultivo).forEach(function(k){
+      var kg = kgPorCultivo[k]; if(kg <= 0) return;
+      tn += kg / 1000;
+      var pr = precioDelMes(o.forwards, k, fin);
+      /* Sin precio no se valúa en cero: las toneladas se saben igual, lo que
+         no se sabe es cuánto valen, y hay que poder decirlo. */
+      if(!pr){ faltaPrecio = true; return; }
+      if(pr.arrastrado) arrastre = true;
+      usdCos += (kg / 1000) * pr.usdTn;
+    });
+
+    /* Stock de insumos: el saldo de movimientos hasta fin de mes. */
+    var saldo = {};
+    (o.movimientos || []).forEach(function(m){
+      if(!m.fecha || m.fecha > fin) return;
+      saldo[m.insumoId] = (saldo[m.insumoId] || 0) + num(m.cantidad);
+    });
+    var usdIns = 0;
+    Object.keys(saldo).forEach(function(id){
+      if(saldo[id] <= 0) return;
+      usdIns += saldo[id] * num((insPorId[id] || {}).precio);
+    });
+
+    /* Lo invertido hasta ese mes: gastos de la campaña más insumos aplicados. */
+    var costo = 0;
+    (o.gastos || []).forEach(function(g){
+      if(g.campaniaId !== c.id || !g.fecha || g.fecha > fin) return;
+      costo += importeGasto(g);
+    });
+    (o.movimientos || []).forEach(function(m){
+      if(m.tipo !== "aplicacion" || !m.ordenId || !m.fecha || m.fecha > fin) return;
+      if(!clPorId[clDeOrden[m.ordenId]]) return;
+      var ins = insPorId[m.insumoId] || {};
+      var pu = (m.precioUnitario != null) ? num(m.precioUnitario) : num(ins.precio);
+      costo += Math.abs(num(m.cantidad)) * pu;
+    });
+
+    var cosechado = { tn:centavos(tn), usd:(faltaPrecio ? null : centavos(usdCos)),
+                      precioArrastrado:arrastre };
+    var insumos = { usd:centavos(usdIns) };
+    return { mes:mesISO,
+             cosechado:cosechado,
+             insumos:insumos,
+             enPie:null,
+             /* Un total que suma un null como si fuera cero es un patrimonio
+                inventado. Si falta una capa, el total falta. */
+             total:(cosechado.usd == null ? null : centavos(cosechado.usd + insumos.usd)),
+             costoAcumulado:centavos(costo) };
+  });
+}
+
 /* Cuánto dejó cada cultivo y en qué se fue la plata.
 
    Margen bruto = ingreso − costos directos. No es el resultado del cultivo:
