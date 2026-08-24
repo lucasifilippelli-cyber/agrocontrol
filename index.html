@@ -2760,11 +2760,13 @@ var TABLAS = {
   ordenes:"ordenes", ordenInsumos:"orden_insumos", movimientos:"movimientos_stock",
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
   telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
-  cuentas:"cuentas", presupuestos:"presupuestos"
+  cuentas:"cuentas", presupuestos:"presupuestos",
+  escenariosLluvia:"escenarios_lluvia"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
-           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[],presupuestos:[]};
+           telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[],presupuestos:[],
+           escenariosLluvia:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
