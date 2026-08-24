@@ -80,12 +80,27 @@ forward y avisa cuánto se puede comprometer sin pasarse.
   respuesta del rendimiento al agua de FAO-33 sobre las ventanas críticas.
 - **Rango de tres escenarios**: el tramo futuro de la ventana se rellena con los
   percentiles 20/50/80 de la lluvia histórica de esa misma ventana. Se cierra
-  solo a medida que la ventana pasa de pronóstico a historia.
+  solo a medida que la ventana pasa de pronóstico a historia. **Cada escenario
+  muestra su agua** (`mmCaidos`, `mmPendiente`, `diasPendientes`): un rinde sin
+  la premisa que lo sostiene no se puede discutir.
+- **El escenario propio agrega, nunca reemplaza.** Se puede pedir el rinde
+  contra una lluvia elegida —en mm o como % de lo normal, por cultivo— y sale
+  en `escenarioPropio`, al lado de los tres. **Nunca los pisa**, porque el
+  límite de compromiso lee el pesimista: si un supuesto lo moviera, un "año
+  Niño" habilitaría a vender grano que no se va a tener. Hay un test dedicado.
+  Ojo con el nombre: `g.propio` es otra cosa (el ancla la cargó el productor).
 - **Regla del compromiso**: el límite se mide contra el escenario **pesimista**,
   no el esperado. Un forward que no se puede entregar obliga a comprar grano
   justo el año en que está caro.
-- **Se llama "rinde esperado por agua"**, nunca "pronóstico de rinde": el modelo
-  no sabe de enfermedades, granizo, malezas, plagas ni nitrógeno.
+- **Se llama "rinde esperado"**, nunca "pronóstico de rinde". El "por agua" salió
+  de los rótulos en agosto de 2026 a pedido de Lucas y su socio, y la limitación
+  bajó a **subtítulo permanente** con clase propia (`.limita`). Sigue entera en
+  la prosa que explica el método y en la hoja imprimible. `tests/nombre.test.js`
+  falla si alguien se la lleva puesta limpiando texto.
+- **La ventana crítica sale del inicio de campaña, no de la fecha de siembra**:
+  todos los lotes de un cultivo comparten ventana. Limitación preexistente,
+  declarada en el pie, y de las que un agrónomo mira distinto en un año de
+  siembras escalonadas.
 - Descarga en hoja imprimible, CSV y JSON, los tres del mismo cálculo.
 
 ### Finanzas y Contabilidad
@@ -103,7 +118,7 @@ forward y avisa cuánto se puede comprometer sin pasarse.
 
 ## Modelo de datos
 
-Diecinueve tablas en `public`, todas con `user_id` y **RLS con una política por
+Veinte tablas en `public`, todas con `user_id` y **RLS con una política por
 tabla**. La clave del cliente viaja en el HTML y es pública por diseño: lo único
 que separa los datos de un productor de los de otro son esas políticas.
 **Verificar siempre con `get_advisors` después de tocar el esquema.**
@@ -111,9 +126,9 @@ que separa los datos de un productor de los de otro son esas políticas.
 `perfiles`, `establecimientos`, `lotes`, `campanias`, `cultivo_lotes`, `tickets`,
 `insumos`, `movimientos_stock`, `ordenes`, `orden_insumos`, `ventas`, `gastos`,
 `monitoreo`, `telegram_cuentas`, `clima_series`, `precios_forward`, `cuentas`,
-`presupuestos`.
+`presupuestos`, `escenarios_lluvia`.
 
-Migraciones aplicadas: `0001` a `0015`.
+Migraciones aplicadas: `0001` a `0016`.
 
 Los objetos anidados van como `jsonb`. **Las columnas de fecha aceptan `null`
 pero no `""`** — contemplado en `aGuion()`.
@@ -136,7 +151,7 @@ defecto crítico.**
 node --test          # sin ruta: en Node 24, pasarle un directorio no descubre nada
 ```
 
-**294 tests.** El arnés lee `index.html`, extrae el bloque entre
+**327 tests.** El arnés lee `index.html`, extrae el bloque entre
 `/* === modelo:inicio === */` y `/* === modelo:fin === */`, y lo evalúa aislado
 con `vm`. Por eso **toda función testeable tiene que vivir dentro de ese
 bloque**, y por eso las funciones del modelo reciben sus datos por argumento.
@@ -171,6 +186,7 @@ git add -A && git commit && git push   # Vercel redespliega solo
 | Qué | Dónde |
 |---|---|
 | Spec de Sementera | `docs/sementera.md` |
+| Spec y plan del rinde esperado | `docs/rinde-esperado.md`, `docs/rinde-esperado-plan.md` |
 | Plan de Sementera | `docs/sementera-plan.md` |
 | Spec de Finanzas y Contabilidad | `docs/finanzas.md` |
 | Plan del plan de cuentas | `docs/finanzas-plan-1.md` |
@@ -182,6 +198,13 @@ proyecto: cada decisión tomada en nombre de Lucas está ahí escrita.
 
 ## Pendiente, en orden
 
+0. **Las otras cuatro piezas de la reunión del 21/08/2026**, en este orden:
+   margen bruto por cultivo con desglose de insumos (la más barata:
+   `economiaCampania` ya calcula ingreso, insumos, gastos y resultado **por
+   lote**; falta agrupar por cultivo); valuaciones por mes; importación de
+   facturas en PDF; importación de asientos y sumas y saldos. Las dos últimas
+   rompen la arquitectura de un solo archivo sin dependencias y necesitan su
+   propia conversación antes de diseñarse.
 1. **El documento de validación para el socio.** Prometido y nunca escrito. Ver
    la lista completa abajo. Tiene que ser autocontenido y portable.
 2. **El contraste del modelo de Sementera contra la campaña 2025/26 cerrada.**
