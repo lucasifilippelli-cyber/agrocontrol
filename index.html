@@ -1915,6 +1915,50 @@ function importeUSD(fila){
    la app. Duplicarla afuera era garantizar que un día divergieran. */
 function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
 function importeGasto(g){ return importeUSD(g); }
+/* Los primeros de cada mes entre dos fechas, los dos extremos incluidos. La
+   valuación es una serie mensual y este es su eje. */
+function mesesEntre(desdeISO, hastaISO){
+  if(!desdeISO || !hastaISO) return [];
+  var d = new Date(desdeISO.slice(0,7) + "-01T12:00:00Z");
+  var h = new Date(hastaISO.slice(0,7) + "-01T12:00:00Z");
+  var r = [];
+  while(d <= h){
+    r.push(d.toISOString().slice(0,10));
+    d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 12));
+  }
+  return r;
+}
+
+/* El último día de un mes, para cortar por fecha "hasta fin de mes". */
+function finDeMes(mesISO){
+  var d = new Date(mesISO.slice(0,7) + "-01T12:00:00Z");
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 12))
+    .toISOString().slice(0,10);
+}
+
+/* Cuánto valía una tonelada de este cultivo a fin de ese mes.
+
+   No hay serie de precios: lo único que existe es el forward que el productor
+   cargó a mano. Se toma la observación más reciente hasta ese mes —la mejor
+   disponible— y si esa carga es de un mes anterior, el precio sale MARCADO como
+   arrastrado. Sin ninguna observación previa devuelve null, nunca cero: cero es
+   "no vale nada" y null es "no sé cuánto vale", y en el número más grande de la
+   app confundirlos es el peor lugar posible. */
+function precioDelMes(forwards, cultivo, finMesISO){
+  var c = (forwards || []).filter(function(p){
+    return p.cultivo === cultivo && p.fechaCarga && p.fechaCarga <= finMesISO;
+  }).sort(function(a, b){
+    if(a.fechaCarga !== b.fechaCarga) return a.fechaCarga < b.fechaCarga ? 1 : -1;
+    /* Empate de fecha de carga: el de entrega más cercana. El comparador
+       declara el empate (0) para no violar la antisimetría que exige sort. */
+    if(a.mesEntrega === b.mesEntrega) return 0;
+    return a.mesEntrega < b.mesEntrega ? -1 : 1;
+  });
+  if(!c.length) return null;
+  return { usdTn: num(c[0].usdTn),
+           arrastrado: c[0].fechaCarga.slice(0,7) !== finMesISO.slice(0,7) };
+}
+
 /* Cuánto dejó cada cultivo y en qué se fue la plata.
 
    Margen bruto = ingreso − costos directos. No es el resultado del cultivo:
