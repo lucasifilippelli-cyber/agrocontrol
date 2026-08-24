@@ -1091,6 +1091,18 @@ function escenariosVentana(o){
     }
   }
 
+  /* Lo que ya cayó adentro de la ventana. Sin esto, la premisa del escenario
+     queda a medias: "85 mm supuestos" solo no se puede discutir; "60 caídos
+     más 85 supuestos" sí. Se recorta a los días de la ventana que la serie
+     efectivamente cubre —sumar la serie entera metería la lluvia de antes de
+     la ventana, que regó el perfil pero no es agua de la ventana. */
+  var iCaido0 = Math.max(0, diasEntre(o.serie.desde, o.ventana.desde));
+  var iCaido1 = Math.min(o.serie.lluvia.length - 1,
+                         diasEntre(o.serie.desde, o.ventana.hasta));
+  var mmCaidos = 0;
+  for(var q = iCaido0; q <= iCaido1; q++) mmCaidos += (o.serie.lluvia[q] || 0);
+  mmCaidos = Math.round(mmCaidos * 10) / 10;
+
   var ias = [];
   for(var k = 0; k < pcts.length; k++){
     var lluvia = o.serie.lluvia.slice(), eto = o.serie.eto.slice();
@@ -1123,6 +1135,9 @@ function escenariosVentana(o){
      Sin tramo pendiente no se estimó nada y no hay degradación que declarar,
      aunque la historia del campo no se haya bajado nunca. */
   r.normal = respaldoNormal;
+  r.mmCaidos = mmCaidos;
+  r.mmPendiente = [pcts[0], pcts[1], pcts[2]];
+  r.diasPendientes = faltan;
   return r;
 }
 

@@ -2356,3 +2356,59 @@ test("el proyectado de 2025/26 cierra la mirada financiera contra la económica"
   var ingresoReal = real.cultivos.reduce(function(a, c){ return a + c.ingresoUSD; }, 0);
   assert.ok(ingresos > ingresoReal, "el proyectado tiene que valuar el grano todavía no vendido");
 });
+
+/* ============================================================
+   Rinde esperado · el agua detrás de cada escenario
+   El número existía y no salía: "pesimista 2.800 kg/ha" es un
+   número sin la premisa que lo sostiene, y nadie puede
+   discutirlo ni verificarlo.
+   ============================================================ */
+
+function escenarioDeDosDias(){
+  /* Mismo armado que el test de percentiles de más arriba: tres días reales
+     que secan el perfil antes de la ventana, y dos días de ventana sin ocurrir
+     que se rellenan con los percentiles 0, 20 y 60 mm. */
+  var lluvia = [];
+  for(var i = 0; i <= 3657; i++) lluvia.push(0);
+  var porAnio = [ [3656,100], [3290,80], [2925,60], [2560,40], [2195,30],
+                  [1829,20], [1464,10], [1099,5], [734,0], [368,0], [3,0] ];
+  porAnio.forEach(function(par){ lluvia[par[0]] = par[1]; });
+  return {
+    serie: { desde:"2026-01-01", lluvia:[0,0,0], eto:[20,20,20] },
+    ventana: { desde:"2026-01-04", hasta:"2026-01-05" },
+    desdeCampaniaISO: null,
+    cau:50, au0:50, kc:1,
+    historiaLarga: { desde:"2015-01-01", lluvia:lluvia },
+    rBase:4000, ky:1
+  };
+}
+
+test("escenariosVentana declara cuánta agua supone cada escenario", function(){
+  var e = M.escenariosVentana(escenarioDeDosDias());
+  assert.strictEqual(JSON.stringify(e.mmPendiente), JSON.stringify([0, 20, 60]),
+    "son los mismos milímetros que el motor reparte día a día");
+  assert.strictEqual(e.diasPendientes, 2);
+  assert.strictEqual(e.mmCaidos, 0, "ningún día de la ventana ocurrió todavía");
+});
+
+test("con la ventana cumplida no se declara nada supuesto", function(){
+  var o = escenarioDeDosDias();
+  /* La serie ahora cubre la ventana entera: cinco días reales, con 30 mm el
+     cuarto, que cae adentro de la ventana. */
+  o.serie = { desde:"2026-01-01", lluvia:[0,0,0,30,0], eto:[20,20,20,20,20] };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.diasPendientes, 0);
+  assert.strictEqual(e.mmCaidos, 30, "los 30 mm cayeron adentro de la ventana");
+  assert.strictEqual(JSON.stringify(e.mmPendiente), JSON.stringify([0, 0, 0]),
+    "no hay tramo por estimar: no se supone nada");
+});
+
+test("el agua caída se cuenta sólo adentro de la ventana", function(){
+  var o = escenarioDeDosDias();
+  /* 100 mm el 1 de enero, tres días ANTES de que abra la ventana. Sumar la
+     serie entera los metería en la premisa del escenario. */
+  o.serie = { desde:"2026-01-01", lluvia:[100,0,0,30,0], eto:[20,20,20,20,20] };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.mmCaidos, 30,
+    "los 100 mm de antes de la ventana regaron el perfil, pero no son agua de la ventana");
+});
