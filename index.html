@@ -451,6 +451,13 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .panel-fila b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700}
 .panel-fila.mal b{color:var(--alerta)}
 .panel-fila.bien b{color:var(--ok)}
+.panel-fila.propio{background:var(--ojo-bg)}
+.panel-fila.propio b{color:var(--ojo)}
+.sem-escenario{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
+.sem-escenario label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--tierra-3);font-weight:700}
+.sem-escenario select,.sem-escenario input{font-family:var(--sans);font-size:12.5px;padding:5px 8px;
+  border:1px solid var(--linea-fuerte);border-radius:8px;background:var(--campo-bg);color:var(--tierra)}
+.sem-escenario input{width:88px;font-family:var(--mono)}
 .panel-fila small{display:block;color:var(--tierra-3);font-size:11.5px;font-weight:400}
 .panel-aviso{padding:9px 13px;font-size:12.5px;background:var(--alerta-bg);color:var(--tierra);border-top:1px solid var(--alerta)}
 .panel-aviso.bien{background:var(--ok-bg);border-top-color:var(--ok)}
@@ -1378,6 +1385,10 @@ function filaSementera(o){
        Con Ky 1,50 —maíz— eso pasa en 0,333. */
     iaCero:((ky != null && ky > 1) ? Math.round((1 - 1 / ky) * 1000) / 1000 : 0),
     ambientes:amb, kgHa:null, tn:null,
+    /* En null desde el arranque, no undefined: si la fila corta antes por
+       falta de serie o de ancla, "todavía no sé" tiene que llegar dicho, no
+       omitido. Es la misma regla que kgHa y tn. */
+    mm:null, escenarioPropio:null,
     ia:null, iaDias:0,
     iaDiasVentana:(ventana ? diasEntre(ventana.desde, ventana.hasta) + 1 : 0),
     mmSiembra:null, mmVentana:null, serieHasta:null,
@@ -1496,7 +1507,13 @@ function sementeraDeCampania(o){
     return filaSementera({ cl:cl, lote:l, establecimiento:es, campania:c,
       serie:serieDe(o.series, l.establecimientoId, c.id),
       historiaLarga:((o.historias || {})[l.establecimientoId] || null),
-      overrides:((o.overrides || {})[l.establecimientoId] || null) });
+      overrides:((o.overrides || {})[l.establecimientoId] || null),
+      /* Por cultivo y por argumento: mirar el maíz temprano contra un año seco
+         y la soja de segunda contra uno normal, al mismo tiempo. Y por
+         argumento, no leído de una variable de la pantalla, porque es lo que
+         va a permitir simular campañas conectándole otra vista al mismo
+         cálculo. */
+      propio:((o.propioPorCultivo || {})[cl.cultivo] || null) });
   }).sort(function(a, b){ return b.ha - a.ha; });
 
   var mapa = {}, acum = {}, cultivos = [];
@@ -5533,6 +5550,12 @@ function asegurarHistorias(){
    del respaldo NORMAL sin que nada lo dijera. Es idempotente y se cachea en
    localStorage para siempre —la lluvia de hace diez años no cambia—, así que
    son unos pocos pedidos una sola vez en la vida de la cuenta. */
+/* Qué escenario se está mirando en cada cultivo. Es una vista, no un dato: no
+   se guarda ni viaja a la base, y se pierde al salir. Los escenarios en sí sí
+   se guardan; cuál estabas mirando, no. Es más barato agregarle persistencia
+   después que descubrir que una marca guardada cambió de significado. */
+var semEscenario = {};
+
 function sementeraActual(){
   var c = campania(campActiva); if(!c) return null;
   asegurarHistorias();
@@ -5542,7 +5565,8 @@ function sementeraActual(){
     campania:c, cultivoLotes:E.cultivoLotes, lotes:E.lotes,
     establecimientos:E.establecimientos, series:E.climaSeries,
     historias:HISTORIA, overrides:overridesDePerfil(perfil),
-    vendidas:vend, forwards:(E.preciosForward || []) });
+    vendidas:vend, forwards:(E.preciosForward || []),
+    propioPorCultivo:semEscenario });
 }
 
 /* Por qué no hay número. Nunca un cero ni un guión: "no sé" y "está todo
@@ -5583,6 +5607,36 @@ function semMarcas(x){
     (x.napa?'<span class="sem-marca napa" title="Algún ambiente tiene cargado a mano un aporte de napa, que el balance de superficie no modela">con napa</span>':'')+
     (x.normal?'<span class="sem-marca gruesa" title="No se pudo bajar la historia de 20 años del campo: el rango sale de la lluvia mensual típica y es una estimación gruesa, no un rango más ancho">estimación gruesa</span>':'')+
     '</div>';
+}
+
+/* El control para preguntarle al modelo por otra lluvia. Uno por cultivo, no
+   uno para toda la campaña: el maíz temprano y la soja de segunda no comparten
+   ni ventana ni año. */
+function semControlEscenario(g){
+  var sel = semEscenario[g.cultivo] || {};
+  var ops = '<option value="">Según la estadística</option>';
+  (E.escenariosLluvia || []).forEach(function(e){
+    var v = "f:"+e.factor;
+    ops += '<option value="'+esc(v)+'"'+(sel.factor === e.factor ? " selected" : "")+'>'+
+           esc(e.nombre)+' — '+nf(e.factor*100,0)+' %</option>';
+  });
+  return '<div class="sem-escenario">'+
+    '<label for="esc-'+esc(g.cultivo)+'">Suponiendo</label>'+
+    '<select id="esc-'+esc(g.cultivo)+'" class="sem-esc" data-cultivo="'+esc(g.cultivo)+'">'+ops+'</select>'+
+    '<input type="number" class="sem-esc-mm" data-cultivo="'+esc(g.cultivo)+'" min="0" max="900" '+
+      'placeholder="o mm" aria-label="Milímetros a mano para lo que falta de la ventana" '+
+      'value="'+(sel.mm != null ? esc(String(sel.mm)) : "")+'">'+
+    '</div>';
+}
+
+/* El rinde bajo el supuesto propio va SIEMPRE marcado. Un número mirado bajo
+   una lluvia elegida y uno salido de la estadística no pueden verse iguales:
+   ése es el defecto que más veces mordió a este proyecto. */
+function semFilaPropio(g){
+  if(!g.escenarioPropio) return "";
+  return '<div class="panel-fila propio"><span>Con tu supuesto'+
+    '<small>'+nf(g.escenarioPropio.mm,0)+' mm en lo que falta de la ventana, en vez de lo que dice la estadística</small></span>'+
+    '<b>'+nf(g.escenarioPropio.kgHa)+' kg/ha</b></div>';
 }
 
 /* La premisa del rango, a la vista. Un rinde sin el agua que lo sostiene es un
@@ -5976,7 +6030,8 @@ function vistaSementera(){
       '<h2><i class="punto" style="background:'+cu.color+'"></i>'+esc(cu.nom)+'</h2>'+
       '<div class="aclara">'+nf(g.ha,1)+' ha en '+g.lotes+' lote'+(g.lotes===1?"":"s")+
         (g.precio!=null?' · forward '+nf(g.precio,1)+' USD/t entrega '+mesAno(g.mesEntrega):' · sin forward cargado para '+mesAno(g.mesEntrega))+
-      '</div></div><div class="bloque-cuerpo">'+
+      '</div>'+semControlEscenario(g)+
+      '</div><div class="bloque-cuerpo">'+
       semMarcas(g)+
       (g.tn
         ?'<div class="panel-vivo"><h4>Rinde esperado</h4>'+
@@ -5990,6 +6045,7 @@ function vistaSementera(){
             '<b>'+(semCero(g.kgHa)||semConverge(g.kgHa)?nf(g.kgHa.esperado)
                    :nf(g.kgHa.pesimista)+' · '+nf(g.kgHa.esperado)+' · '+nf(g.kgHa.optimista))+' kg/ha</b></div>'+
           semAgua(g)+
+          semFilaPropio(g)+
           '<div class="panel-fila"><span>Producción esperada</span><b>'+nf(g.tn.esperada,1)+' t</b></div>'+
           '<div class="panel-fila"><span>Comprometido<small>vendido de esta campaña</small></span><b>'+nf(g.tnVendidas,1)+' t</b></div>'+
           '<div class="panel-fila '+(mal?"mal":"bien")+'"><span>Queda por comprometer'+
@@ -6243,6 +6299,31 @@ function pintar(){
   else $("lienzo").innerHTML=(VISTAS[v]||vistaHoy)();
   var se=$("sel-estab");
   if(se) se.addEventListener("change",function(){ A.verEstab(this.value); });
+  engancharEscenarios();
+}
+
+/* El escenario elegido vive en semEscenario y se repinta entero, así que los
+   listeners se vuelven a colgar en cada pintada, igual que sel-estab. */
+function engancharEscenarios(){
+  document.querySelectorAll(".sem-esc").forEach(function(el){
+    el.addEventListener("change",function(){
+      var c=this.getAttribute("data-cultivo"), v=this.value;
+      if(!v) delete semEscenario[c];
+      else semEscenario[c]={factor:parseFloat(v.slice(2))};
+      pintar();
+    });
+  });
+  document.querySelectorAll(".sem-esc-mm").forEach(function(el){
+    el.addEventListener("change",function(){
+      var c=this.getAttribute("data-cultivo"), v=parseFloat(this.value);
+      /* Un campo vacío es "no supongas nada", no "supongas cero milímetros":
+         cero es un año sin una gota y el modelo lo tiene que poder decir, pero
+         sólo si alguien lo escribió. */
+      if(this.value==="" || !isFinite(v) || v<0) delete semEscenario[c];
+      else semEscenario[c]={mm:v};
+      pintar();
+    });
+  });
 }
 
 $("nav").addEventListener("click",function(ev){

@@ -2619,3 +2619,25 @@ test("la marca del ancla y el escenario propio son cosas distintas y no se pisan
   assert.strictEqual(g.propio, true, "el ancla la cargó el productor");
   assert.strictEqual(g.escenarioPropio, null, "pero no se pidió ningún escenario propio");
 });
+
+test("cada cultivo se puede mirar con un escenario propio distinto", function(){
+  var cl2 = { id:"cl2", campaniaId:"c1", loteId:"l2", cultivo:"maiz_t",
+              haSembrada:100, fechaSiembra:"2025-09-25" };
+  var l2 = { id:"l2", establecimientoId:"e1", nombre:"Lote 3", ha:100,
+             ambientes:[{ nombre:"Loma", ha:100, cau:140, napa:null }] };
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE, l2], establecimientos:[EST],
+    cultivoLotes:[CL, cl2], series:[serieHasta("2026-01-20", 3, 4)],
+    historias:{}, overrides:{}, vendidas:{}, forwards:[],
+    propioPorCultivo:{ soja_1:{ factor:0.5 } } });
+  var soja = s.cultivos.filter(function(g){ return g.cultivo === "soja_1"; })[0];
+  var maiz = s.cultivos.filter(function(g){ return g.cultivo === "maiz_t"; })[0];
+  assert.ok(soja.escenarioPropio, "la soja se pidió con escenario propio");
+  assert.strictEqual(maiz.escenarioPropio, null, "el maíz no, y no se le contagia");
+});
+
+test("sin propioPorCultivo ningún cultivo inventa un escenario propio", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serieHasta("2026-01-20", 3, 4)],
+    historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+  assert.strictEqual(s.cultivos[0].escenarioPropio, null);
+});
