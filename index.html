@@ -1103,8 +1103,11 @@ function escenariosVentana(o){
   for(var q = iCaido0; q <= iCaido1; q++) mmCaidos += (o.serie.lluvia[q] || 0);
   mmCaidos = Math.round(mmCaidos * 10) / 10;
 
-  var ias = [];
-  for(var k = 0; k < pcts.length; k++){
+  /* El cuerpo del bucle, extraído: los tres percentiles y el escenario propio
+     tienen que correr exactamente el mismo balance. Duplicado, un arreglo en
+     uno de los dos caminos dejaría al otro atrás y los números dejarían de ser
+     comparables sin que nada avise. */
+  function balanceDeTramo(mmTramo){
     var lluvia = o.serie.lluvia.slice(), eto = o.serie.eto.slice();
     /* Fix round 2, C3: eto puede venir más corta que lluvia (serieDe la trae
        con eto: fila.eto||[]). Si se hace push directo sobre ese array corto,
@@ -1115,12 +1118,12 @@ function escenariosVentana(o){
        lluvia y eto queden alineados día a día. */
     while(eto.length < o.serie.lluvia.length) eto.push(0);
     if(faltan > 0){
-      var mmDia = pcts[k] / faltan;                       /* reparto sobre el tramo pendiente, no la ventana */
+      var mmDia = mmTramo / faltan;                       /* reparto sobre el tramo pendiente, no la ventana */
       for(var j = 0; j < faltan; j++){ lluvia.push(mmDia); eto.push(etoDias[j]); }
     }
     var bal = balanceHidrico({ lluvia: lluvia, eto: eto, cau: o.cau, au0: o.au0, kc: o.kc });
-    var r = indiceAgua(bal, o.serie.desde, o.ventana);
-    if(!r || r.dias !== r.diasVentana) return null;
+    var res = indiceAgua(bal, o.serie.desde, o.ventana);
+    if(!res || res.dias !== res.diasVentana) return null;
 
     var i0 = Math.max(0, diasEntre(o.serie.desde, o.ventana.desde));
     var i1 = Math.min(bal.etc.length - 1, diasEntre(o.serie.desde, o.ventana.hasta));
@@ -1128,7 +1131,36 @@ function escenariosVentana(o){
     for(var m = i0; m <= i1; m++) etcVentana += (bal.etc[m] || 0);
     if(etcVentana <= 0) return null;
 
-    ias.push(r.ia);
+    return res.ia;
+  }
+
+  var ias = [];
+  for(var k = 0; k < pcts.length; k++){
+    var ia = balanceDeTramo(pcts[k]);
+    if(ia == null) return null;
+    ias.push(ia);
+  }
+
+  /* El escenario propio se calcula AL LADO de los tres estadísticos, nunca
+     encima: la regla del compromiso lee r.pesimista, y si un supuesto propio
+     lo moviera, cargar un año húmedo habilitaría a vender forward grano que no
+     se va a tener —justo el año en que hay que salir a comprarlo caro—. Ver
+     docs/rinde-esperado.md.
+
+     Con faltan === 0 no hay tramo sobre el cual suponer nada y queda null: la
+     ventana ya pasó entera y el número es historia, no proyección. */
+  var propio = null;
+  if(o.propio && faltan > 0){
+    var mmPropio = (typeof o.propio.mm === "number")
+      ? o.propio.mm
+      : (typeof o.propio.factor === "number" ? pcts[1] * o.propio.factor : null);
+    if(mmPropio != null && isFinite(mmPropio) && mmPropio >= 0){
+      var iaPropio = balanceDeTramo(mmPropio);
+      if(iaPropio != null){
+        propio = { kgHa: rindeEsperado(o.rBase, iaPropio, o.ky),
+                   mm: Math.round(mmPropio * 10) / 10 };
+      }
+    }
   }
   var r = escenarios({ rBase: o.rBase, ky: o.ky, iaPeor: ias[0], iaMedio: ias[1], iaMejor: ias[2] });
   /* Fix round 1, I1: es la única función que sabe la verdad sobre el respaldo.
@@ -1138,6 +1170,7 @@ function escenariosVentana(o){
   r.mmCaidos = mmCaidos;
   r.mmPendiente = [pcts[0], pcts[1], pcts[2]];
   r.diasPendientes = faltan;
+  r.propio = propio;
   return r;
 }
 

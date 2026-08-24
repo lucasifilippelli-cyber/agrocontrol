@@ -2412,3 +2412,82 @@ test("el agua caída se cuenta sólo adentro de la ventana", function(){
   assert.strictEqual(e.mmCaidos, 30,
     "los 100 mm de antes de la ventana regaron el perfil, pero no son agua de la ventana");
 });
+
+/* ============================================================
+   Rinde esperado · el escenario propio
+   Agrega, nunca reemplaza. Ver docs/rinde-esperado.md.
+   ============================================================ */
+
+/* El invariante fuerte: si el camino nuevo no corre el mismo modelo que el
+   viejo, todo lo demás da igual. */
+test("con factor 1.0 el rinde propio da idéntico al esperado", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { factor: 1.0 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio.kgHa, e.esperado);
+  assert.strictEqual(e.propio.mm, 20, "el factor se resuelve a milímetros");
+});
+
+test("el factor escala la mediana de la ventana", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { factor: 0.5 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio.mm, 10, "la mitad de los 20 mm de la mediana");
+  assert.ok(e.propio.kgHa > e.pesimista && e.propio.kgHa < e.esperado,
+    "media lluvia normal cae entre el pesimista y el esperado");
+});
+
+test("también se pueden pedir milímetros directos", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { mm: 60 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio.mm, 60);
+  assert.strictEqual(e.propio.kgHa, e.optimista,
+    "60 mm es justo el percentil 80 de esta ventana");
+});
+
+test("sin escenario propio pedido, propio es null y no cero", function(){
+  var e = M.escenariosVentana(escenarioDeDosDias());
+  assert.strictEqual(e.propio, null,
+    "no haber preguntado no es haber preguntado y obtenido cero");
+});
+
+/* El test que protege la regla del compromiso. Sin él, un refactor futuro
+   vuelve a conectar el propio al pesimista y ningún otro test se entera. */
+test("un escenario propio optimista NO mueve los tres estadísticos", function(){
+  var base = M.escenariosVentana(escenarioDeDosDias());
+  var o = escenarioDeDosDias();
+  o.propio = { factor: 3.0 };
+  var con = M.escenariosVentana(o);
+  assert.strictEqual(con.pesimista, base.pesimista,
+    "el límite de venta forward se mide contra este número: no puede moverlo un supuesto");
+  assert.strictEqual(con.esperado, base.esperado);
+  assert.strictEqual(con.optimista, base.optimista);
+  assert.strictEqual(con.propio.mm, 60, "el supuesto sí se refleja, al lado y no encima");
+});
+
+test("un escenario propio pesimista tampoco baja el pesimista", function(){
+  var base = M.escenariosVentana(escenarioDeDosDias());
+  var o = escenarioDeDosDias();
+  o.propio = { mm: 0 };
+  var con = M.escenariosVentana(o);
+  assert.strictEqual(con.pesimista, base.pesimista);
+  assert.strictEqual(con.propio.kgHa, 0, "sin agua en el tramo pendiente no hace grano");
+});
+
+test("con la ventana ya cumplida no hay nada que suponer: propio es null", function(){
+  var o = escenarioDeDosDias();
+  o.serie = { desde:"2026-01-01", lluvia:[0,0,0,30,0], eto:[20,20,20,20,20] };
+  o.propio = { factor: 0.5 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio, null,
+    "la ventana pasó entera: no queda tramo sobre el cual suponer nada");
+});
+
+test("un factor absurdo no produce un rinde con cara de cálculo", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { factor: -1 };
+  assert.strictEqual(M.escenariosVentana(o).propio, null);
+  o.propio = { mm: NaN };
+  assert.strictEqual(M.escenariosVentana(o).propio, null);
+});
