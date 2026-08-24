@@ -105,6 +105,12 @@ forward y avisa cuánto se puede comprometer sin pasarse.
 
 ### Finanzas y Contabilidad
 
+- **Margen bruto por cultivo**: ingreso menos costos directos, con los insumos
+  abiertos por tipo y por insumo. `CATEGORIAS_DIRECTAS` es la decisión que
+  define el número: **el arrendamiento queda afuera** a propósito, porque el
+  margen bruto mide la decisión agronómica y tiene que ser comparable entre
+  cultivos. La pantalla declara los indirectos sin prorratear para que no se
+  lea como el resultado del cultivo.
 - **Plan de cuentas** de 40 cuentas, ampliable desde la app. Cada gasto y venta se
   imputa por su categoría, así que **nada de lo ya cargado se recodifica a mano**.
 - **El cultivo es una dimensión, no una cuenta.**
@@ -151,7 +157,7 @@ defecto crítico.**
 node --test          # sin ruta: en Node 24, pasarle un directorio no descubre nada
 ```
 
-**327 tests.** El arnés lee `index.html`, extrae el bloque entre
+**348 tests.** El arnés lee `index.html`, extrae el bloque entre
 `/* === modelo:inicio === */` y `/* === modelo:fin === */`, y lo evalúa aislado
 con `vm`. Por eso **toda función testeable tiene que vivir dentro de ese
 bloque**, y por eso las funciones del modelo reciben sus datos por argumento.
@@ -187,6 +193,7 @@ git add -A && git commit && git push   # Vercel redespliega solo
 |---|---|
 | Spec de Sementera | `docs/sementera.md` |
 | Spec y plan del rinde esperado | `docs/rinde-esperado.md`, `docs/rinde-esperado-plan.md` |
+| Spec y plan del margen bruto | `docs/margen-bruto.md`, `docs/margen-bruto-plan.md` |
 | Plan de Sementera | `docs/sementera-plan.md` |
 | Spec de Finanzas y Contabilidad | `docs/finanzas.md` |
 | Plan del plan de cuentas | `docs/finanzas-plan-1.md` |
@@ -198,13 +205,11 @@ proyecto: cada decisión tomada en nombre de Lucas está ahí escrita.
 
 ## Pendiente, en orden
 
-0. **Las otras cuatro piezas de la reunión del 21/08/2026**, en este orden:
-   margen bruto por cultivo con desglose de insumos (la más barata:
-   `economiaCampania` ya calcula ingreso, insumos, gastos y resultado **por
-   lote**; falta agrupar por cultivo); valuaciones por mes; importación de
-   facturas en PDF; importación de asientos y sumas y saldos. Las dos últimas
-   rompen la arquitectura de un solo archivo sin dependencias y necesitan su
-   propia conversación antes de diseñarse.
+0. **Las tres piezas que quedan de la reunión del 21/08/2026**, en este orden:
+   valuaciones por mes; importación de facturas en PDF; importación de asientos
+   y sumas y saldos. Las dos últimas rompen la arquitectura de un solo archivo
+   sin dependencias y necesitan su propia conversación antes de diseñarse.
+   (El rinde esperado y el margen bruto por cultivo ya están desplegados.)
 1. **El documento de validación para el socio.** Prometido y nunca escrito. Ver
    la lista completa abajo. Tiene que ser autocontenido y portable.
 2. **El contraste del modelo de Sementera contra la campaña 2025/26 cerrada.**
@@ -271,9 +276,11 @@ de "aporte de napa" por ambiente es el parche declarado.
   arrancar sube antes de bajar, porque `cargar()` reemplaza `E` entero. El
   cartel del tope es la contracara: mientras haya algo sin subir, se ve.
   La siembra del plan de cuentas sigue aislada de la cola, por lo suyo (I2).
-- **`economiaCampania` tiene un agujero contable, desplegado hoy**: un cultivo
-  con ventas y cero producción cargada reparte ingreso 0 y esa plata desaparece.
-  **El escenario no lo reprodujo a propósito.** Merece tarea propia.
+- **El agujero de `economiaCampania` está cerrado** (24/08/2026): un cultivo con
+  ventas y cero producción repartía 0 a cada lote y la plata desaparecía.
+  Ahora `sinRepartir` lo declara y el margen bruto por cultivo no pasa por ese
+  reparto. **No se inventó un reparto por hectárea**: los lotes rinden distinto.
+  El escenario de Finanzas sigue sin reproducirlo, a propósito.
 - **Una venta cuyo cultivo no tiene ningún cultivo-lote en la campaña** mete plata
   en los cobros del escenario que no aparece en los cultivos. La etapa 2b **no
   puede usar `suma(ingresos) == suma(cobros)` como autocontrol** creyéndolo
