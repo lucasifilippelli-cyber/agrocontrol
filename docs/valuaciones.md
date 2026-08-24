@@ -98,8 +98,16 @@ tocan**. Esta pieza los usa o replica su criterio, no los modifica.
   es que la serie no se truncó.
 - El costo acumulado sólo cuenta gastos con fecha hasta ese mes.
 - El stock de insumos a fin de mes no incluye movimientos posteriores.
-- **El total nunca suma un `null` como si fuera cero.** Si una capa no se pudo
-  calcular, el total del mes queda declarado incompleto.
+- **El total suma lo que sí se sabe y declara lo que falta.** Corriéndolo sobre
+  datos reales quedó claro que poner el total entero en `null` por una capa
+  faltante es peor: sin serie de clima no hay grano en pie, pero el silo y los
+  insumos se saben igual, y borrar todo hacía desaparecer información cierta.
+  "Sé esto y me falta aquello" es honesto; sumar un `null` como si fuera cero y
+  presentarlo como total cerrado, no. Son cosas distintas y sólo la segunda es
+  una mentira.
+- **El rinde declarado también es producción.** No todo entra por carta de
+  porte; se fecha por la cosecha del lote, y la balanza manda sobre lo declarado
+  cuando hay las dos cosas.
 
 ## Lo que tiene que validar el socio
 

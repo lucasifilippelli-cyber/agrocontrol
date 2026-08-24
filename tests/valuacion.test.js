@@ -128,7 +128,8 @@ test("sin precio no se valúa en cero: se declara", function(){
   var m = mes(M.valuacionMensual(o), "2026-02-01");
   assert.strictEqual(m.cosechado.tn, 300, "las toneladas se saben igual");
   assert.strictEqual(m.cosechado.usd, null, "lo que no se sabe es cuánto valen");
-  assert.strictEqual(m.total, null, "y el total no puede sumar un null como si fuera cero");
+  assert.strictEqual(m.totalCompleto, false, "el total no está cerrado");
+  assert.ok(m.faltan.indexOf("en silo") >= 0, "y se dice qué falta");
 });
 
 test("el stock de insumos no incluye movimientos posteriores al mes", function(){
@@ -229,9 +230,10 @@ test("cosechar saca el grano de en pie y lo pasa a cosechado", function(){
 test("sin precio, el grano en pie tiene toneladas y no tiene dólares", function(){
   var o = conSerie({ forwards:[] });
   var m = mes(M.valuacionMensual(o), "2026-01-01");
-  assert.ok(m.enPie.tn > 0);
-  assert.strictEqual(m.enPie.usd, null);
-  assert.strictEqual(m.total, null, "el total tampoco se puede cerrar");
+  assert.ok(m.enPie.tn > 0, "las toneladas proyectadas se saben");
+  assert.strictEqual(m.enPie.usd, null, "lo que falta es a cuánto se venden");
+  assert.strictEqual(m.totalCompleto, false, "el total no se puede cerrar");
+  assert.ok(m.faltan.indexOf("en pie") >= 0);
 });
 
 test("sin serie climática el grano en pie se declara, no se inventa", function(){
@@ -239,4 +241,50 @@ test("sin serie climática el grano en pie se declara, no se inventa", function(
   var m = mes(M.valuacionMensual(o), "2026-01-01");
   assert.strictEqual(m.enPie.tn, null, "no hay con qué proyectar");
   assert.ok(m.enPie.falta, "y tiene que decir por qué");
+});
+
+/* ============================================================
+   Dos cosas que aparecieron al correrlo sobre datos reales
+   ============================================================ */
+
+test("el rinde declarado también es producción, fechada por la cosecha", function(){
+  /* No todo entra por carta de porte: el proyecto acepta rinde declarado, y
+     un productor que carga así vería el silo vacío para siempre. */
+  var cl = { id:"cl1", campaniaId:"c1", loteId:"l1", cultivo:"soja_1",
+             haSembrada:100, haCosechada:100, fechaSiembra:"2025-11-05",
+             fechaCosecha:"2026-02-20", rindeDeclarado:3000 };
+  var r = M.valuacionMensual(entrada({ cultivoLotes:[cl] }));
+  assert.strictEqual(mes(r, "2026-01-01").cosechado.tn, 0, "en enero todavía no se cosechó");
+  assert.strictEqual(mes(r, "2026-02-01").cosechado.tn, 300, "3.000 kg/ha en 100 ha");
+});
+
+test("con tickets, el rinde declarado no se suma dos veces", function(){
+  var cl = { id:"cl1", campaniaId:"c1", loteId:"l1", cultivo:"soja_1",
+             haSembrada:100, haCosechada:100, fechaSiembra:"2025-11-05",
+             fechaCosecha:"2026-02-20", rindeDeclarado:3000 };
+  var r = M.valuacionMensual(entrada({ cultivoLotes:[cl],
+    tickets:[{ id:"t1", cultivoLoteId:"cl1", fecha:"2026-02-10", kgNetos:250000, humedad:13.5 }] }));
+  assert.strictEqual(mes(r, "2026-02-01").cosechado.tn, 250,
+    "la balanza manda sobre lo declarado, igual que en rendimientoDe");
+});
+
+test("una capa que falta no borra las que sí se saben", function(){
+  /* Sin serie de clima no hay grano en pie, pero el silo y los insumos se
+     saben igual. Poner el patrimonio entero en "no sé" haría desaparecer
+     información cierta: se muestra lo que hay y se declara lo que falta. */
+  var o = entrada({ lotes:[LOTE], establecimientos:[EST], series:[],
+    tickets:[{ id:"t1", cultivoLoteId:"cl1", fecha:"2026-02-10", kgNetos:300000, humedad:13.5 }] });
+  var m = mes(M.valuacionMensual(o), "2026-02-01");
+  assert.strictEqual(m.enPie.tn, 0, "ya está cosechado: no falta el en pie");
+  assert.strictEqual(m.total, 300 * 340, "el silo se sabe y se muestra");
+  assert.strictEqual(m.totalCompleto, true);
+});
+
+test("el total incompleto se declara, con el detalle de qué falta", function(){
+  var o = entrada({ lotes:[LOTE], establecimientos:[EST], series:[] });
+  var m = mes(M.valuacionMensual(o), "2026-01-01");
+  assert.strictEqual(m.enPie.falta, "serie", "en enero está en pie y no hay clima");
+  assert.strictEqual(m.totalCompleto, false, "el total no está cerrado");
+  assert.ok(m.total != null, "pero lo que se sabe se muestra igual");
+  assert.ok(m.faltan.indexOf("en pie") >= 0, "y se dice qué falta: " + JSON.stringify(m.faltan));
 });

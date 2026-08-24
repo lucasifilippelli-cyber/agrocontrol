@@ -452,6 +452,7 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .panel-fila.mal b{color:var(--alerta)}
 .panel-fila.bien b{color:var(--ok)}
 .panel-fila.propio{background:var(--ojo-bg)}
+.nose{color:var(--tierra-3);font-style:italic;font-size:12px}
 .panel-fila.sangria{padding-left:28px;font-size:12.5px;color:var(--tierra-2);background:var(--panel-2)}
 .panel-fila.sangria b{font-weight:600;color:var(--tierra-2)}
 .panel-fila.propio b{color:var(--ojo)}
@@ -2003,12 +2004,24 @@ function valuacionMensual(o){
 
     /* Cosechado y todavía no vendido, por cultivo. Los kilos son de balanza:
        lo único incierto es a cuánto se venden. */
-    var kgPorCultivo = {};
+    var kgPorCultivo = {}, conTicket = {};
     (o.tickets || []).forEach(function(t){
       var cl = clPorId[t.cultivoLoteId]; if(!cl) return;
       if(!t.fecha || t.fecha > fin) return;
       var recibo = (CULTIVOS[cl.cultivo] || {}).recibo;
       kgPorCultivo[cl.cultivo] = (kgPorCultivo[cl.cultivo] || 0) + kgSecos(t.kgNetos, t.humedad, recibo);
+      conTicket[cl.id] = true;
+    });
+    /* No todo entra por carta de porte: el rinde declarado también es
+       producción, y se fecha por la cosecha del lote. Sin esto, un productor
+       que carga así vería el silo vacío para siempre. La balanza manda sobre lo
+       declarado, mismo criterio que rendimientoDe. */
+    cls.forEach(function(cl){
+      if(conTicket[cl.id]) return;
+      if(!cl.fechaCosecha || cl.fechaCosecha > fin) return;
+      var kg = num(cl.rindeDeclarado) * num(cl.haCosechada);
+      if(kg <= 0) return;
+      kgPorCultivo[cl.cultivo] = (kgPorCultivo[cl.cultivo] || 0) + kg;
     });
     (o.ventas || []).forEach(function(v){
       if(v.campaniaId !== c.id || !v.fecha || v.fecha > fin) return;
@@ -2095,14 +2108,25 @@ function valuacionMensual(o){
     var cosechado = { tn:centavos(tn), usd:(faltaPrecio ? null : centavos(usdCos)),
                       precioArrastrado:arrastre };
     var insumos = { usd:centavos(usdIns) };
+
+    /* El total suma lo que SÍ se sabe y declara aparte lo que falta.
+
+       La primera versión ponía el total entero en null si faltaba una capa, y
+       corriéndolo sobre datos reales quedó claro que es peor: sin serie de
+       clima no hay grano en pie, pero el silo y los insumos se saben igual, y
+       borrar todo hacía desaparecer información cierta. "Sé esto y me falta
+       aquello" es honesto; sumar un null como si fuera cero, no. Son cosas
+       distintas y sólo la segunda es una mentira. */
+    var faltan = [];
+    if(enPie.usd == null) faltan.push("en pie");
+    if(cosechado.usd == null) faltan.push("en silo");
     return { mes:mesISO,
              cosechado:cosechado,
              insumos:insumos,
              enPie:enPie,
-             /* Un total que suma un null como si fuera cero es un patrimonio
-                inventado. Si falta una capa, el total falta. */
-             total:((cosechado.usd == null || enPie.usd == null) ? null
-                    : centavos(cosechado.usd + insumos.usd + enPie.usd)),
+             total:centavos((cosechado.usd || 0) + insumos.usd + (enPie.usd || 0)),
+             totalCompleto:(faltan.length === 0),
+             faltan:faltan,
              costoAcumulado:centavos(costo) };
   });
 }
@@ -5692,6 +5716,56 @@ function bloquePresupuestos(pres){
       '<button class="btn" data-a="nuevoPresupuesto">+ Cargar presupuesto</button></p></div>')+'</div>';
 }
 
+/* La valuación mes a mes: cuánto valía lo que había y cuánto se había puesto.
+
+   Las dos columnas que importan van juntas: el patrimonio y la inversión
+   acumulada. Una sola de las dos no responde nada; las dos al lado dicen si lo
+   que está parado vale más que lo que se puso.
+
+   Un mes sin precio cargado no vale cero: vale "no sé", y se pinta como tal. */
+function bloqueValuacion(val){
+  if(!val.length) return "";
+  var hayAlgo=val.some(function(m){
+    return m.total!=null || m.costoAcumulado>0.01 || (m.enPie&&m.enPie.tn) || m.cosechado.tn;
+  });
+  if(!hayAlgo) return "";
+
+  var arrastre=false, incompletos=0;
+  var filas=val.map(function(m){
+    if(m.cosechado.precioArrastrado) arrastre=true;
+    if(!m.totalCompleto) incompletos++;
+    var dif=m.total-m.costoAcumulado;
+    function usd(v){ return v==null ? '<span class="nose">no sé</span>' : nf(v); }
+    return '<tr><td>'+esc(mesAno(m.mes))+'</td>'+
+      '<td class="num">'+(m.enPie.falta?'<span class="nose">no sé</span>':nf(m.enPie.tn,1))+'</td>'+
+      '<td class="num col-opcional">'+usd(m.enPie.usd)+'</td>'+
+      '<td class="num col-opcional">'+nf(m.cosechado.tn,1)+'</td>'+
+      '<td class="num col-opcional">'+usd(m.cosechado.usd)+'</td>'+
+      '<td class="num col-opcional">'+nf(m.insumos.usd)+'</td>'+
+      '<td class="num"><b>'+nf(m.total)+'</b>'+
+        (m.totalCompleto?'':'<br><span class="nose" title="Falta valuar: '+esc(m.faltan.join(", "))+'">falta '+esc(m.faltan.join(" y "))+'</span>')+'</td>'+
+      '<td class="num">'+nf(m.costoAcumulado)+'</td>'+
+      '<td class="num"><b style="color:'+(dif>=0?"var(--ok)":"var(--alerta)")+'">'+
+        (dif<0?"−":"")+nf(Math.abs(dif))+'</b></td></tr>';
+  }).join("");
+
+  return '<div class="bloque"><div class="bloque-cab"><h2>Valuación por mes</h2>'+
+    '<div class="aclara">Cuánto valía lo que tenías a fin de cada mes, contra lo que habías puesto hasta ahí</div></div>'+
+    '<div class="scroll-x"><table class="tabla"><thead><tr><th>Mes</th>'+
+    '<th class="num">En pie (t)</th><th class="num col-opcional">En pie (USD)</th>'+
+    '<th class="num col-opcional">En silo (t)</th><th class="num col-opcional">En silo (USD)</th>'+
+    '<th class="num col-opcional">Insumos</th>'+
+    '<th class="num">Patrimonio</th><th class="num">Invertido</th><th class="num">Diferencia</th>'+
+    '</tr></thead><tbody>'+filas+'</tbody></table></div>'+
+    '<div class="bloque-cuerpo"><p class="pie" style="margin:0">'+
+    'El grano en pie es una <b>proyección</b>: sale del rinde esperado calculado con la lluvia que había caído hasta ese mes, '+
+    'no con la de hoy. El de silo son kilos de balanza. Los insumos se valúan al precio de la última compra.'+
+    (arrastre?'<br><b>Algunos meses no tienen precio cargado</b> y usan el último conocido: el forward se carga a mano y esos meses son una aproximación.':'')+
+    (incompletos?'<br><b>'+incompletos+' mes'+(incompletos===1?'':'es')+' con el patrimonio incompleto</b>: falta el precio del cultivo o la serie de clima. '+
+      'El número que se muestra es lo que sí se pudo valuar, no el total: lo que falta está declarado en cada fila.':'')+
+    '</p></div></div>';
+}
+
 /* Cuánto dejó cada cultivo y en qué se fue la plata. Margen bruto: ingreso
    menos costos directos. Lo que queda afuera —arrendamiento, honorarios,
    estructura, impuestos— va declarado abajo, sin prorratear: un margen bruto
@@ -5819,6 +5893,14 @@ function vistaFinanzas(){
     campaniaId:campActiva, produccion:ec.prod });
   var bloqueMargen=bloqueMargenBruto(mb, ec);
 
+  var val=valuacionMensual({ campania:c, cultivoLotes:E.cultivoLotes, lotes:E.lotes,
+    establecimientos:E.establecimientos, tickets:E.tickets, ventas:E.ventas,
+    gastos:E.gastos, movimientos:E.movimientos, insumos:E.insumos, ordenes:E.ordenes,
+    series:E.climaSeries, historias:HISTORIA, overrides:overridesDePerfil(perfil),
+    forwards:(E.preciosForward||[]),
+    hastaISO:(c.estado==="curso" ? hoyISO() : (c.fechaCierre || hoyISO())) });
+  var bloqueVal=bloqueValuacion(val);
+
   /* resultado por lote */
   var lotes=ec.porLote.filter(function(x){ return x.ingreso>0.01||x.costo>0.01; })
                       .sort(function(a,b){ return b.porHa-a.porHa; });
@@ -5922,7 +6004,7 @@ function vistaFinanzas(){
       }).join("")+'</tbody></table></div>'
      :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueMargen+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloquePresupuestos(presupuestos)+bloqueCuentas();
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueMargen+bloqueVal+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloquePresupuestos(presupuestos)+bloqueCuentas();
 }
 
 function vistaClima(){
