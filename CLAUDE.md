@@ -105,6 +105,12 @@ forward y avisa cuánto se puede comprometer sin pasarse.
 
 ### Finanzas y Contabilidad
 
+- **Valuación por mes**: patrimonio (en pie, en silo, insumos) contra inversión
+  acumulada, mes a mes. El grano en pie se recalcula con la **serie de clima
+  recortada a fin de cada mes**, así que es el rinde que el modelo esperaba
+  entonces y no el de hoy. **No hay serie de precios**: se usa el forward
+  cargado a mano más reciente hasta ese mes, marcado cuando es arrastrado. El
+  total suma lo que se sabe y declara qué capa falta.
 - **Margen bruto por cultivo**: ingreso menos costos directos, con los insumos
   abiertos por tipo y por insumo. `CATEGORIAS_DIRECTAS` es la decisión que
   define el número: **el arrendamiento queda afuera** a propósito, porque el
@@ -157,7 +163,7 @@ defecto crítico.**
 node --test          # sin ruta: en Node 24, pasarle un directorio no descubre nada
 ```
 
-**348 tests.** El arnés lee `index.html`, extrae el bloque entre
+**375 tests.** El arnés lee `index.html`, extrae el bloque entre
 `/* === modelo:inicio === */` y `/* === modelo:fin === */`, y lo evalúa aislado
 con `vm`. Por eso **toda función testeable tiene que vivir dentro de ese
 bloque**, y por eso las funciones del modelo reciben sus datos por argumento.
@@ -194,6 +200,7 @@ git add -A && git commit && git push   # Vercel redespliega solo
 | Spec de Sementera | `docs/sementera.md` |
 | Spec y plan del rinde esperado | `docs/rinde-esperado.md`, `docs/rinde-esperado-plan.md` |
 | Spec y plan del margen bruto | `docs/margen-bruto.md`, `docs/margen-bruto-plan.md` |
+| Spec y plan de las valuaciones | `docs/valuaciones.md`, `docs/valuaciones-plan.md` |
 | Plan de Sementera | `docs/sementera-plan.md` |
 | Spec de Finanzas y Contabilidad | `docs/finanzas.md` |
 | Plan del plan de cuentas | `docs/finanzas-plan-1.md` |
@@ -205,11 +212,11 @@ proyecto: cada decisión tomada en nombre de Lucas está ahí escrita.
 
 ## Pendiente, en orden
 
-0. **Las tres piezas que quedan de la reunión del 21/08/2026**, en este orden:
-   valuaciones por mes; importación de facturas en PDF; importación de asientos
-   y sumas y saldos. Las dos últimas rompen la arquitectura de un solo archivo
-   sin dependencias y necesitan su propia conversación antes de diseñarse.
-   (El rinde esperado y el margen bruto por cultivo ya están desplegados.)
+0. **Las dos piezas que quedan de la reunión del 21/08/2026**: importación de
+   facturas en PDF e importación de asientos y sumas y saldos. **Las dos rompen
+   la arquitectura de un solo archivo sin dependencias** y necesitan su propia
+   conversación antes de diseñarse. (El rinde esperado, el margen bruto por
+   cultivo y las valuaciones por mes ya están desplegados.)
 1. **El documento de validación para el socio.** Prometido y nunca escrito. Ver
    la lista completa abajo. Tiene que ser autocontenido y portable.
 2. **El contraste del modelo de Sementera contra la campaña 2025/26 cerrada.**
