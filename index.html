@@ -5585,6 +5585,27 @@ function semMarcas(x){
     '</div>';
 }
 
+/* La premisa del rango, a la vista. Un rinde sin el agua que lo sostiene es un
+   número que no se puede discutir ni verificar: "2.800 kg/ha" no dice nada,
+   "60 mm caídos más 85 supuestos" sí.
+
+   Con la ventana ya cumplida no hay nada supuesto y se muestra sólo el agua
+   real: es el momento en que el número deja de ser una proyección. */
+function semAgua(x){
+  if(!x.mm) return "";
+  var caidos = nf(x.mm.caidos, 0)+' mm';
+  if(!x.mm.dias){
+    return '<div class="panel-fila"><span>El agua de la ventana'+
+      '<small>la ventana crítica ya pasó entera: nada de esto es supuesto</small></span>'+
+      '<b>'+caidos+'</b></div>';
+  }
+  return '<div class="panel-fila"><span>El agua detrás del rango'+
+    '<small>'+caidos+' ya caídos, más lo que se supone en los '+x.mm.dias+
+    ' días que faltan de la ventana</small></span>'+
+    '<b>'+nf(x.mm.pendiente[0],0)+' · '+nf(x.mm.pendiente[1],0)+' · '+
+    nf(x.mm.pendiente[2],0)+' mm</b></div>';
+}
+
 /* El rango contra lo comprometido, en toneladas. SVG a mano como el resto:
    la banda es pesimista–optimista, la marca fina el esperado y la gruesa lo
    que ya se vendió. Si la marca gruesa se pasa de la banda por la izquierda,
@@ -5968,6 +5989,7 @@ function vistaSementera(){
                 :'pesimista, esperado y optimista según cómo siga la lluvia'))+'</small></span>'+
             '<b>'+(semCero(g.kgHa)||semConverge(g.kgHa)?nf(g.kgHa.esperado)
                    :nf(g.kgHa.pesimista)+' · '+nf(g.kgHa.esperado)+' · '+nf(g.kgHa.optimista))+' kg/ha</b></div>'+
+          semAgua(g)+
           '<div class="panel-fila"><span>Producción esperada</span><b>'+nf(g.tn.esperada,1)+' t</b></div>'+
           '<div class="panel-fila"><span>Comprometido<small>vendido de esta campaña</small></span><b>'+nf(g.tnVendidas,1)+' t</b></div>'+
           '<div class="panel-fila '+(mal?"mal":"bien")+'"><span>Queda por comprometer'+
