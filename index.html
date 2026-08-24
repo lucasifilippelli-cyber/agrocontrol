@@ -1751,6 +1751,25 @@ function hijasDe(cuentas, codigo){
 var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
                         "Estructura","Impuestos y comisiones","Otros"];
 
+/* Cuáles de esas categorías son costo DIRECTO del cultivo, o sea cuáles entran
+   al margen bruto. Es la decisión que define el número, no un detalle de
+   implementación.
+
+   El arrendamiento queda afuera a propósito, y es la exclusión que más se va a
+   discutir: el margen bruto mide la decisión agronómica —cuánta soja y cuánto
+   maíz sembrar— y tiene que ser comparable entre cultivos y contra los
+   márgenes de referencia de la zona. Metiendo el arrendamiento adentro, dos
+   campos alquilados a distinto precio hacen ver un cultivo peor que otro por
+   una razón que no tiene nada que ver con el cultivo. Lo mismo con honorarios,
+   estructura e impuestos: son costos de la empresa.
+
+   "Otros" sí entra cuando el gasto está atribuido a un cultivo-lote: atribuirlo
+   es un acto deliberado del productor, y dejarlo afuera haría desaparecer plata
+   del margen sin explicación. El riesgo inverso —que ahí se cuele algo que en
+   realidad es estructura— se compensa mostrando siempre el desglose por
+   categoría en la pantalla, así lo que entró queda auditable de un vistazo. */
+var CATEGORIAS_DIRECTAS = ["Labores de terceros","Cosecha","Flete","Otros"];
+
 /* De la categoría que el productor ya carga sale la cuenta, así nada de lo
    cargado hasta hoy hay que recodificar a mano. Lo que se cargue explícito
    en el campo `cuenta` pisa a este default. */
