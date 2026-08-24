@@ -2029,8 +2029,11 @@ function entornoFinanzas(){
   var ini = html.indexOf("/* === modelo:inicio === */");
   var fin = html.indexOf("/* === modelo:fin === */");
   var src = html.slice(ini, fin) + "\n" +
-    ["semilla", "ticketsDe", "rendimiento", "insumo", "clsDeCampania", "importeVenta",
-     "importeGasto", "produccionPorCultivo", "ventasPorCultivo", "costoInsumosDe",
+    /* importeVenta e importeGasto ya no se extraen: viven adentro del bloque
+       del modelo desde el margen bruto, y extraerlas otra vez las declaraba
+       dos veces en el mismo contexto. */
+    ["semilla", "ticketsDe", "rendimiento", "insumo", "clsDeCampania",
+     "produccionPorCultivo", "ventasPorCultivo", "costoInsumosDe",
      "economiaCampania"].map(function(n){ return extraerFuncion(html, n); }).join("\n\n");
   var ctx = {};
   vm.createContext(ctx);
@@ -2640,4 +2643,71 @@ test("sin propioPorCultivo ningún cultivo inventa un escenario propio", functio
     cultivoLotes:[CL], series:[serieHasta("2026-01-20", 3, 4)],
     historias:{}, overrides:{}, vendidas:{}, forwards:[] });
   assert.strictEqual(s.cultivos[0].escenarioPropio, null);
+});
+
+
+/* ============================================================
+   El agujero de las ventas sin producción cargada
+   ============================================================ */
+
+function entornoConE(E){
+  var html = fs.readFileSync(__dirname + "/../index.html", "utf8");
+  var ini = html.indexOf("/* === modelo:inicio === */");
+  var fin = html.indexOf("/* === modelo:fin === */");
+  var src = html.slice(ini, fin) + "\n" +
+    ["ticketsDe", "rendimiento", "insumo", "clsDeCampania",
+     "produccionPorCultivo", "ventasPorCultivo", "costoInsumosDe",
+     "economiaCampania"].map(function(n){ return extraerFuncion(html, n); }).join("\n\n");
+  var ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+  ctx.E = E;
+  return ctx;
+}
+
+function EVendidoSinCosechar(){
+  return {
+    campanias:[{ id:"c1", nombre:"2026/27", estado:"curso" }],
+    cultivoLotes:[{ id:"cl1", campaniaId:"c1", loteId:"l1", cultivo:"soja_1",
+                    haSembrada:100, haCosechada:0 }],
+    lotes:[{ id:"l1", nombre:"Lote 7", ha:100 }],
+    tickets:[], ordenes:[], ordenInsumos:[], movimientos:[], insumos:[],
+    gastos:[],
+    ventas:[{ id:"v1", campaniaId:"c1", cultivo:"soja_1", toneladas:240,
+              precioTn:300, moneda:"USD", fecha:"2026-08-01" }]
+  };
+}
+
+test("una venta de un cultivo sin producción cargada no se pierde en silencio", function(){
+  /* El caso normal a mitad de campaña: se vendió forward y todavía no se
+     cosechó. El reparto entre lotes va por kilos, así que sin kilos la parte
+     de cada lote da 0 y los 72.000 dólares desaparecen del resultado sin que
+     nada avise. */
+  var ctx = entornoConE(EVendidoSinCosechar());
+  var ec = ctx.economiaCampania("c1");
+
+  assert.strictEqual(ec.ingresos, 0, "el reparto por lote sigue sin poder repartir");
+  assert.ok(ec.sinRepartir, "pero ahora lo tiene que declarar");
+  assert.strictEqual(ec.sinRepartir.length, 1);
+  assert.strictEqual(ec.sinRepartir[0].cultivo, "soja_1");
+  assert.strictEqual(ec.sinRepartir[0].usd, 72000, "240 t × 300 USD/t");
+  assert.strictEqual(ec.sinRepartir[0].tn, 240);
+});
+
+test("con producción cargada no se declara nada sin repartir", function(){
+  var E = EVendidoSinCosechar();
+  E.cultivoLotes[0].haCosechada = 100;
+  E.tickets = [{ id:"t1", cultivoLoteId:"cl1", kgNetos:600000, humedad:13.5, tipo:"recibo" }];
+  var ec = entornoConE(E).economiaCampania("c1");
+  assert.strictEqual(ec.sinRepartir.length, 0, "hay kilos: el ingreso se reparte y no queda huérfano");
+});
+
+test("no se inventa un reparto por hectárea", function(){
+  /* Repartir por superficie sería una respuesta plausible y equivocada: los
+     lotes rinden distinto, y le asignaría ingreso a un lote que puede no haber
+     producido nada. */
+  var ctx = entornoConE(EVendidoSinCosechar());
+  var ec = ctx.economiaCampania("c1");
+  assert.strictEqual(ec.porLote[0].ingreso, 0,
+    "el lote no recibe ingreso inventado; el dato va aparte, declarado");
 });

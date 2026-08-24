@@ -3577,6 +3577,22 @@ function economiaCampania(cid){
   var indirectos=E.gastos.filter(function(g){ return g.campaniaId===cid && !g.cultivoLoteId; })
                          .reduce(function(a,g){ return a+importeGasto(g); },0);
 
+  /* El ingreso de un cultivo se reparte entre sus lotes según cuántos kilos
+     puso cada uno. Si el cultivo se vendió y todavía no se cosechó no hay
+     kilos, la parte de cada lote da 0 y esa plata desaparece del resultado sin
+     que nada avise. Es el caso normal a mitad de campaña, no una rareza.
+
+     Acá NO se inventa un reparto: repartir por hectárea sembrada sería una
+     respuesta plausible y equivocada —los lotes rinden distinto y le asignaría
+     ingreso a uno que puede no haber producido nada—. Se declara aparte, para
+     que la pantalla lo diga en vez de mostrar ceros. El margen bruto por
+     cultivo sí tiene esa plata: no pasa por este reparto. */
+  var sinRepartir=[];
+  Object.keys(vend).forEach(function(k){
+    var kg=(prod[k]||{}).kg||0;
+    if(kg<=0 && vend[k].usd>0) sinRepartir.push({cultivo:k, usd:vend[k].usd, tn:vend[k].tn});
+  });
+
   var porLote=cls.map(function(cl){
     var r=rendimiento(cl);
     var totalKgCultivo=(prod[cl.cultivo]||{}).kg||0;
@@ -3595,7 +3611,7 @@ function economiaCampania(cid){
 
   var ingresos=porLote.reduce(function(a,x){return a+x.ingreso;},0);
   var costos=porLote.reduce(function(a,x){return a+x.costo;},0);
-  return {porLote:porLote, prod:prod, vend:vend, haTotal:haTotal,
+  return {porLote:porLote, prod:prod, vend:vend, haTotal:haTotal, sinRepartir:sinRepartir,
           ingresos:ingresos, costos:costos, resultado:ingresos-costos,
           porHa:haTotal>0?(ingresos-costos)/haTotal:0,
           indirectos:indirectos};
