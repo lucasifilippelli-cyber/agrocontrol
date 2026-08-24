@@ -341,3 +341,58 @@ test("cable I2: un presupuesto cargado por el formulario deja el escenario con f
     M.fechaPagoDe({fecha:"2026-04-01", categoria:"Cosecha"}));
   assert.strictEqual(e.inciertoFinanciero, false);
 });
+
+/* ============================================================
+   Rinde esperado · el escenario propio, por argumento
+   El motor de Sementera no lee estado global por diseño: es lo
+   que va a permitir simular campañas conectándole otra pantalla
+   al mismo cálculo. Si la vista dejara de pasarlo y el modelo lo
+   leyera de una variable suelta, las funciones puras seguirían
+   todas en verde.
+   ============================================================ */
+
+test("cable: sementeraActual le pasa el escenario elegido por argumento", function(){
+  var src = extraerDesde(HTML, "function sementeraActual(", "sementeraActual") +
+    "\nthis.__f = sementeraActual;";
+  var recibido = null;
+  var ctx = {
+    campActiva: "c1",
+    campania: function(){ return { id:"c1", desde:"2025-07-01" }; },
+    asegurarHistorias: function(){},
+    ventasPorCultivo: function(){ return {}; },
+    overridesDePerfil: function(){ return {}; },
+    semEscenario: { soja_1: { factor: 0.65 } },
+    HISTORIA: {},
+    perfil: {},
+    E: { cultivoLotes:[], lotes:[], establecimientos:[], climaSeries:[], preciosForward:[] },
+    sementeraDeCampania: function(o){ recibido = o; return null; }
+  };
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+  ctx.__f();
+
+  assert.ok(recibido, "no llamó a sementeraDeCampania");
+  assert.ok(recibido.propioPorCultivo, "no le pasó el escenario elegido");
+  assert.strictEqual(recibido.propioPorCultivo.soja_1.factor, 0.65);
+});
+
+test("cable: el modelo no adivina el escenario si la vista no se lo pasa", function(){
+  var src = bloqueModelo(HTML) + "\nthis.__f = sementeraDeCampania;";
+  /* La trampa: una global con el nombre que tendría la variable de la vista. */
+  var ctx = { semEscenario: { soja_1: { factor: 0.5 } } };
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+
+  var s = ctx.__f({ campania:{ id:"c1", desde:"2025-07-01" },
+    lotes:[{ id:"l1", establecimientoId:"e1", nombre:"L7", ha:100,
+             ambientes:[{ nombre:"Loma", ha:100, cau:140, napa:null }] }],
+    establecimientos:[{ id:"e1", nombre:"La Constancia", localidad:"San Antonio de Areco" }],
+    cultivoLotes:[{ id:"cl1", campaniaId:"c1", loteId:"l1", cultivo:"soja_1",
+                    haSembrada:100, fechaSiembra:"2025-11-05" }],
+    series:[], historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+
+  s.filas.forEach(function(f){
+    assert.strictEqual(f.escenarioPropio, null,
+      "leyó el escenario de una global en vez del argumento");
+  });
+});

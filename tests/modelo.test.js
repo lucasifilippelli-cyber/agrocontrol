@@ -2356,3 +2356,288 @@ test("el proyectado de 2025/26 cierra la mirada financiera contra la económica"
   var ingresoReal = real.cultivos.reduce(function(a, c){ return a + c.ingresoUSD; }, 0);
   assert.ok(ingresos > ingresoReal, "el proyectado tiene que valuar el grano todavía no vendido");
 });
+
+/* ============================================================
+   Rinde esperado · el agua detrás de cada escenario
+   El número existía y no salía: "pesimista 2.800 kg/ha" es un
+   número sin la premisa que lo sostiene, y nadie puede
+   discutirlo ni verificarlo.
+   ============================================================ */
+
+function escenarioDeDosDias(){
+  /* Mismo armado que el test de percentiles de más arriba: tres días reales
+     que secan el perfil antes de la ventana, y dos días de ventana sin ocurrir
+     que se rellenan con los percentiles 0, 20 y 60 mm. */
+  var lluvia = [];
+  for(var i = 0; i <= 3657; i++) lluvia.push(0);
+  var porAnio = [ [3656,100], [3290,80], [2925,60], [2560,40], [2195,30],
+                  [1829,20], [1464,10], [1099,5], [734,0], [368,0], [3,0] ];
+  porAnio.forEach(function(par){ lluvia[par[0]] = par[1]; });
+  return {
+    serie: { desde:"2026-01-01", lluvia:[0,0,0], eto:[20,20,20] },
+    ventana: { desde:"2026-01-04", hasta:"2026-01-05" },
+    desdeCampaniaISO: null,
+    cau:50, au0:50, kc:1,
+    historiaLarga: { desde:"2015-01-01", lluvia:lluvia },
+    rBase:4000, ky:1
+  };
+}
+
+test("escenariosVentana declara cuánta agua supone cada escenario", function(){
+  var e = M.escenariosVentana(escenarioDeDosDias());
+  assert.strictEqual(JSON.stringify(e.mmPendiente), JSON.stringify([0, 20, 60]),
+    "son los mismos milímetros que el motor reparte día a día");
+  assert.strictEqual(e.diasPendientes, 2);
+  assert.strictEqual(e.mmCaidos, 0, "ningún día de la ventana ocurrió todavía");
+});
+
+test("con la ventana cumplida no se declara nada supuesto", function(){
+  var o = escenarioDeDosDias();
+  /* La serie ahora cubre la ventana entera: cinco días reales, con 30 mm el
+     cuarto, que cae adentro de la ventana. */
+  o.serie = { desde:"2026-01-01", lluvia:[0,0,0,30,0], eto:[20,20,20,20,20] };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.diasPendientes, 0);
+  assert.strictEqual(e.mmCaidos, 30, "los 30 mm cayeron adentro de la ventana");
+  assert.strictEqual(JSON.stringify(e.mmPendiente), JSON.stringify([0, 0, 0]),
+    "no hay tramo por estimar: no se supone nada");
+});
+
+test("el agua caída se cuenta sólo adentro de la ventana", function(){
+  var o = escenarioDeDosDias();
+  /* 100 mm el 1 de enero, tres días ANTES de que abra la ventana. Sumar la
+     serie entera los metería en la premisa del escenario. */
+  o.serie = { desde:"2026-01-01", lluvia:[100,0,0,30,0], eto:[20,20,20,20,20] };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.mmCaidos, 30,
+    "los 100 mm de antes de la ventana regaron el perfil, pero no son agua de la ventana");
+});
+
+/* ============================================================
+   Rinde esperado · el escenario propio
+   Agrega, nunca reemplaza. Ver docs/rinde-esperado.md.
+   ============================================================ */
+
+/* El invariante fuerte: si el camino nuevo no corre el mismo modelo que el
+   viejo, todo lo demás da igual. */
+test("con factor 1.0 el rinde propio da idéntico al esperado", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { factor: 1.0 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio.kgHa, e.esperado);
+  assert.strictEqual(e.propio.mm, 20, "el factor se resuelve a milímetros");
+});
+
+test("el factor escala la mediana de la ventana", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { factor: 0.5 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio.mm, 10, "la mitad de los 20 mm de la mediana");
+  assert.ok(e.propio.kgHa > e.pesimista && e.propio.kgHa < e.esperado,
+    "media lluvia normal cae entre el pesimista y el esperado");
+});
+
+test("también se pueden pedir milímetros directos", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { mm: 60 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio.mm, 60);
+  assert.strictEqual(e.propio.kgHa, e.optimista,
+    "60 mm es justo el percentil 80 de esta ventana");
+});
+
+test("sin escenario propio pedido, propio es null y no cero", function(){
+  var e = M.escenariosVentana(escenarioDeDosDias());
+  assert.strictEqual(e.propio, null,
+    "no haber preguntado no es haber preguntado y obtenido cero");
+});
+
+/* El test que protege la regla del compromiso. Sin él, un refactor futuro
+   vuelve a conectar el propio al pesimista y ningún otro test se entera. */
+test("un escenario propio optimista NO mueve los tres estadísticos", function(){
+  var base = M.escenariosVentana(escenarioDeDosDias());
+  var o = escenarioDeDosDias();
+  o.propio = { factor: 3.0 };
+  var con = M.escenariosVentana(o);
+  assert.strictEqual(con.pesimista, base.pesimista,
+    "el límite de venta forward se mide contra este número: no puede moverlo un supuesto");
+  assert.strictEqual(con.esperado, base.esperado);
+  assert.strictEqual(con.optimista, base.optimista);
+  assert.strictEqual(con.propio.mm, 60, "el supuesto sí se refleja, al lado y no encima");
+});
+
+test("un escenario propio pesimista tampoco baja el pesimista", function(){
+  var base = M.escenariosVentana(escenarioDeDosDias());
+  var o = escenarioDeDosDias();
+  o.propio = { mm: 0 };
+  var con = M.escenariosVentana(o);
+  assert.strictEqual(con.pesimista, base.pesimista);
+  assert.strictEqual(con.propio.kgHa, 0, "sin agua en el tramo pendiente no hace grano");
+});
+
+test("con la ventana ya cumplida no hay nada que suponer: propio es null", function(){
+  var o = escenarioDeDosDias();
+  o.serie = { desde:"2026-01-01", lluvia:[0,0,0,30,0], eto:[20,20,20,20,20] };
+  o.propio = { factor: 0.5 };
+  var e = M.escenariosVentana(o);
+  assert.strictEqual(e.propio, null,
+    "la ventana pasó entera: no queda tramo sobre el cual suponer nada");
+});
+
+test("un factor absurdo no produce un rinde con cara de cálculo", function(){
+  var o = escenarioDeDosDias();
+  o.propio = { factor: -1 };
+  assert.strictEqual(M.escenariosVentana(o).propio, null);
+  o.propio = { mm: NaN };
+  assert.strictEqual(M.escenariosVentana(o).propio, null);
+});
+
+/* ============================================================
+   Rinde esperado · el agua y el propio suben por la cadena
+   El agua y la ventana crítica son del LOTE: todos sus ambientes
+   reciben la misma lluvia y rinden distinto, porque lo que cambia
+   entre ellos es cuánta agua retienen.
+   ============================================================ */
+
+test("el lote declara los milímetros de su ventana", function(){
+  /* Sembrado el 5 de noviembre; la ventana de soja 1ª va del 10 de enero al
+     26 de febrero, 48 días. Con la serie hasta el 20 de enero, once días de
+     ventana ya transcurrieron a 3 mm por día. */
+  var f = fila({ serie: serieHasta("2026-01-20", 3, 4) });
+  assert.ok(f.mm, "el lote tiene que declarar su agua");
+  assert.strictEqual(f.mm.caidos, 33, "once días de ventana a 3 mm");
+  assert.strictEqual(f.mm.dias, 37, "48 días de ventana menos los 11 corridos");
+  assert.strictEqual(f.mm.pendiente.length, 3);
+});
+
+test("el agua del lote no se suma entre ambientes", function(){
+  /* LOTE tiene Loma (40 ha, cau 140) y Bajo (60 ha, cau 180). Los dos reciben
+     la misma lluvia: acumularla como se acumulan los rindes daría el doble y
+     sugeriría que el agua varía por ambiente, que no varía. */
+  var f = fila({ serie: serieHasta("2026-01-20", 3, 4) });
+  assert.strictEqual(f.mm.caidos, 33, "33, no 66");
+});
+
+test("sin escenario propio pedido, el lote tampoco lo inventa", function(){
+  var f = fila({ serie: serieHasta("2026-01-20", 3, 4) });
+  assert.strictEqual(f.escenarioPropio, null);
+});
+
+test("con escenario propio, el lote lo pondera por hectárea entre sus ambientes", function(){
+  var f = fila({ serie: serieHasta("2026-01-20", 3, 4), propio:{ factor:1.0 } });
+  assert.ok(f.escenarioPropio, "tiene que dar un rinde propio");
+  assert.strictEqual(f.escenarioPropio.kgHa, f.kgHa.esperado,
+    "con factor 1.0 el camino nuevo tiene que dar lo mismo que el de siempre, " +
+    "también después de ponderar los dos ambientes");
+  assert.ok(f.escenarioPropio.mm > 0, "los milímetros supuestos tienen que salir");
+});
+
+test("el rinde propio del lote sube con el agua supuesta", function(){
+  var seco   = fila({ serie: serieHasta("2026-01-20", 3, 4), propio:{ factor:0.5 } });
+  var normal = fila({ serie: serieHasta("2026-01-20", 3, 4), propio:{ factor:1.0 } });
+  var humedo = fila({ serie: serieHasta("2026-01-20", 3, 4), propio:{ factor:1.5 } });
+  assert.ok(seco.escenarioPropio.kgHa < normal.escenarioPropio.kgHa, "menos agua, menos rinde");
+  assert.ok(normal.escenarioPropio.kgHa < humedo.escenarioPropio.kgHa, "más agua, más rinde");
+});
+
+test("media lluvia normal es más seca que el escenario pesimista", function(){
+  /* No es un error: el pesimista es el percentil 20, que con el respaldo
+     normal vale la mediana por 0,71. Suponer la mitad de lo normal es más
+     seco que eso, y el modelo tiene que poder decirlo. Que el propio caiga
+     por debajo del pesimista es información, no una inconsistencia. */
+  var f = fila({ serie: serieHasta("2026-01-20", 3, 4), propio:{ factor:0.5 } });
+  assert.ok(f.escenarioPropio.kgHa < f.kgHa.pesimista,
+    "propio " + f.escenarioPropio.kgHa + " contra pesimista " + f.kgHa.pesimista);
+});
+
+test("el escenario propio no mueve el rango del lote", function(){
+  var base = fila({ serie: serieHasta("2026-01-20", 3, 4) });
+  var con  = fila({ serie: serieHasta("2026-01-20", 3, 4), propio:{ factor:3.0 } });
+  assert.strictEqual(JSON.stringify(con.kgHa), JSON.stringify(base.kgHa),
+    "el compromiso se mide contra este rango: un supuesto no puede moverlo");
+});
+
+test("el cultivo declara el agua de sus lotes, ponderada por hectárea", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serieHasta("2026-01-20", 3, 4)], historias:{}, overrides:{},
+    vendidas:{}, forwards:[] });
+  var g = s.cultivos[0];
+  assert.ok(g.mm, "el cultivo tiene que declarar su agua");
+  assert.strictEqual(g.mm.caidos, 33, "con un solo lote es el del lote");
+  assert.strictEqual(g.mm.dias, 37);
+});
+
+test("con lotes en campos distintos, el agua del cultivo es un promedio pesado", function(){
+  /* La ventana crítica no se corre con la fecha de siembra: sale del inicio de
+     campaña, así que todos los lotes de un cultivo la comparten. Lo que sí
+     cambia entre lotes es la lluvia, cuando están en campos distintos. Un lote
+     de 100 ha con 33 mm y otro de 300 ha con 11 mm dan 16,5 de promedio
+     pesado, no 22 de promedio simple. */
+  var EST2 = { id:"e2", nombre:"El Ombú", localidad:"Duggan" };
+  var l2 = { id:"l2", establecimientoId:"e2", nombre:"Lote 3", ha:300,
+             ambientes:[{ nombre:"Loma", ha:300, cau:140, napa:null }] };
+  var cl2 = { id:"cl2", campaniaId:"c1", loteId:"l2", cultivo:"soja_1",
+              haSembrada:300, fechaSiembra:"2025-11-05" };
+  var serie2 = serieHasta("2026-01-20", 1, 4);
+  serie2.id = "s2"; serie2.establecimientoId = "e2";
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE, l2], establecimientos:[EST, EST2],
+    cultivoLotes:[CL, cl2], series:[serieHasta("2026-01-20", 3, 4), serie2],
+    historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+  var g = s.cultivos[0];
+  assert.strictEqual(g.lotes, 2);
+  assert.strictEqual(g.mm.caidos, 16.5,
+    "(33 × 100 + 11 × 300) ÷ 400: pesado por hectárea, no promedio simple");
+  assert.strictEqual(g.mm.dias, 37, "la ventana es la misma para los dos");
+});
+
+test("la ventana crítica sale del inicio de campaña, no de la fecha de siembra", function(){
+  /* Limitación declarada del modelo, y conviene tenerla amarrada con un test:
+     dos lotes sembrados con un mes de diferencia comparten ventana crítica.
+     Un maíz de septiembre y uno de octubre florecen en momentos distintos y
+     el modelo los mira en la misma. Está dicho en el pie de la pantalla. */
+  var temprano = M.ventanaCritica("soja_1", "2025-07-01");
+  assert.strictEqual(temprano.desde, "2026-01-10");
+  assert.strictEqual(temprano.hasta, "2026-02-26");
+});
+
+test("sin escenario propio pedido, el cultivo tampoco lo inventa", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serieHasta("2026-01-20", 3, 4)], historias:{}, overrides:{},
+    vendidas:{}, forwards:[] });
+  assert.strictEqual(s.cultivos[0].escenarioPropio, null);
+});
+
+test("la marca del ancla y el escenario propio son cosas distintas y no se pisan", function(){
+  /* g.propio significa "el rinde de referencia lo cargó el productor" y pinta
+     la pastilla de criterio propio. g.escenarioPropio es el rinde contra una
+     lluvia elegida. Compartir nombre sería el defecto clásico de este
+     proyecto: dos cosas distintas indistinguibles en la pantalla. */
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serieHasta("2026-01-20", 3, 4)],
+    historias:{}, overrides:{ e1:{ soja_1:4200 } }, vendidas:{}, forwards:[] });
+  var g = s.cultivos[0];
+  assert.strictEqual(g.propio, true, "el ancla la cargó el productor");
+  assert.strictEqual(g.escenarioPropio, null, "pero no se pidió ningún escenario propio");
+});
+
+test("cada cultivo se puede mirar con un escenario propio distinto", function(){
+  var cl2 = { id:"cl2", campaniaId:"c1", loteId:"l2", cultivo:"maiz_t",
+              haSembrada:100, fechaSiembra:"2025-09-25" };
+  var l2 = { id:"l2", establecimientoId:"e1", nombre:"Lote 3", ha:100,
+             ambientes:[{ nombre:"Loma", ha:100, cau:140, napa:null }] };
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE, l2], establecimientos:[EST],
+    cultivoLotes:[CL, cl2], series:[serieHasta("2026-01-20", 3, 4)],
+    historias:{}, overrides:{}, vendidas:{}, forwards:[],
+    propioPorCultivo:{ soja_1:{ factor:0.5 } } });
+  var soja = s.cultivos.filter(function(g){ return g.cultivo === "soja_1"; })[0];
+  var maiz = s.cultivos.filter(function(g){ return g.cultivo === "maiz_t"; })[0];
+  assert.ok(soja.escenarioPropio, "la soja se pidió con escenario propio");
+  assert.strictEqual(maiz.escenarioPropio, null, "el maíz no, y no se le contagia");
+});
+
+test("sin propioPorCultivo ningún cultivo inventa un escenario propio", function(){
+  var s = M.sementeraDeCampania({ campania:CAMP, lotes:[LOTE], establecimientos:[EST],
+    cultivoLotes:[CL], series:[serieHasta("2026-01-20", 3, 4)],
+    historias:{}, overrides:{}, vendidas:{}, forwards:[] });
+  assert.strictEqual(s.cultivos[0].escenarioPropio, null);
+});
