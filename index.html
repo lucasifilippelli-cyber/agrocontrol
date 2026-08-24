@@ -1908,6 +1908,114 @@ function importeUSD(fila){
   if(fila.moneda==="ARS") return num(fila.tipoCambio)>0 ? num(fila.monto)/num(fila.tipoCambio) : 0;
   return num(fila.monto);
 }
+/* Movidas acá adentro del bloque del modelo con el margen bruto: son la regla
+   de valuación, y el margen tiene que usar exactamente la misma que el resto de
+   la app. Duplicarla afuera era garantizar que un día divergieran. */
+function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
+function importeGasto(g){ return importeUSD(g); }
+/* Cuánto dejó cada cultivo y en qué se fue la plata.
+
+   Margen bruto = ingreso − costos directos. No es el resultado del cultivo:
+   arrendamiento, honorarios, estructura e impuestos quedan afuera aunque
+   alguien los impute a un lote. Ver CATEGORIAS_DIRECTAS y docs/margen-bruto.md.
+
+   El ingreso sale de las ventas del cultivo, sin pasar por el reparto entre
+   lotes que hace economiaCampania. Ésa es la diferencia que cierra el agujero:
+   un cultivo vendido y todavía no cosechado reparte 0 a cada lote y la plata
+   desaparece; acá está.
+
+   Todo por argumento y sin leer E, como el resto del modelo. */
+function margenBrutoPorCultivo(o){
+  var cid = o.campaniaId;
+  var cls = (o.cultivoLotes || []).filter(function(cl){ return cl.campaniaId === cid; });
+  var insPorId = {}; (o.insumos || []).forEach(function(i){ insPorId[i.id] = i; });
+  var clDeOrden = {}; (o.ordenes || []).forEach(function(x){ if(x.cultivoLoteId) clDeOrden[x.id] = x.cultivoLoteId; });
+  var cultivoDeCl = {}; cls.forEach(function(cl){ cultivoDeCl[cl.id] = cl.cultivo; });
+  var prod = o.produccion || null;
+
+  var m = {}, orden = [];
+  function fila(cultivo){
+    if(!m[cultivo]){
+      m[cultivo] = { cultivo:cultivo, ha:0, ingreso:0,
+        insumos:{ total:0, porTipo:[], porInsumo:[], sinValuar:0 },
+        gastosDirectos:{ total:0, porCategoria:[] },
+        margen:0, margenPorHa:null, ingresoSinProduccion:false,
+        _t:{}, _i:{}, _c:{} };
+      orden.push(cultivo);
+    }
+    return m[cultivo];
+  }
+  cls.forEach(function(cl){ fila(cl.cultivo).ha += num(cl.haSembrada); });
+
+  /* Insumos: sólo lo efectivamente aplicado, valuado al precio del movimiento
+     y recién en su defecto al precio de lista. Misma regla que costoInsumosDe. */
+  (o.movimientos || []).forEach(function(mv){
+    if(mv.tipo !== "aplicacion" || !mv.ordenId) return;
+    var clId = clDeOrden[mv.ordenId]; if(!clId) return;
+    var cultivo = cultivoDeCl[clId]; if(!cultivo) return;
+    var x = fila(cultivo), ins = insPorId[mv.insumoId] || {};
+    var pu = (mv.precioUnitario != null) ? num(mv.precioUnitario) : num(ins.precio);
+    var cant = Math.abs(num(mv.cantidad));
+    /* Sin precio en ningún lado NO vale cero: valdría cero el margen entero y
+       saldría mejor de lo que es, sin que nada avise. Se declara. */
+    if(!(pu > 0)){ x.insumos.sinValuar++; return; }
+    var usd = cant * pu;
+    x.insumos.total += usd;
+    var t = ins.tipo || "Sin tipo";
+    x._t[t] = (x._t[t] || 0) + usd;
+    var k = mv.insumoId;
+    if(!x._i[k]) x._i[k] = { id:k, nombre:(ins.nombre || "Insumo dado de baja"),
+                             unidad:(ins.unidad || ""), cantidad:0, usd:0 };
+    x._i[k].cantidad += cant; x._i[k].usd += usd;
+  });
+
+  /* Gastos: directos por atribución Y por categoría. Las dos condiciones. */
+  (o.gastos || []).forEach(function(g){
+    if(g.campaniaId !== cid || !g.cultivoLoteId) return;
+    var cultivo = cultivoDeCl[g.cultivoLoteId]; if(!cultivo) return;
+    if(CATEGORIAS_DIRECTAS.indexOf(g.categoria) < 0) return;
+    var x = fila(cultivo), usd = importeGasto(g);
+    x.gastosDirectos.total += usd;
+    x._c[g.categoria] = (x._c[g.categoria] || 0) + usd;
+  });
+
+  (o.ventas || []).forEach(function(v){
+    if(v.campaniaId !== cid) return;
+    fila(v.cultivo).ingreso += importeVenta(v);
+  });
+
+  function centavos(n){ return Math.round(n * 100) / 100; }
+  function aLista(mapa, clave){
+    return Object.keys(mapa).map(function(k){
+      var r = {}; r[clave] = k; r.usd = centavos(mapa[k]); return r;
+    }).sort(function(a, b){ return b.usd - a.usd; });
+  }
+
+  return orden.map(function(k){
+    var x = m[k];
+    x.insumos.porTipo = aLista(x._t, "tipo");
+    x.insumos.porInsumo = Object.keys(x._i).map(function(id){
+      var i = x._i[id];
+      return { id:i.id, nombre:i.nombre, unidad:i.unidad,
+               cantidad:centavos(i.cantidad), usd:centavos(i.usd) };
+    }).sort(function(a, b){ return b.usd - a.usd; });
+    x.gastosDirectos.porCategoria = aLista(x._c, "categoria");
+    x.insumos.total = centavos(x.insumos.total);
+    x.gastosDirectos.total = centavos(x.gastosDirectos.total);
+    x.ingreso = centavos(x.ingreso);
+    x.margen = centavos(x.ingreso - x.insumos.total - x.gastosDirectos.total);
+    /* Con cero hectáreas no hay margen por hectárea: null, nunca Infinity ni un
+       cero que se lea como "no dejó nada". */
+    x.margenPorHa = x.ha > 0 ? centavos(x.margen / x.ha) : null;
+    /* Vendido y todavía no cosechado. No es un error: es agosto. Pero el
+       margen de ese cultivo todavía no tiene producción detrás y hay que
+       poder decirlo. */
+    x.ingresoSinProduccion = !!(prod && x.ingreso > 0 && !((prod[k] || {}).kg > 0));
+    delete x._t; delete x._i; delete x._c;
+    return x;
+  }).sort(function(a, b){ return b.margen - a.margen; });
+}
+
 /* La primera capa del costo que falta, y la única que no hay que cargar: las
    órdenes programadas ya tienen su mezcla con dosis por hectárea. Las
    completadas NO se cuentan acá — su costo ya está asentado en movimientos y
@@ -3432,8 +3540,6 @@ function ocupacionPadron(cid){
    Todo se lleva a dólares al tipo de cambio del día de la operación.
    Comparar campañas en pesos no dice nada.
    ============================================================ */
-function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
-function importeGasto(g){ return importeUSD(g); }
 
 /* Kilos secos que produjo cada cultivo de la campaña. */
 function produccionPorCultivo(cid){
