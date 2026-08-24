@@ -103,18 +103,34 @@ no es un buscar-y-reemplazar ciego, porque algunas son prosa explicativa donde
 "por agua" **sí tiene que quedarse** (es la explicación del método, no el
 título).
 
-Cambiar el **título** en: 5526, 5579, 5584, 5848, 5850.
-Cambiar el **encabezado de la hoja imprimible** en: 5775, 5786.
-Dejar como está la prosa que explica el método en: 4159, 5444, 5582, 5716,
-5728, 5879 — ahí "por agua" describe de dónde sale el número, y sacarlo
-volvería la frase incomprensible.
+**Seis son rótulos y cambian; siete son prosa y se quedan.** La diferencia
+es si el texto NOMBRA al número o si lo EXPLICA. En la prosa, "por agua"
+describe de dónde sale el número y a la vez es la advertencia: sacarlo volvería
+las frases incomprensibles y borraría la limitación que esta tarea existe para
+preservar.
+
+Rótulos que cambian: 5526 (cadena de cálculo), 5579 y 5584 (las dos ramas del
+bloque "Cómo se calcula"), 5786 (subtítulo de la hoja imprimible), 5848 (panel
+del cultivo), 5850 (etiqueta de la fila cuando el rango converge).
+
+Prosa que queda intacta: 4159, 5444, 5582, 5716, 5728, 5775, 5879.
 
 En 5526, agregar el subtítulo debajo del título:
 
 ```javascript
 '<span class="cadena-t"><strong>Rinde esperado</strong>'+
-  '<small>Responde sólo al agua. No contempla enfermedades, granizo, '+
-  'malezas, plagas ni nitrógeno.</small><small>'+
+  '<small class="limita">Responde sólo al agua. No contempla enfermedades, '+
+  'granizo, malezas, plagas ni nitrógeno.</small><small>'+
+```
+
+Con su clase propia en el CSS. Sin ella, la limitación queda con el mismo gris
+y el mismo tamaño que el detalle del rango que va abajo, los dos se leen como
+un párrafo único, y la advertencia se diluye justo en la tarea que existe para
+que no se diluya:
+
+```css
+.cadena-t small.limita{color:var(--tierra-2);border-left:2px solid var(--linea-fuerte);
+  padding-left:8px;margin:6px 0 4px}
 ```
 
 - [ ] **Paso 4: correr los tests**

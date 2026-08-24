@@ -397,6 +397,12 @@ body{background:var(--horizonte);color:var(--tierra);font-family:var(--sans);fon
 .cadena-paso.final .cadena-i{background:var(--c-maiz-d);color:#221B14}
 .cadena-t{font-size:13.5px}
 .cadena-t small{display:block;color:var(--tierra-3);font-size:12px;margin-top:1px}
+/* La limitación no puede leerse como una línea más del detalle técnico: es lo
+   único que, sacado el "por agua" del título, dice qué NO contempla el modelo.
+   Va más oscura que el detalle —se lee más, no menos— y con un filete que la
+   separa de él. */
+.cadena-t small.limita{color:var(--tierra-2);border-left:2px solid var(--linea-fuerte);
+  padding-left:8px;margin:6px 0 4px}
 .cadena-v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;white-space:nowrap}
 .cadena-paso.final .cadena-v{font-size:21px}
 .contraste{display:flex;border:1px solid var(--linea-fuerte);border-radius:3px;margin:14px 16px 0;overflow:hidden}
@@ -5523,7 +5529,9 @@ function semCadena(f, cu){
                   ' da el mismo 0 kg/ha: la fórmula ya llegó al piso':'')+
     '</small></span><span class="cadena-v">Ky '+nf(f.ky,2)+'</span></div>'+
   '<div class="cadena-paso final"><span class="cadena-i">=</span>'+
-    '<span class="cadena-t"><strong>Rinde esperado por agua</strong><small>'+
+    '<span class="cadena-t"><strong>Rinde esperado</strong>'+
+      '<small class="limita">Responde sólo al agua. No contempla enfermedades, granizo, malezas, plagas ni nitrógeno.</small>'+
+      '<small>'+
       (semCero(f.kgHa)
         ?'cero: ni en el escenario optimista el agua alcanza para hacer grano'
         :(semConverge(f.kgHa)
@@ -5576,12 +5584,12 @@ function semDetalleLote(f){
 
   var cuerpo = '<div class="sem-cuerpo"><div class="dos-col"><div>'+
     (f.kgHa
-      ?'<div class="bloque"><div class="bloque-cab"><h2>Cómo se calcula el rinde esperado por agua</h2></div>'+
+      ?'<div class="bloque"><div class="bloque-cab"><h2>Cómo se calcula el rinde esperado</h2></div>'+
         semCadena(f, cu)+
         (f.normal?'<p class="aviso">No se pudo bajar la historia de 20 años de este campo. El tramo de la ventana que falta se completó con la lluvia mensual típica: el rango es una estimación gruesa, no un rango más ancho.</p>':'')+
         (f.cosechado?'<p class="aviso">Este lote ya se cosechó. El número de acá sigue siendo la proyección por agua, no el rinde real de balanza: para eso está la ficha del lote en Siembra y cosecha.</p>':'')+
         '</div>'
-      :'<div class="bloque"><div class="bloque-cab"><h2>Cómo se calcula el rinde esperado por agua</h2></div>'+
+      :'<div class="bloque"><div class="bloque-cab"><h2>Cómo se calcula el rinde esperado</h2></div>'+
         '<div class="vacio">'+semNoSe(f.falta)+'</div></div>')+
     '</div><div>'+ficha+ambientes+'</div></div></div>';
 
@@ -5783,7 +5791,8 @@ function hojaImprimible(s, c){
 function vistaSementera(){
   var c = campania(campActiva), s = sementeraActual();
   var cab = '<div class="cabecera"><div><h1>Sementera</h1>'+
-    '<div class="sub">Rinde esperado <b>por agua</b> de lo que está en pie en '+esc(c.nombre)+'. '+
+    '<div class="sub">Rinde esperado de lo que está en pie en '+esc(c.nombre)+'. '+
+    'Responde sólo al agua: no contempla enfermedades, granizo, malezas, plagas ni nitrógeno. '+
     'No es un pronóstico de rinde: el modelo no sabe de enfermedades, granizo, malezas, plagas ni nitrógeno.</div></div>'+
     '<div class="cabecera-acc"><button class="btn sec" data-a="nuevoPrecioForward">+ Precio forward</button>'+
     '<button class="btn sec" data-a="asignarCultivo">+ Planificar cultivo</button></div></div>';
@@ -5845,9 +5854,9 @@ function vistaSementera(){
       '</div></div><div class="bloque-cuerpo">'+
       semMarcas(g)+
       (g.tn
-        ?'<div class="panel-vivo"><h4>Rinde esperado por agua</h4>'+
+        ?'<div class="panel-vivo"><h4>Rinde esperado</h4>'+
           '<div class="panel-fila'+(semCero(g.kgHa)?' mal':'')+'"><span>'+
-            (semCero(g.kgHa)||semConverge(g.kgHa)?'Rinde esperado por agua':'Rango de rinde')+
+            (semCero(g.kgHa)||semConverge(g.kgHa)?'Rinde esperado':'Rango de rinde')+
             '<small>'+(semCero(g.kgHa)
               ?'cero: ni en el escenario optimista el agua alcanza para hacer grano'
               :(semConverge(g.kgHa)
