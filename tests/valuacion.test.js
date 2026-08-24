@@ -170,3 +170,73 @@ test("la inversión acumulada incluye los insumos aplicados", function(){
                    fecha:"2025-11-06", cantidad:-6000, precioUnitario:0.5 }] });
   assert.strictEqual(mes(M.valuacionMensual(o), "2025-12-01").costoAcumulado, 3000);
 });
+
+/* ============================================================
+   El grano en pie, con la serie truncada a cada mes
+   ============================================================ */
+
+var EST  = { id:"e1", nombre:"La Constancia", localidad:"San Antonio de Areco" };
+var LOTE = { id:"l1", establecimientoId:"e1", nombre:"Lote 7", ha:100,
+             ambientes:[{ nombre:"Loma", ha:100, cau:140, napa:null }] };
+
+function serieHasta(hastaISO, mm, eto){
+  var n = M.diasEntre("2025-07-01", hastaISO) + 1, lluvia = [], etos = [];
+  for(var i = 0; i < n; i++){ lluvia.push(mm); etos.push(eto); }
+  return { id:"s1", establecimientoId:"e1", campaniaId:"c1",
+           desde:"2025-07-01", hasta:hastaISO, lluvia:lluvia, eto:etos };
+}
+function conSerie(extra){
+  return entrada(Object.assign({ lotes:[LOTE], establecimientos:[EST],
+    series:[serieHasta("2026-03-15", 3, 4)] }, extra || {}));
+}
+
+test("antes de la siembra no hay grano en pie, y eso es cero de verdad", function(){
+  /* La diferencia entre este cero y un null importa: acá no había nada
+     sembrado, no es que no se sepa cuánto había. */
+  var m = mes(M.valuacionMensual(conSerie()), "2025-08-01");
+  assert.ok(m.enPie, "el mes tiene que traer la capa igual");
+  assert.strictEqual(m.enPie.tn, 0);
+  assert.strictEqual(m.enPie.usd, 0);
+  assert.strictEqual(m.enPie.falta, null, "no falta nada: no había nada");
+});
+
+test("con el cultivo sembrado y sin cosechar aparece el grano en pie", function(){
+  var m = mes(M.valuacionMensual(conSerie()), "2026-01-01");
+  assert.ok(m.enPie.tn > 0, "en enero la soja está en pie");
+  assert.ok(m.enPie.usd > 0);
+  assert.ok(m.enPie.pesimista <= m.enPie.esperado && m.enPie.esperado <= m.enPie.optimista,
+    "sale como rango, porque es una proyección y no un dato");
+});
+
+test("el rinde en pie de un mes temprano no es el de hoy", function(){
+  /* Si diera igual, la serie no se truncó: se estaría valuando enero con la
+     lluvia que cayó en marzo, o sea con información del futuro. */
+  var r = M.valuacionMensual(conSerie());
+  var ene = mes(r, "2026-01-01"), mar = mes(r, "2026-03-01");
+  assert.notStrictEqual(ene.enPie.esperado, mar.enPie.esperado,
+    "enero " + ene.enPie.esperado + " contra marzo " + mar.enPie.esperado);
+});
+
+test("cosechar saca el grano de en pie y lo pasa a cosechado", function(){
+  var o = conSerie({ tickets:[{ id:"t1", cultivoLoteId:"cl1", fecha:"2026-02-10",
+                                kgNetos:300000, humedad:13.5 }] });
+  var r = M.valuacionMensual(o);
+  assert.ok(mes(r, "2026-01-01").enPie.tn > 0, "en enero estaba en pie");
+  assert.strictEqual(mes(r, "2026-02-01").enPie.tn, 0, "en febrero ya está cosechado");
+  assert.strictEqual(mes(r, "2026-02-01").cosechado.tn, 300);
+});
+
+test("sin precio, el grano en pie tiene toneladas y no tiene dólares", function(){
+  var o = conSerie({ forwards:[] });
+  var m = mes(M.valuacionMensual(o), "2026-01-01");
+  assert.ok(m.enPie.tn > 0);
+  assert.strictEqual(m.enPie.usd, null);
+  assert.strictEqual(m.total, null, "el total tampoco se puede cerrar");
+});
+
+test("sin serie climática el grano en pie se declara, no se inventa", function(){
+  var o = entrada({ lotes:[LOTE], establecimientos:[EST], series:[] });
+  var m = mes(M.valuacionMensual(o), "2026-01-01");
+  assert.strictEqual(m.enPie.tn, null, "no hay con qué proyectar");
+  assert.ok(m.enPie.falta, "y tiene que decir por qué");
+});

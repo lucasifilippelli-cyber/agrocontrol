@@ -1981,6 +1981,23 @@ function valuacionMensual(o){
 
   function centavos(n){ return Math.round(n * 100) / 100; }
 
+  /* La serie diaria recortada a fin de mes: es lo que permite preguntarle al
+     modelo qué esperaba EN ese mes, en vez de qué espera hoy con la lluvia que
+     todavía no había caído. Valuar enero con la información de marzo sería
+     valuar con datos del futuro. */
+  function recortarSerie(serie, finISO){
+    if(!serie || !serie.lluvia) return null;
+    var n = diasEntre(serie.desde, finISO) + 1;
+    if(n <= 0) return null;
+    if(n >= serie.lluvia.length) return serie;
+    var r = {};
+    for(var k in serie){ r[k] = serie[k]; }
+    r.lluvia = serie.lluvia.slice(0, n);
+    r.eto = (serie.eto || []).slice(0, n);
+    r.hasta = finISO;
+    return r;
+  }
+
   return meses.map(function(mesISO){
     var fin = finDeMes(mesISO);
 
@@ -2036,16 +2053,56 @@ function valuacionMensual(o){
       costo += Math.abs(num(m.cantidad)) * pu;
     });
 
+    /* Grano en pie: lo sembrado y todavía no cosechado a fin de ese mes, al
+       rinde que el modelo esperaba ENTONCES. Es la capa cara —corre el motor de
+       Sementera una vez por mes— y la única que es una proyección, así que sale
+       como rango. */
+    var pP = 0, pE = 0, pO = 0, usdPie = 0;
+    var huboPie = false, faltaPie = null, faltaPrecioPie = false;
+    cls.forEach(function(cl){
+      if(!cl.fechaSiembra || cl.fechaSiembra > fin) return;      /* todavía no se sembró */
+      var cosechadoYa = (o.tickets || []).some(function(t){
+        return t.cultivoLoteId === cl.id && t.fecha && t.fecha <= fin;
+      });
+      if(cosechadoYa) return;                                     /* ya pasó a cosechado */
+      huboPie = true;
+      var l = (o.lotes || []).filter(function(x){ return x.id === cl.loteId; })[0];
+      if(!l){ faltaPie = "lote"; return; }
+      var es = (o.establecimientos || []).filter(function(x){ return x.id === l.establecimientoId; })[0] || {};
+      var sr = recortarSerie(serieDe(o.series, l.establecimientoId, c.id), fin);
+      if(!sr){ faltaPie = "serie"; return; }
+      var f = filaSementera({ cl:cl, lote:l, establecimiento:es, campania:c,
+        serie:sr, historiaLarga:((o.historias || {})[l.establecimientoId] || null),
+        overrides:((o.overrides || {})[l.establecimientoId] || null) });
+      if(!f.tn){ faltaPie = f.falta || "ventana"; return; }
+      pP += f.tn.pesimista; pE += f.tn.esperada; pO += f.tn.optimista;
+      var pr = precioDelMes(o.forwards, cl.cultivo, fin);
+      if(!pr){ faltaPrecioPie = true; return; }
+      usdPie += f.tn.esperada * pr.usdTn;
+    });
+
+    var enPie = huboPie
+      ? { tn:(faltaPie ? null : centavos(pE)),
+          usd:((faltaPie || faltaPrecioPie) ? null : centavos(usdPie)),
+          pesimista:(faltaPie ? null : centavos(pP)),
+          esperado:(faltaPie ? null : centavos(pE)),
+          optimista:(faltaPie ? null : centavos(pO)),
+          falta:(faltaPie || null) }
+      /* Antes de sembrar no hay grano en pie, y eso es CERO de verdad: no es
+         que no se sepa cuánto había, es que no había nada. */
+      : { tn:0, usd:0, pesimista:0, esperado:0, optimista:0, falta:null };
+
     var cosechado = { tn:centavos(tn), usd:(faltaPrecio ? null : centavos(usdCos)),
                       precioArrastrado:arrastre };
     var insumos = { usd:centavos(usdIns) };
     return { mes:mesISO,
              cosechado:cosechado,
              insumos:insumos,
-             enPie:null,
+             enPie:enPie,
              /* Un total que suma un null como si fuera cero es un patrimonio
                 inventado. Si falta una capa, el total falta. */
-             total:(cosechado.usd == null ? null : centavos(cosechado.usd + insumos.usd)),
+             total:((cosechado.usd == null || enPie.usd == null) ? null
+                    : centavos(cosechado.usd + insumos.usd + enPie.usd)),
              costoAcumulado:centavos(costo) };
   });
 }
