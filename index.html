@@ -452,6 +452,8 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .panel-fila.mal b{color:var(--alerta)}
 .panel-fila.bien b{color:var(--ok)}
 .panel-fila.propio{background:var(--ojo-bg)}
+.panel-fila.sangria{padding-left:28px;font-size:12.5px;color:var(--tierra-2);background:var(--panel-2)}
+.panel-fila.sangria b{font-weight:600;color:var(--tierra-2)}
 .panel-fila.propio b{color:var(--ojo)}
 .sem-escenario{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
 .sem-escenario label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--tierra-3);font-weight:700}
@@ -1751,6 +1753,25 @@ function hijasDe(cuentas, codigo){
 var CATEGORIAS_GASTO = ["Labores de terceros","Cosecha","Flete","Arrendamiento","Honorarios",
                         "Estructura","Impuestos y comisiones","Otros"];
 
+/* Cuáles de esas categorías son costo DIRECTO del cultivo, o sea cuáles entran
+   al margen bruto. Es la decisión que define el número, no un detalle de
+   implementación.
+
+   El arrendamiento queda afuera a propósito, y es la exclusión que más se va a
+   discutir: el margen bruto mide la decisión agronómica —cuánta soja y cuánto
+   maíz sembrar— y tiene que ser comparable entre cultivos y contra los
+   márgenes de referencia de la zona. Metiendo el arrendamiento adentro, dos
+   campos alquilados a distinto precio hacen ver un cultivo peor que otro por
+   una razón que no tiene nada que ver con el cultivo. Lo mismo con honorarios,
+   estructura e impuestos: son costos de la empresa.
+
+   "Otros" sí entra cuando el gasto está atribuido a un cultivo-lote: atribuirlo
+   es un acto deliberado del productor, y dejarlo afuera haría desaparecer plata
+   del margen sin explicación. El riesgo inverso —que ahí se cuele algo que en
+   realidad es estructura— se compensa mostrando siempre el desglose por
+   categoría en la pantalla, así lo que entró queda auditable de un vistazo. */
+var CATEGORIAS_DIRECTAS = ["Labores de terceros","Cosecha","Flete","Otros"];
+
 /* De la categoría que el productor ya carga sale la cuenta, así nada de lo
    cargado hasta hoy hay que recodificar a mano. Lo que se cargue explícito
    en el campo `cuenta` pisa a este default. */
@@ -1889,6 +1910,114 @@ function importeUSD(fila){
   if(fila.moneda==="ARS") return num(fila.tipoCambio)>0 ? num(fila.monto)/num(fila.tipoCambio) : 0;
   return num(fila.monto);
 }
+/* Movidas acá adentro del bloque del modelo con el margen bruto: son la regla
+   de valuación, y el margen tiene que usar exactamente la misma que el resto de
+   la app. Duplicarla afuera era garantizar que un día divergieran. */
+function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
+function importeGasto(g){ return importeUSD(g); }
+/* Cuánto dejó cada cultivo y en qué se fue la plata.
+
+   Margen bruto = ingreso − costos directos. No es el resultado del cultivo:
+   arrendamiento, honorarios, estructura e impuestos quedan afuera aunque
+   alguien los impute a un lote. Ver CATEGORIAS_DIRECTAS y docs/margen-bruto.md.
+
+   El ingreso sale de las ventas del cultivo, sin pasar por el reparto entre
+   lotes que hace economiaCampania. Ésa es la diferencia que cierra el agujero:
+   un cultivo vendido y todavía no cosechado reparte 0 a cada lote y la plata
+   desaparece; acá está.
+
+   Todo por argumento y sin leer E, como el resto del modelo. */
+function margenBrutoPorCultivo(o){
+  var cid = o.campaniaId;
+  var cls = (o.cultivoLotes || []).filter(function(cl){ return cl.campaniaId === cid; });
+  var insPorId = {}; (o.insumos || []).forEach(function(i){ insPorId[i.id] = i; });
+  var clDeOrden = {}; (o.ordenes || []).forEach(function(x){ if(x.cultivoLoteId) clDeOrden[x.id] = x.cultivoLoteId; });
+  var cultivoDeCl = {}; cls.forEach(function(cl){ cultivoDeCl[cl.id] = cl.cultivo; });
+  var prod = o.produccion || null;
+
+  var m = {}, orden = [];
+  function fila(cultivo){
+    if(!m[cultivo]){
+      m[cultivo] = { cultivo:cultivo, ha:0, ingreso:0,
+        insumos:{ total:0, porTipo:[], porInsumo:[], sinValuar:0 },
+        gastosDirectos:{ total:0, porCategoria:[] },
+        margen:0, margenPorHa:null, ingresoSinProduccion:false,
+        _t:{}, _i:{}, _c:{} };
+      orden.push(cultivo);
+    }
+    return m[cultivo];
+  }
+  cls.forEach(function(cl){ fila(cl.cultivo).ha += num(cl.haSembrada); });
+
+  /* Insumos: sólo lo efectivamente aplicado, valuado al precio del movimiento
+     y recién en su defecto al precio de lista. Misma regla que costoInsumosDe. */
+  (o.movimientos || []).forEach(function(mv){
+    if(mv.tipo !== "aplicacion" || !mv.ordenId) return;
+    var clId = clDeOrden[mv.ordenId]; if(!clId) return;
+    var cultivo = cultivoDeCl[clId]; if(!cultivo) return;
+    var x = fila(cultivo), ins = insPorId[mv.insumoId] || {};
+    var pu = (mv.precioUnitario != null) ? num(mv.precioUnitario) : num(ins.precio);
+    var cant = Math.abs(num(mv.cantidad));
+    /* Sin precio en ningún lado NO vale cero: valdría cero el margen entero y
+       saldría mejor de lo que es, sin que nada avise. Se declara. */
+    if(!(pu > 0)){ x.insumos.sinValuar++; return; }
+    var usd = cant * pu;
+    x.insumos.total += usd;
+    var t = ins.tipo || "Sin tipo";
+    x._t[t] = (x._t[t] || 0) + usd;
+    var k = mv.insumoId;
+    if(!x._i[k]) x._i[k] = { id:k, nombre:(ins.nombre || "Insumo dado de baja"),
+                             unidad:(ins.unidad || ""), cantidad:0, usd:0 };
+    x._i[k].cantidad += cant; x._i[k].usd += usd;
+  });
+
+  /* Gastos: directos por atribución Y por categoría. Las dos condiciones. */
+  (o.gastos || []).forEach(function(g){
+    if(g.campaniaId !== cid || !g.cultivoLoteId) return;
+    var cultivo = cultivoDeCl[g.cultivoLoteId]; if(!cultivo) return;
+    if(CATEGORIAS_DIRECTAS.indexOf(g.categoria) < 0) return;
+    var x = fila(cultivo), usd = importeGasto(g);
+    x.gastosDirectos.total += usd;
+    x._c[g.categoria] = (x._c[g.categoria] || 0) + usd;
+  });
+
+  (o.ventas || []).forEach(function(v){
+    if(v.campaniaId !== cid) return;
+    fila(v.cultivo).ingreso += importeVenta(v);
+  });
+
+  function centavos(n){ return Math.round(n * 100) / 100; }
+  function aLista(mapa, clave){
+    return Object.keys(mapa).map(function(k){
+      var r = {}; r[clave] = k; r.usd = centavos(mapa[k]); return r;
+    }).sort(function(a, b){ return b.usd - a.usd; });
+  }
+
+  return orden.map(function(k){
+    var x = m[k];
+    x.insumos.porTipo = aLista(x._t, "tipo");
+    x.insumos.porInsumo = Object.keys(x._i).map(function(id){
+      var i = x._i[id];
+      return { id:i.id, nombre:i.nombre, unidad:i.unidad,
+               cantidad:centavos(i.cantidad), usd:centavos(i.usd) };
+    }).sort(function(a, b){ return b.usd - a.usd; });
+    x.gastosDirectos.porCategoria = aLista(x._c, "categoria");
+    x.insumos.total = centavos(x.insumos.total);
+    x.gastosDirectos.total = centavos(x.gastosDirectos.total);
+    x.ingreso = centavos(x.ingreso);
+    x.margen = centavos(x.ingreso - x.insumos.total - x.gastosDirectos.total);
+    /* Con cero hectáreas no hay margen por hectárea: null, nunca Infinity ni un
+       cero que se lea como "no dejó nada". */
+    x.margenPorHa = x.ha > 0 ? centavos(x.margen / x.ha) : null;
+    /* Vendido y todavía no cosechado. No es un error: es agosto. Pero el
+       margen de ese cultivo todavía no tiene producción detrás y hay que
+       poder decirlo. */
+    x.ingresoSinProduccion = !!(prod && x.ingreso > 0 && !((prod[k] || {}).kg > 0));
+    delete x._t; delete x._i; delete x._c;
+    return x;
+  }).sort(function(a, b){ return b.margen - a.margen; });
+}
+
 /* La primera capa del costo que falta, y la única que no hay que cargar: las
    órdenes programadas ya tienen su mezcla con dosis por hectárea. Las
    completadas NO se cuentan acá — su costo ya está asentado en movimientos y
@@ -3413,8 +3542,6 @@ function ocupacionPadron(cid){
    Todo se lleva a dólares al tipo de cambio del día de la operación.
    Comparar campañas en pesos no dice nada.
    ============================================================ */
-function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
-function importeGasto(g){ return importeUSD(g); }
 
 /* Kilos secos que produjo cada cultivo de la campaña. */
 function produccionPorCultivo(cid){
@@ -3452,6 +3579,22 @@ function economiaCampania(cid){
   var indirectos=E.gastos.filter(function(g){ return g.campaniaId===cid && !g.cultivoLoteId; })
                          .reduce(function(a,g){ return a+importeGasto(g); },0);
 
+  /* El ingreso de un cultivo se reparte entre sus lotes según cuántos kilos
+     puso cada uno. Si el cultivo se vendió y todavía no se cosechó no hay
+     kilos, la parte de cada lote da 0 y esa plata desaparece del resultado sin
+     que nada avise. Es el caso normal a mitad de campaña, no una rareza.
+
+     Acá NO se inventa un reparto: repartir por hectárea sembrada sería una
+     respuesta plausible y equivocada —los lotes rinden distinto y le asignaría
+     ingreso a uno que puede no haber producido nada—. Se declara aparte, para
+     que la pantalla lo diga en vez de mostrar ceros. El margen bruto por
+     cultivo sí tiene esa plata: no pasa por este reparto. */
+  var sinRepartir=[];
+  Object.keys(vend).forEach(function(k){
+    var kg=(prod[k]||{}).kg||0;
+    if(kg<=0 && vend[k].usd>0) sinRepartir.push({cultivo:k, usd:vend[k].usd, tn:vend[k].tn});
+  });
+
   var porLote=cls.map(function(cl){
     var r=rendimiento(cl);
     var totalKgCultivo=(prod[cl.cultivo]||{}).kg||0;
@@ -3470,7 +3613,7 @@ function economiaCampania(cid){
 
   var ingresos=porLote.reduce(function(a,x){return a+x.ingreso;},0);
   var costos=porLote.reduce(function(a,x){return a+x.costo;},0);
-  return {porLote:porLote, prod:prod, vend:vend, haTotal:haTotal,
+  return {porLote:porLote, prod:prod, vend:vend, haTotal:haTotal, sinRepartir:sinRepartir,
           ingresos:ingresos, costos:costos, resultado:ingresos-costos,
           porHa:haTotal>0?(ingresos-costos)/haTotal:0,
           indirectos:indirectos};
@@ -5357,6 +5500,66 @@ function bloquePresupuestos(pres){
       '<button class="btn" data-a="nuevoPresupuesto">+ Cargar presupuesto</button></p></div>')+'</div>';
 }
 
+/* Cuánto dejó cada cultivo y en qué se fue la plata. Margen bruto: ingreso
+   menos costos directos. Lo que queda afuera —arrendamiento, honorarios,
+   estructura, impuestos— va declarado abajo, sin prorratear: un margen bruto
+   positivo con la empresa perdiendo plata es una situación real y frecuente, y
+   presentarlo como si fuera el resultado del cultivo sería mentir por omisión. */
+function bloqueMargenBruto(mb, ec){
+  if(!mb.length) return "";
+  var conDato=mb.filter(function(x){ return x.ingreso>0.01 || x.insumos.total>0.01 || x.gastosDirectos.total>0.01; });
+  if(!conDato.length) return "";
+
+  var filas=conDato.map(function(x){
+    var cu=CULTIVOS[x.cultivo]||{nom:x.cultivo,color:"var(--tierra-3)"}, pos=x.margen>=0;
+    var det='<details class="sem-lote"><summary>'+
+      '<i class="punto" style="background:'+cu.color+'"></i><b>'+esc(cu.nom)+'</b>'+
+      '<span class="sem-rango" style="margin-left:auto">'+
+        '<b style="color:'+(pos?"var(--ok)":"var(--alerta)")+'">'+(pos?"":"−")+nf(Math.abs(x.margen))+' USD</b>'+
+        (x.margenPorHa!=null?nf(x.margenPorHa)+' USD/ha':'sin superficie sembrada')+
+      '</span></summary><div class="sem-cuerpo">'+
+      '<div class="panel-vivo"><h4>De dónde sale</h4>'+
+        '<div class="panel-fila"><span>Ingreso<small>'+nf(x.ha,1)+' ha sembradas</small></span><b>'+nf(x.ingreso)+' USD</b></div>'+
+        '<div class="panel-fila"><span>Insumos aplicados</span><b>−'+nf(x.insumos.total)+' USD</b></div>'+
+        (x.insumos.porTipo.length
+          ? x.insumos.porTipo.map(function(t){
+              return '<div class="panel-fila sangria"><span>'+esc(t.tipo)+'</span><b>'+nf(t.usd)+'</b></div>';
+            }).join("")
+          : '')+
+        (x.insumos.sinValuar
+          ? '<div class="panel-aviso">'+x.insumos.sinValuar+' aplicaci'+(x.insumos.sinValuar===1?"ón":"ones")+
+            ' sin precio cargado: el costo de insumos está incompleto y este margen es mejor que el real.</div>'
+          : '')+
+        '<div class="panel-fila"><span>Gastos directos</span><b>−'+nf(x.gastosDirectos.total)+' USD</b></div>'+
+        x.gastosDirectos.porCategoria.map(function(c){
+          return '<div class="panel-fila sangria"><span>'+esc(c.categoria)+'</span><b>'+nf(c.usd)+'</b></div>';
+        }).join("")+
+        '<div class="panel-fila '+(pos?"bien":"mal")+'"><span>Margen bruto</span>'+
+          '<b>'+(pos?"":"−")+nf(Math.abs(x.margen))+' USD</b></div>'+
+      '</div>'+
+      (x.ingresoSinProduccion
+        ? '<p class="aviso" style="margin:12px 0 0">Este ingreso todavía no tiene producción cargada detrás: se vendió y no se cosechó.</p>'
+        : '')+
+      (x.insumos.porInsumo.length
+        ? '<div class="panel-vivo"><h4>Insumo por insumo</h4>'+
+          x.insumos.porInsumo.map(function(i){
+            return '<div class="panel-fila"><span>'+esc(i.nombre)+
+              '<small>'+nf(i.cantidad,2)+' '+esc(i.unidad)+'</small></span><b>'+nf(i.usd)+' USD</b></div>';
+          }).join("")+'</div>'
+        : '')+
+      '</div></details>';
+    return det;
+  }).join("");
+
+  return '<div class="bloque"><div class="bloque-cab"><h2>Margen bruto por cultivo</h2>'+
+    '<div class="aclara">Ingreso menos costos directos. Tocá un cultivo para abrir los insumos</div></div>'+
+    '<div class="bloque-cuerpo">'+filas+
+    '<p class="pie" style="margin-top:14px">El margen bruto <b>no es el resultado del cultivo</b>: '+
+    'deja afuera arrendamiento, honorarios, estructura e impuestos, que son costos de la empresa y no del cultivo. '+
+    'Esta campaña tiene <b>'+nf(ec.indirectos)+' USD</b> de gastos indirectos sin prorratear.</p>'+
+    '</div></div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
   var cab='<div class="cabecera"><div><h1>Finanzas y Contabilidad</h1>'+
@@ -5418,11 +5621,26 @@ function vistaFinanzas(){
         '<td class="num" style="font-weight:700">'+(g.usd>0?nf(g.usd):'—')+'</td></tr>';
     }).join("")+'</tbody></table></div></div>':'';
 
+  /* margen bruto por cultivo */
+  var mb=margenBrutoPorCultivo({ cultivoLotes:E.cultivoLotes, ordenes:E.ordenes,
+    movimientos:E.movimientos, insumos:E.insumos, gastos:E.gastos, ventas:E.ventas,
+    campaniaId:campActiva, produccion:ec.prod });
+  var bloqueMargen=bloqueMargenBruto(mb, ec);
+
   /* resultado por lote */
   var lotes=ec.porLote.filter(function(x){ return x.ingreso>0.01||x.costo>0.01; })
                       .sort(function(a,b){ return b.porHa-a.porHa; });
-  var bloqueLotes=lotes.length?'<div class="bloque"><div class="bloque-cab"><h2>Resultado por lote</h2>'+
-    '<div class="aclara">El ingreso de cada lote es su parte de lo vendido de ese cultivo</div></div><div class="scroll-x">'+
+  var avisoSinRepartir=ec.sinRepartir.length
+    ? '<div class="panel-aviso" style="margin:12px 16px 0">'+
+      ec.sinRepartir.map(function(x){
+        var cu=CULTIVOS[x.cultivo]||{nom:x.cultivo};
+        return 'Vendiste '+nf(x.tn,1)+' t de '+esc(cu.nom)+' ('+nf(x.usd)+' USD) y todavía no cargaste producción: '+
+               'no hay con qué repartir ese ingreso entre los lotes. Está contado en el margen bruto de arriba.';
+      }).join('<br>')+'</div>'
+    : '';
+  var bloqueLotes=(lotes.length||ec.sinRepartir.length)?'<div class="bloque"><div class="bloque-cab"><h2>Resultado por lote</h2>'+
+    '<div class="aclara">El ingreso de cada lote es su parte de lo vendido de ese cultivo</div></div>'+
+    avisoSinRepartir+'<div class="scroll-x">'+
     '<table class="tabla"><thead><tr><th>Lote</th><th>Cultivo</th><th class="num">Ingreso</th>'+
     '<th class="num col-opcional">Insumos</th><th class="num col-opcional">Otros gastos</th>'+
     '<th class="num">Resultado</th><th class="num">USD/ha</th></tr></thead><tbody>'+
@@ -5512,7 +5730,7 @@ function vistaFinanzas(){
       }).join("")+'</tbody></table></div>'
      :'<p class="vacio">Sin precios forward cargados todavía.</p>')+'</div>';
 
-  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloquePresupuestos(presupuestos)+bloqueCuentas();
+  return cab+ficha+tableroFinanzas(ec,ventas,gastos)+bloqueGranos+bloqueMargen+bloqueLotes+bloqueVentas+bloquePreciosForward+bloqueGastos+bloquePresupuestos(presupuestos)+bloqueCuentas();
 }
 
 function vistaClima(){
