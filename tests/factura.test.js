@@ -123,3 +123,83 @@ test("un importe que no es un número devuelve null", function(){
   raro.importe = -500;
   assert.strictEqual(M.leerQrAfip(armarQr(raro)), null, "un importe negativo no es una factura");
 });
+
+/* ============================================================
+   De la factura al gasto
+   ============================================================ */
+
+var YA_CARGADA = { id:"f1", cuit:"30500001735", tipoCmp:1, ptoVta:10, nroCmp:94,
+                   fecha:"2026-08-14", importe:1210000.50, moneda:"ARS", estado:"pendiente" };
+
+test("la misma factura dos veces se reconoce y no entra de nuevo", function(){
+  /* La base también lo impide con un unique, pero un rechazo de la base se
+     suelta de la cola y no se reintenta: conviene frenarlo acá, donde se puede
+     explicar por qué. */
+  var f = M.leerQrAfip(armarQr(FACTURA_A));
+  assert.ok(M.facturaRepetida([YA_CARGADA], f), "es la misma");
+  assert.strictEqual(M.facturaRepetida([], f), null, "sin nada cargado no hay repetida");
+});
+
+test("otro punto de venta del mismo proveedor no es la misma factura", function(){
+  var d = {}; for(var k in FACTURA_A) d[k] = FACTURA_A[k];
+  d.ptoVta = 11;
+  assert.strictEqual(M.facturaRepetida([YA_CARGADA], M.leerQrAfip(armarQr(d))), null);
+});
+
+test("una factura rechazada no bloquea volver a cargarla", function(){
+  var rechazada = {}; for(var k in YA_CARGADA) rechazada[k] = YA_CARGADA[k];
+  rechazada.estado = "rechazada";
+  assert.strictEqual(M.facturaRepetida([rechazada], M.leerQrAfip(armarQr(FACTURA_A))), null,
+    "si se rechazó por error, tiene que poder volver a entrar");
+});
+
+test("el gasto propuesto sale del QR, en la moneda de la factura", function(){
+  var g = M.gastoDeFactura(YA_CARGADA, { tipoCambio:1350, categoria:"Otros" });
+  assert.strictEqual(g.monto, 1210000.50);
+  assert.strictEqual(g.moneda, "ARS");
+  assert.strictEqual(g.tipoCambio, 1350);
+  assert.strictEqual(g.fecha, "2026-08-14");
+});
+
+test("sin tipo de cambio no se propone un gasto en pesos", function(){
+  /* El QR viene en pesos y la app trabaja en dólares. Un gasto en pesos sin
+     cotización se valúa en cero: entra plata que no aparece en ningún lado. */
+  assert.strictEqual(M.gastoDeFactura(YA_CARGADA, { categoria:"Otros" }), null);
+  assert.strictEqual(M.gastoDeFactura(YA_CARGADA, { tipoCambio:0, categoria:"Otros" }), null);
+});
+
+test("una factura en dólares no necesita tipo de cambio", function(){
+  var enUsd = {}; for(var k in YA_CARGADA) enUsd[k] = YA_CARGADA[k];
+  enUsd.moneda = "USD"; enUsd.importe = 900;
+  var g = M.gastoDeFactura(enUsd, { categoria:"Otros" });
+  assert.ok(g, "en dólares el monto ya está en la moneda de la app");
+  assert.strictEqual(g.monto, 900);
+  assert.strictEqual(g.moneda, "USD");
+});
+
+test("el gasto propuesto usa el neto cuando el extractor ya lo trajo", function(){
+  /* Al costo del cultivo va el neto gravado: el IVA es crédito fiscal y no es
+     costo. Sumarlo inflaría el costo de cada insumo un 21 %. */
+  var conNeto = {}; for(var k in YA_CARGADA) conNeto[k] = YA_CARGADA[k];
+  conNeto.neto = 1000000; conNeto.iva = 210000; conNeto.percepciones = 500.50;
+  var g = M.gastoDeFactura(conNeto, { tipoCambio:1350, categoria:"Otros" });
+  assert.strictEqual(g.monto, 1000000, "el neto, no el total");
+});
+
+test("la ecuación fiscal cierra con un peso de tolerancia", function(){
+  assert.strictEqual(M.facturaCuadra({ importe:1210500.50, neto:1000000, iva:210000, percepciones:500.50 }), true);
+  assert.strictEqual(M.facturaCuadra({ importe:1210501.20, neto:1000000, iva:210000, percepciones:500.50 }), true,
+    "setenta centavos es redondeo, no un error");
+  assert.strictEqual(M.facturaCuadra({ importe:1300000, neto:1000000, iva:210000, percepciones:500.50 }), false);
+});
+
+test("sin extraer todavía, la factura no cuadra ni deja de cuadrar", function(){
+  assert.strictEqual(M.facturaCuadra(YA_CARGADA), null,
+    "todavía no se sabe: null, no false");
+});
+
+test("una factura A con IVA y percepciones cuadra", function(){
+  /* El caso normal. La primera versión de la especificación exigía que los
+     ítems sumaran el total y habría bloqueado casi todas las facturas reales. */
+  assert.strictEqual(M.facturaCuadra({ importe:121000, neto:100000, iva:21000, percepciones:0 }), true);
+});
