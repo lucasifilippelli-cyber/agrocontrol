@@ -67,7 +67,7 @@ compilación. Se edita y se recarga. El resto del repo: `sw.js`,
 ## Los diez módulos
 
 Hoy, Inicio · Trabajos · Resumen · Siembra y cosecha · Lotes · **Finanzas y
-Contabilidad** · Insumos · Lluvias · Monitoreo · **Sementera**.
+Contabilidad** · Insumos · Lluvias · Monitoreo · **Sementera** · **Facturas**.
 
 ### Sementera
 
@@ -130,7 +130,7 @@ forward y avisa cuánto se puede comprometer sin pasarse.
 
 ## Modelo de datos
 
-Veinte tablas en `public`, todas con `user_id` y **RLS con una política por
+Veintiuna tablas en `public`, todas con `user_id` y **RLS con una política por
 tabla**. La clave del cliente viaja en el HTML y es pública por diseño: lo único
 que separa los datos de un productor de los de otro son esas políticas.
 **Verificar siempre con `get_advisors` después de tocar el esquema.**
@@ -138,9 +138,9 @@ que separa los datos de un productor de los de otro son esas políticas.
 `perfiles`, `establecimientos`, `lotes`, `campanias`, `cultivo_lotes`, `tickets`,
 `insumos`, `movimientos_stock`, `ordenes`, `orden_insumos`, `ventas`, `gastos`,
 `monitoreo`, `telegram_cuentas`, `clima_series`, `precios_forward`, `cuentas`,
-`presupuestos`, `escenarios_lluvia`.
+`presupuestos`, `escenarios_lluvia`, `facturas`.
 
-Migraciones aplicadas: `0001` a `0016`.
+Migraciones aplicadas: `0001` a `0017`.
 
 Los objetos anidados van como `jsonb`. **Las columnas de fecha aceptan `null`
 pero no `""`** — contemplado en `aGuion()`.
@@ -163,7 +163,7 @@ defecto crítico.**
 node --test          # sin ruta: en Node 24, pasarle un directorio no descubre nada
 ```
 
-**375 tests.** El arnés lee `index.html`, extrae el bloque entre
+**398 tests.** El arnés lee `index.html`, extrae el bloque entre
 `/* === modelo:inicio === */` y `/* === modelo:fin === */`, y lo evalúa aislado
 con `vm`. Por eso **toda función testeable tiene que vivir dentro de ese
 bloque**, y por eso las funciones del modelo reciben sus datos por argumento.
@@ -201,6 +201,7 @@ git add -A && git commit && git push   # Vercel redespliega solo
 | Spec y plan del rinde esperado | `docs/rinde-esperado.md`, `docs/rinde-esperado-plan.md` |
 | Spec y plan del margen bruto | `docs/margen-bruto.md`, `docs/margen-bruto-plan.md` |
 | Spec y plan de las valuaciones | `docs/valuaciones.md`, `docs/valuaciones-plan.md` |
+| Spec y plan de facturas | `docs/facturas.md`, `docs/facturas-plan.md` |
 | Plan de Sementera | `docs/sementera-plan.md` |
 | Spec de Finanzas y Contabilidad | `docs/finanzas.md` |
 | Plan del plan de cuentas | `docs/finanzas-plan-1.md` |
@@ -212,18 +213,20 @@ proyecto: cada decisión tomada en nombre de Lucas está ahí escrita.
 
 ## Pendiente, en orden
 
-0. **Las dos piezas que quedan de la reunión del 21/08/2026**: importación de
-   facturas en PDF e importación de asientos y sumas y saldos. **Las dos rompen
-   la arquitectura de un solo archivo sin dependencias** y necesitan su propia
-   conversación antes de diseñarse. (El rinde esperado, el margen bruto por
-   cultivo y las valuaciones por mes ya están desplegados.)
-1. **El documento de validación para el socio.** Prometido y nunca escrito. Ver
+0. **Facturas, parte B**: la Edge Function que extrae los ítems del cuerpo de la
+   factura. **Es la que rompe la arquitectura** —servicio externo, costo por uso,
+   las facturas salen de la cuenta— y **está bloqueada hasta que Lucas cargue
+   `ANTHROPIC_API_KEY` como secreto del proyecto**. La parte A —QR de AFIP,
+   tabla, confirmación— ya está desplegada y no depende de nada externo.
+1. **Importación de asientos y sumas y saldos.** Última pieza de la reunión del
+   21/08/2026, sin diseñar todavía.
+2. **El documento de validación para el socio.** Prometido y nunca escrito. Ver
    la lista completa abajo. Tiene que ser autocontenido y portable.
-2. **El contraste del modelo de Sementera contra la campaña 2025/26 cerrada.**
+3. **El contraste del modelo de Sementera contra la campaña 2025/26 cerrada.**
    Era la Task 11 de su plan y nunca se corrió. **Los tests dicen que las cuentas
    están bien hechas; nadie verificó que el modelo se parezca a la realidad de
    esos campos.**
-3. **Etapa 2b**: los indicadores y las dos proyecciones sobre el escenario.
+4. **Etapa 2b**: los indicadores y las dos proyecciones sobre el escenario.
    **Primer ítem, antes de dibujar la primera curva**: la marca `precioEstimado`
    existe en la fila del cultivo pero **falta en el cobro**, así que un monto
    extrapolado y uno cerrado entran a la curva financiera indistinguibles.

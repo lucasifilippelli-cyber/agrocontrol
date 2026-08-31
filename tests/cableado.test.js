@@ -396,3 +396,65 @@ test("cable: el modelo no adivina el escenario si la vista no se lo pasa", funct
       "leyó el escenario de una global en vez del argumento");
   });
 });
+
+/* ============================================================
+   Facturas · nada se asienta sin confirmación
+   Una factura mal imputada ensucia el margen bruto de dos
+   cultivos a la vez, y la app no tiene forma de saber que se
+   equivocó: el número queda creíble y mal. Por eso la
+   confirmación humana no es negociable, y por eso hay un test
+   de cable que falla si alguna vez se crea un gasto sin ella.
+   ============================================================ */
+
+test("cable: leer el QR guarda la factura pendiente y NO crea un gasto", function(){
+  var src = bloqueModelo(HTML) + "\n" +
+    extraerDesde(HTML, "function razonDeCuit(", "razonDeCuit") + "\n" +
+    extraerDesde(HTML, "function guardarFacturaLeida(", "guardarFacturaLeida") +
+    "\nthis.__f = guardarFacturaLeida;";
+  var marcado = [];
+  var ctx = {
+    E: { facturas: [], gastos: [] },
+    campActiva: "c1",
+    uid: function(){ return "nuevo"; },
+    marcar: function(col, fila){ marcado.push(col); },
+    guardar: function(){},
+    avisar: function(){},
+    pintar: function(){},
+    vistaActual: "facturas"
+  };
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+
+  ctx.__f({ cuit:"30500001735", fecha:"2026-08-14", ptoVta:10, tipoCmp:1, nroCmp:94,
+            importe:121000, moneda:"ARS", ctz:1 }, "crudo");
+
+  assert.strictEqual(ctx.E.facturas.length, 1, "la factura queda esperando");
+  assert.strictEqual(ctx.E.facturas[0].estado, "pendiente");
+  assert.strictEqual(ctx.E.gastos.length, 0,
+    "leer el QR NO carga un gasto: eso lo decide el productor al confirmar");
+  assert.ok(marcado.indexOf("gastos") < 0, "no se marcó ningún gasto para subir");
+});
+
+test("cable: escanear la misma factura dos veces no la duplica", function(){
+  var src = bloqueModelo(HTML) + "\n" +
+    extraerDesde(HTML, "function razonDeCuit(", "razonDeCuit") + "\n" +
+    extraerDesde(HTML, "function guardarFacturaLeida(", "guardarFacturaLeida") +
+    "\nthis.__f = guardarFacturaLeida;";
+  var avisos = [];
+  var ctx = {
+    E: { facturas: [{ id:"f1", cuit:"30500001735", tipoCmp:1, ptoVta:10, nroCmp:94,
+                      estado:"pendiente" }], gastos: [] },
+    campActiva: "c1", uid: function(){ return "nuevo"; },
+    marcar: function(){}, guardar: function(){},
+    avisar: function(m){ avisos.push(m); }, pintar: function(){},
+    vistaActual: "facturas"
+  };
+  vm.createContext(ctx);
+  vm.runInContext(src, ctx);
+
+  ctx.__f({ cuit:"30500001735", fecha:"2026-08-14", ptoVta:10, tipoCmp:1, nroCmp:94,
+            importe:121000, moneda:"ARS", ctz:1 }, "crudo");
+
+  assert.strictEqual(ctx.E.facturas.length, 1, "sigue habiendo una sola");
+  assert.ok(/ya está cargada/.test(avisos.join(" ")), "y se dice por qué: " + avisos.join(" "));
+});

@@ -453,6 +453,8 @@ dialog::backdrop{background:rgba(20,16,12,.6)}
 .panel-fila.bien b{color:var(--ok)}
 .panel-fila.propio{background:var(--ojo-bg)}
 .nose{color:var(--tierra-3);font-style:italic;font-size:12px}
+#qr-video{width:100%;max-height:52vh;background:#000;border-radius:10px;display:block}
+.qr-aviso{margin:10px 0 0;font-size:13px;color:var(--tierra-2);text-align:center}
 .panel-fila.sangria{padding-left:28px;font-size:12.5px;color:var(--tierra-2);background:var(--panel-2)}
 .panel-fila.sangria b{font-weight:600;color:var(--tierra-2)}
 .panel-fila.propio b{color:var(--ojo)}
@@ -701,6 +703,7 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
     <a href="#" data-vista="insumos">Insumos <span class="n" data-n="insumos"></span></a>
     <a href="#" data-vista="clima">Lluvias</a>
     <a href="#" data-vista="monitoreo">Monitoreo <span class="n" data-n="monitoreo"></span></a>
+    <a href="#" data-vista="facturas">Facturas <span class="n" data-n="facturas"></span></a>
   </nav>
   <main class="lienzo" id="lienzo"></main>
 </div>
@@ -716,6 +719,16 @@ entrando con la misma cuenta. El clima viene de Open-Meteo para las coordenadas 
       <button type="submit" class="btn" id="dlg-ok">Guardar</button>
     </div>
   </form>
+</div></dialog>
+
+<dialog id="dlg-qr"><div class="modal">
+  <div class="modal-cab"><h3>Leer el QR de la factura</h3>
+    <button type="button" id="qr-cerrar" aria-label="Cerrar">×</button></div>
+  <div class="modal-cuerpo">
+    <video id="qr-video" playsinline muted></video>
+    <p id="qr-aviso" class="qr-aviso"></p>
+    <p class="pie" style="margin:8px 0 0">El QR se lee en el teléfono: la imagen no se guarda ni sale de acá.</p>
+  </div>
 </div></dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1916,6 +1929,135 @@ function importeUSD(fila){
    la app. Duplicarla afuera era garantizar que un día divergieran. */
 function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
 function importeGasto(g){ return importeUSD(g); }
+/* ---------- el QR de las facturas ----------
+
+   Toda factura electrónica argentina lleva un QR obligatorio desde 2020: una
+   URL de AFIP con un JSON en base64 detrás de ?p=. Adentro viajan el CUIT del
+   emisor, la fecha, el tipo y número de comprobante, el importe total, la
+   moneda y la cotización.
+
+   Es la única parte de una factura que no se puede falsear, y se lee en el
+   teléfono sin librerías y sin señal. Lo que NO trae son los ítems: el QR sabe
+   cuánto pagaste y a quién, no qué compraste. */
+
+var TIPOS_CMP = {
+  1:"Factura A", 2:"Nota de débito A", 3:"Nota de crédito A",
+  6:"Factura B", 7:"Nota de débito B", 8:"Nota de crédito B",
+  11:"Factura C", 12:"Nota de débito C", 13:"Nota de crédito C",
+  51:"Factura M", 52:"Nota de débito M", 53:"Nota de crédito M",
+  201:"Factura de crédito A", 206:"Factura de crédito B", 211:"Factura de crédito C"
+};
+/* Sin nombre conocido se muestra el código y no se adivina: AFIP tiene decenas
+   de tipos y bautizar mal un comprobante es peor que no bautizarlo. */
+function tipoComprobante(t){ return TIPOS_CMP[t] || ("Comprobante " + t); }
+
+/* 0010-00000094, como lo escribe la gente y como figura en el papel. */
+function nroComprobante(ptoVta, nro){
+  function ceros(n, largo){
+    var s = String(n); while(s.length < largo) s = "0" + s; return s;
+  }
+  return ceros(ptoVta, 4) + "-" + ceros(nro, 8);
+}
+
+/* Devuelve la factura o null. NUNCA un objeto a medias: media factura es peor
+   que ninguna, porque entra un gasto con el importe de una y la fecha de otra
+   y nada avisa. */
+function leerQrAfip(texto){
+  if(!texto || typeof texto !== "string") return null;
+  var b64 = texto;
+  var i = texto.indexOf("?p=");
+  if(i >= 0) b64 = texto.slice(i + 3);
+  else if(texto.indexOf("://") >= 0) return null;   /* una URL que no es la del QR */
+  var j;
+  try{
+    j = JSON.parse(decodeURIComponent(escape(atob(b64))));
+  }catch(e){ return null; }
+  if(!j || typeof j !== "object") return null;
+
+  var importe = num(j.importe);
+  /* Sin importe o sin fecha no hay gasto que cargar. Un importe que no es un
+     número finito y positivo tampoco es una factura. */
+  if(typeof j.importe === "string" && !/^[0-9.,\-]+$/.test(j.importe)) return null;
+  if(!isFinite(importe) || importe <= 0) return null;
+  if(!j.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(String(j.fecha))) return null;
+  if(!j.cuit) return null;
+
+  return {
+    cuit:String(j.cuit),
+    fecha:String(j.fecha),
+    ptoVta:num(j.ptoVta),
+    tipoCmp:num(j.tipoCmp),
+    nroCmp:num(j.nroCmp),
+    importe:importe,
+    /* AFIP dice PES y DOL; la app trabaja con ARS y USD. */
+    moneda:(j.moneda === "DOL" ? "USD" : "ARS"),
+    ctz:num(j.ctz) || 1
+  };
+}
+
+/* El último tipo de cambio que usó el productor, para proponerlo en vez de
+   hacerlo buscar. Si nunca cargó ninguno se devuelve null y el formulario lo
+   pide vacío: inventar una cotización sería peor que preguntarla. */
+function ultimoTipoCambio(gastos, ventas){
+  var filas = (gastos || []).concat(ventas || []).filter(function(x){
+    return x.moneda === "ARS" && num(x.tipoCambio) > 0 && x.fecha;
+  }).sort(function(a, b){ return a.fecha < b.fecha ? 1 : (a.fecha > b.fecha ? -1 : 0); });
+  return filas.length ? num(filas[0].tipoCambio) : null;
+}
+
+/* ¿Esta factura ya está cargada? La base también lo impide con un unique, pero
+   un rechazo de la base se suelta de la cola y no se reintenta: conviene
+   frenarlo acá, donde se puede explicar por qué en vez de perder la carga.
+
+   Una rechazada no cuenta: si se rechazó por error, tiene que poder volver. */
+function facturaRepetida(facturas, f){
+  if(!f) return null;
+  var m = (facturas || []).filter(function(x){
+    return x.estado !== "rechazada" &&
+           String(x.cuit) === String(f.cuit) &&
+           num(x.tipoCmp) === num(f.tipoCmp) &&
+           num(x.ptoVta) === num(f.ptoVta) &&
+           num(x.nroCmp) === num(f.nroCmp);
+  });
+  return m.length ? m[0] : null;
+}
+
+/* ¿Cierra la aritmética fiscal? neto + IVA + percepciones tiene que dar el
+   importe que firmó AFIP.
+
+   OJO: los ítems suman el NETO, no el importe. En una factura A el total lleva
+   IVA discriminado y percepciones adentro; exigir que los ítems sumen el total
+   bloquearía casi todas las facturas reales.
+
+   Devuelve null mientras no haya extracción: "todavía no sé" no es "no cuadra".
+   Un peso de tolerancia, porque los emisores redondean distinto. */
+function facturaCuadra(f){
+  if(!f || f.neto == null) return null;
+  var suma = num(f.neto) + num(f.iva) + num(f.percepciones);
+  return Math.abs(suma - num(f.importe)) <= 1;
+}
+
+/* El gasto que propone una factura. Propone: no lo asienta nadie más que la
+   confirmación del productor.
+
+   Al costo va el NETO gravado cuando ya se extrajo, porque el IVA es crédito
+   fiscal y no es costo del cultivo: sumarlo inflaría cada insumo un 21 %.
+   Mientras no haya neto, el importe total es lo único que se sabe. */
+function gastoDeFactura(f, opciones){
+  if(!f) return null;
+  var o = opciones || {};
+  /* El QR viene en pesos y la app trabaja en dólares. Un gasto en pesos sin
+     cotización se valúa en cero: entra plata que no aparece en ningún lado. */
+  if(f.moneda === "ARS" && !(num(o.tipoCambio) > 0)) return null;
+  var monto = (f.neto != null) ? num(f.neto) : num(f.importe);
+  if(!(monto > 0)) return null;
+  return { fecha:f.fecha, monto:monto, moneda:f.moneda,
+           tipoCambio:(f.moneda === "ARS" ? num(o.tipoCambio) : null),
+           categoria:(o.categoria || "Otros"),
+           cultivoLoteId:(o.cultivoLoteId || null),
+           nota:(o.nota || "") };
+}
+
 /* Los primeros de cada mes entre dos fechas, los dos extremos incluidos. La
    valuación es una serie mensual y este es su eje. */
 function mesesEntre(desdeISO, hastaISO){
@@ -3123,12 +3265,12 @@ var TABLAS = {
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
   telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
   cuentas:"cuentas", presupuestos:"presupuestos",
-  escenariosLluvia:"escenarios_lluvia"
+  escenariosLluvia:"escenarios_lluvia", facturas:"facturas"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
            telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[],presupuestos:[],
-           escenariosLluvia:[]};
+           escenariosLluvia:[],facturas:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
@@ -4710,6 +4852,149 @@ A.borrarEscenario=function(id){
     marcarBaja("escenariosLluvia",id); avisar("Escenario eliminado."); });
 };
 
+/* ---------- facturas ---------- */
+
+/* BarcodeDetector es una API nativa del navegador: lee el QR sin una sola
+   librería y sin que la imagen salga del teléfono. No existe en Safari, así que
+   donde no está el botón no se ofrece —y se explica por qué— en vez de fallar
+   al tocarlo. */
+function hayEscaner(){
+  return typeof window !== "undefined" && ("BarcodeDetector" in window) &&
+         !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+A.escanearFactura=function(){
+  if(!campActiva){ avisar("Abrí una campaña antes de cargar facturas."); return; }
+  if(!hayEscaner()){ avisar("Este navegador no puede leer el QR. Cargá la factura a mano."); return; }
+  abrirEscaner();
+};
+
+function abrirEscaner(){
+  var dlg=$("dlg-qr"), video=$("qr-video"), aviso=$("qr-aviso");
+  aviso.textContent="Apuntá al código QR de la factura.";
+  dlg.showModal();
+  var detector=new window.BarcodeDetector({formats:["qr_code"]});
+  var stream=null, vivo=true;
+
+  function cerrar(){
+    vivo=false;
+    if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
+    try{ dlg.close(); }catch(e){}
+  }
+  $("qr-cerrar").onclick=cerrar;
+  dlg.addEventListener("close", function(){ vivo=false;
+    if(stream) stream.getTracks().forEach(function(t){ t.stop(); }); }, {once:true});
+
+  navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(function(st){
+    stream=st; video.srcObject=st; return video.play();
+  }).then(function(){
+    (function mirar(){
+      if(!vivo) return;
+      detector.detect(video).then(function(codigos){
+        if(!vivo) return;
+        for(var i=0;i<codigos.length;i++){
+          var f=leerQrAfip(codigos[i].rawValue);
+          if(f){ cerrar(); guardarFacturaLeida(f, codigos[i].rawValue); return; }
+        }
+        /* Un QR que no es de AFIP no se acepta a medias: se sigue mirando. */
+        aviso.textContent=codigos.length?"Ese QR no es de una factura de AFIP.":"Apuntá al código QR de la factura.";
+        requestAnimationFrame(mirar);
+      }).catch(function(){ if(vivo) requestAnimationFrame(mirar); });
+    })();
+  }).catch(function(){
+    aviso.textContent="No pude abrir la cámara. Revisá los permisos del navegador.";
+  });
+}
+
+function guardarFacturaLeida(f, crudo){
+  var repe=facturaRepetida(E.facturas||[], f);
+  if(repe){
+    avisar("Esa factura ya está cargada: "+nroComprobante(repe.ptoVta, repe.nroCmp)+".");
+    vistaActual="facturas"; pintar(); return;
+  }
+  if(!E.facturas) E.facturas=[];
+  var fila={ id:uid(), cuit:f.cuit, razonSocial:razonDeCuit(f.cuit), fecha:f.fecha,
+             tipoCmp:f.tipoCmp, ptoVta:f.ptoVta, nroCmp:f.nroCmp,
+             importe:f.importe, moneda:f.moneda, cotizacion:f.ctz,
+             neto:null, iva:null, percepciones:null,
+             qrCrudo:crudo||"", extraido:null, estado:"pendiente", gastoId:null };
+  E.facturas.push(fila); marcar("facturas", fila); guardar();
+  avisar("Factura leída: "+nroComprobante(fila.ptoVta, fila.nroCmp)+".");
+  vistaActual="facturas"; pintar();
+}
+
+/* El proveedor se aprende: el QR trae el CUIT, no la razón social. La primera
+   factura de cada CUIT se nombra a mano y a partir de ahí se reconoce sola.
+   Consultar el padrón de AFIP necesitaría clave fiscal y un backend que la
+   guarde, y queda afuera a propósito. */
+function razonDeCuit(cuit){
+  var previas=(E.facturas||[]).filter(function(x){
+    return String(x.cuit)===String(cuit) && x.razonSocial;
+  });
+  return previas.length ? previas[0].razonSocial : "";
+}
+
+A.confirmarFactura=function(id){
+  var f=(E.facturas||[]).filter(function(x){return x.id===id;})[0]; if(!f) return;
+  var cuadra=facturaCuadra(f);
+  if(cuadra===false){
+    avisar("Los importes no cierran contra el QR de AFIP. Revisala antes de confirmar.");
+    return;
+  }
+  var tcSugerido=ultimoTipoCambio(E.gastos, E.ventas);
+  abrirForm({titulo:"Confirmar factura",
+    nota:"Nada se asienta hasta que confirmes. El importe y la fecha salen del QR de AFIP y no se editan; lo demás es una propuesta.",
+    valores:{razonSocial:f.razonSocial||"", categoria:"", cultivoLoteId:"",
+             tipoCambio:(f.moneda==="ARS"?tcSugerido:null), descripcion:""},
+    campos:[{k:"razonSocial",label:"Proveedor",req:true,ancho:true,
+             ph:"Cómo se llama el que emitió esta factura",
+             hint:"El QR trae el CUIT "+esc(f.cuit)+", no el nombre. Se recuerda para las próximas."},
+            {k:"categoria",label:"Categoría",tipo:"select",req:true,
+             opciones:CATEGORIAS_GASTO.map(function(t){return {v:t,t:t};})},
+            {k:"cultivoLoteId",label:"Lote y cultivo",tipo:"select",opciones:opcCLCampania(),
+             vacio:"Sin asignar — se reparte por hectárea",ancho:true},
+            {k:"tipoCambio",label:"Tipo de cambio",tipo:"number",paso:"0.01",min:"0",
+             hint:(f.moneda==="ARS"
+               ? "Pesos por dólar el "+fecha(f.fecha)+". Sin esto el gasto no se puede valuar."
+               : "Esta factura ya está en dólares.")},
+            {k:"descripcion",label:"Detalle",ancho:true,ph:"Qué se compró."}],
+    panel:function(d){
+      var g=gastoDeFactura(f,{tipoCambio:d.tipoCambio,categoria:d.categoria});
+      var usd=g?importeUSD({monto:g.monto,moneda:g.moneda,tipoCambio:g.tipoCambio}):null;
+      return '<div class="panel-vivo"><h4>'+esc(tipoComprobante(f.tipoCmp))+' '+esc(nroComprobante(f.ptoVta,f.nroCmp))+'</h4>'+
+        '<div class="panel-fila"><span>Importe del QR<small>lo firmó AFIP: no se edita</small></span>'+
+          '<b>'+nf(f.importe,2)+' '+(f.moneda==="ARS"?"ARS":"USD")+'</b></div>'+
+        (f.neto!=null?'<div class="panel-fila sangria"><span>Neto gravado<small>lo que va al costo</small></span><b>'+nf(f.neto,2)+'</b></div>':'')+
+        '<div class="panel-fila"><span>Fecha</span><b>'+esc(fecha(f.fecha))+'</b></div>'+
+        '<div class="panel-fila '+(usd==null?"mal":"bien")+'"><span>Entra como gasto de'+
+          (f.neto!=null?'<small>el neto, no el total: el IVA es crédito fiscal</small>':'')+'</span>'+
+          '<b>'+(usd==null?"falta el tipo de cambio":nf(usd,2)+" USD")+'</b></div>'+
+        '</div>';
+    },
+    guardar:function(d){
+      var g=gastoDeFactura(f,{tipoCambio:d.tipoCambio,categoria:d.categoria,
+                              cultivoLoteId:d.cultivoLoteId||null});
+      if(!g){ avisar("Falta el tipo de cambio: un gasto en pesos sin cotización se valúa en cero."); return false; }
+      if(!String(d.razonSocial||"").trim()){ avisar("Poné el nombre del proveedor."); return false; }
+      var gasto={ id:uid(), campaniaId:campActiva, cultivoLoteId:g.cultivoLoteId,
+                  fecha:g.fecha, categoria:g.categoria, descripcion:d.descripcion||"",
+                  monto:g.monto, moneda:g.moneda, tipoCambio:g.tipoCambio,
+                  proveedor:String(d.razonSocial).trim(), cuenta:null, diasPago:null };
+      E.gastos.push(gasto); marcar("gastos", gasto);
+      f.razonSocial=String(d.razonSocial).trim();
+      f.estado="confirmada"; f.gastoId=gasto.id;
+      marcar("facturas", f);
+      avisar("Factura confirmada y gasto cargado.");
+    }});
+};
+
+A.rechazarFactura=function(id){
+  var f=(E.facturas||[]).filter(function(x){return x.id===id;})[0]; if(!f) return;
+  confirmar("Rechazar factura",
+    tipoComprobante(f.tipoCmp)+" "+nroComprobante(f.ptoVta,f.nroCmp)+". No se carga ningún gasto, y la podés volver a escanear cuando quieras.",
+    function(){ f.estado="rechazada"; marcar("facturas", f); guardar(); pintar(); avisar("Factura rechazada."); });
+};
+
 A.nuevoPrecioForward=function(id){
   var P=id?E.preciosForward.filter(function(x){return x.id===id;})[0]:null;
   abrirForm({titulo:P?"Editar precio forward":"Cargar precio forward",
@@ -5826,6 +6111,86 @@ function bloqueMargenBruto(mb, ec){
     '</div></div>';
 }
 
+/* Las facturas leídas, entre el QR y el gasto. Nada se asienta hasta que el
+   productor confirma: una factura mal imputada ensucia el margen bruto de dos
+   cultivos a la vez y la app no tiene forma de saber que se equivocó. */
+function vistaFacturas(){
+  var c=campania(campActiva);
+  var todas=(E.facturas||[]).slice().sort(function(a,b){
+    return (b.fecha||"").localeCompare(a.fecha||"");
+  });
+  var pendientes=todas.filter(function(f){ return f.estado!=="confirmada"&&f.estado!=="rechazada"; });
+  var cerradas=todas.filter(function(f){ return f.estado==="confirmada"||f.estado==="rechazada"; });
+
+  var cab='<div class="cabecera"><div><h1>Facturas</h1>'+
+    '<div class="sub">Leé el QR de AFIP y el gasto se carga solo. Nada se asienta hasta que lo confirmes.</div></div>'+
+    '<div class="cabecera-acc">'+
+    (hayEscaner()
+      ? '<button class="btn" data-a="escanearFactura">Escanear una factura</button>'
+      : '<button class="btn sec" disabled title="Este navegador no puede leer códigos QR">Escanear (no disponible acá)</button>')+
+    '</div></div>';
+
+  /* Donde no hay BarcodeDetector se dice por qué y qué hacer, en vez de dejar
+     un botón que falla al tocarlo. */
+  var sinEscaner=hayEscaner() ? '' :
+    '<div class="bloque"><div class="bloque-cuerpo"><p class="aviso">'+
+    '<b>Este navegador no puede leer el QR.</b> La lectura usa una función que hoy tienen Chrome y '+
+    'los navegadores de Android, y no Safari. Desde un teléfono Android funciona; desde acá, cargá el '+
+    'gasto a mano en Finanzas.</p></div></div>';
+
+  function tarjeta(f){
+    var cuadra=facturaCuadra(f);
+    var mal=(cuadra===false);
+    return '<div class="bloque"><div class="bloque-cab">'+
+      '<h2>'+esc(tipoComprobante(f.tipoCmp))+' '+esc(nroComprobante(f.ptoVta,f.nroCmp))+'</h2>'+
+      '<div class="aclara">'+esc(f.razonSocial||("CUIT "+f.cuit))+' · '+esc(fecha(f.fecha))+'</div>'+
+      '</div><div class="bloque-cuerpo">'+
+      '<div class="panel-vivo"><h4>Del QR de AFIP</h4>'+
+        '<div class="panel-fila"><span>Importe<small>lo firmó AFIP: no se edita</small></span>'+
+          '<b>'+nf(f.importe,2)+' '+esc(f.moneda)+'</b></div>'+
+        (f.neto!=null
+          ?'<div class="panel-fila"><span>Neto gravado<small>lo que va al costo del cultivo</small></span><b>'+nf(f.neto,2)+'</b></div>'+
+           '<div class="panel-fila sangria"><span>IVA</span><b>'+nf(f.iva,2)+'</b></div>'+
+           '<div class="panel-fila sangria"><span>Percepciones</span><b>'+nf(f.percepciones,2)+'</b></div>'
+          :'<div class="panel-fila"><span>Detalle<small>todavía sin leer el cuerpo de la factura</small></span>'+
+           '<b><span class="nose">falta</span></b></div>')+
+        (mal?'<div class="panel-aviso">Neto más IVA más percepciones no da el importe que firmó AFIP. '+
+             'No se puede confirmar hasta que se revise.</div>':'')+
+      '</div>'+
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn'+(mal?' sec':'')+'" data-a="confirmarFactura" data-arg="'+esc(f.id)+'"'+(mal?' disabled':'')+'>Confirmar y cargar el gasto</button>'+
+        '<button class="btn peligro sec" data-a="rechazarFactura" data-arg="'+esc(f.id)+'">Rechazar</button>'+
+      '</div></div></div>';
+  }
+
+  var listaPend=pendientes.length
+    ? pendientes.map(tarjeta).join("")
+    : '<div class="bloque"><div class="bloque-cuerpo"><div class="sem-nose">'+
+      '<b>No hay facturas esperando</b>'+
+      'Escaneá el QR de una factura y acá aparece, con el gasto listo para confirmar. '+
+      'El QR trae el CUIT, la fecha y el importe que firmó AFIP: eso no se tipea nunca más.'+
+      '</div></div></div>';
+
+  var listaCerr=cerradas.length
+    ? '<div class="bloque"><div class="bloque-cab"><h2>Ya resueltas</h2></div>'+
+      '<div class="scroll-x"><table class="tabla"><thead><tr><th>Comprobante</th><th>Proveedor</th>'+
+      '<th class="num col-opcional">Importe</th><th>Estado</th></tr></thead><tbody>'+
+      cerradas.map(function(f){
+        return '<tr><td><span class="lote-nom">'+esc(nroComprobante(f.ptoVta,f.nroCmp))+'</span><br>'+
+          '<span class="lote-est">'+esc(fecha(f.fecha))+'</span></td>'+
+          '<td>'+esc(f.razonSocial||("CUIT "+f.cuit))+'</td>'+
+          '<td class="num col-opcional">'+nf(f.importe,2)+' '+esc(f.moneda)+'</td>'+
+          '<td>'+(f.estado==="confirmada"
+            ?'<span class="sem-marca" style="border-color:var(--ok);color:var(--ok)">cargada</span>'
+            :'<span class="sem-marca">rechazada</span>')+'</td></tr>';
+      }).join("")+'</tbody></table></div></div>'
+    : '';
+
+  return '<div class="pantalla">'+cab+sinEscaner+listaPend+listaCerr+
+    '<p class="pie">El QR de AFIP trae quién, cuándo, cuánto y qué comprobante: es lo único de una factura '+
+    'que no se puede falsear. Lo que compraste —los ítems— no viaja en el QR y por ahora se carga a mano.</p></div>';
+}
+
 function vistaFinanzas(){
   var c=campania(campActiva), ec=economiaCampania(campActiva);
   var cab='<div class="cabecera"><div><h1>Finanzas y Contabilidad</h1>'+
@@ -6705,9 +7070,10 @@ function vistaLote(){
    ============================================================ */
 var VISTAS={inicio:vistaInicio,hoy:vistaHoy,campania:vistaCampania,lotes:vistaLotes,cultivos:vistaCultivos,
             ordenes:vistaOrdenes,insumos:vistaInsumos,clima:vistaClima,monitoreo:vistaMonitoreo,
-            finanzas:vistaFinanzas,sementera:vistaSementera,lote:vistaLote};
+            finanzas:vistaFinanzas,sementera:vistaSementera,lote:vistaLote,
+            facturas:vistaFacturas};
 /* Estas vistas no existen sin una campaña abierta. */
-var NECESITAN_CAMPANIA={campania:1,cultivos:1,clima:1,lote:1,finanzas:1,sementera:1};
+var NECESITAN_CAMPANIA={campania:1,cultivos:1,clima:1,lote:1,finanzas:1,sementera:1,facturas:1};
 
 function vistaPrimerosPasos(){
   var hayCampos=E.establecimientos.length>0, hayLotes=E.lotes.length>0;
@@ -6842,7 +7208,8 @@ function pintar(){
   var n={lotes:E.lotes.length, cultivos:clsDeCampania(campActiva).length,
     ordenes:E.ordenes.filter(function(o){return o.campaniaId===campActiva&&o.estado!=="completada";}).length,
     insumos:E.insumos.length, monitoreo:E.monitoreo.filter(function(o){return o.campaniaId===campActiva;}).length,
-    finanzas:E.ventas.filter(function(v){return v.campaniaId===campActiva;}).length};
+    finanzas:E.ventas.filter(function(v){return v.campaniaId===campActiva;}).length,
+    facturas:(E.facturas||[]).filter(function(f){return f.estado!=="confirmada"&&f.estado!=="rechazada";}).length};
   document.querySelectorAll("[data-n]").forEach(function(el){
     var v=n[el.getAttribute("data-n")]; el.textContent=v||""; el.style.display=v?"":"none"; });
   var na=vistaActual==="lote"?"campania":vistaActual;
