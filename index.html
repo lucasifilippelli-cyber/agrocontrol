@@ -1916,6 +1916,72 @@ function importeUSD(fila){
    la app. Duplicarla afuera era garantizar que un día divergieran. */
 function importeVenta(v){ return importeUSD({monto:num(v.toneladas)*num(v.precioTn), moneda:v.moneda, tipoCambio:v.tipoCambio}); }
 function importeGasto(g){ return importeUSD(g); }
+/* ---------- el QR de las facturas ----------
+
+   Toda factura electrónica argentina lleva un QR obligatorio desde 2020: una
+   URL de AFIP con un JSON en base64 detrás de ?p=. Adentro viajan el CUIT del
+   emisor, la fecha, el tipo y número de comprobante, el importe total, la
+   moneda y la cotización.
+
+   Es la única parte de una factura que no se puede falsear, y se lee en el
+   teléfono sin librerías y sin señal. Lo que NO trae son los ítems: el QR sabe
+   cuánto pagaste y a quién, no qué compraste. */
+
+var TIPOS_CMP = {
+  1:"Factura A", 2:"Nota de débito A", 3:"Nota de crédito A",
+  6:"Factura B", 7:"Nota de débito B", 8:"Nota de crédito B",
+  11:"Factura C", 12:"Nota de débito C", 13:"Nota de crédito C",
+  51:"Factura M", 52:"Nota de débito M", 53:"Nota de crédito M",
+  201:"Factura de crédito A", 206:"Factura de crédito B", 211:"Factura de crédito C"
+};
+/* Sin nombre conocido se muestra el código y no se adivina: AFIP tiene decenas
+   de tipos y bautizar mal un comprobante es peor que no bautizarlo. */
+function tipoComprobante(t){ return TIPOS_CMP[t] || ("Comprobante " + t); }
+
+/* 0010-00000094, como lo escribe la gente y como figura en el papel. */
+function nroComprobante(ptoVta, nro){
+  function ceros(n, largo){
+    var s = String(n); while(s.length < largo) s = "0" + s; return s;
+  }
+  return ceros(ptoVta, 4) + "-" + ceros(nro, 8);
+}
+
+/* Devuelve la factura o null. NUNCA un objeto a medias: media factura es peor
+   que ninguna, porque entra un gasto con el importe de una y la fecha de otra
+   y nada avisa. */
+function leerQrAfip(texto){
+  if(!texto || typeof texto !== "string") return null;
+  var b64 = texto;
+  var i = texto.indexOf("?p=");
+  if(i >= 0) b64 = texto.slice(i + 3);
+  else if(texto.indexOf("://") >= 0) return null;   /* una URL que no es la del QR */
+  var j;
+  try{
+    j = JSON.parse(decodeURIComponent(escape(atob(b64))));
+  }catch(e){ return null; }
+  if(!j || typeof j !== "object") return null;
+
+  var importe = num(j.importe);
+  /* Sin importe o sin fecha no hay gasto que cargar. Un importe que no es un
+     número finito y positivo tampoco es una factura. */
+  if(typeof j.importe === "string" && !/^[0-9.,\-]+$/.test(j.importe)) return null;
+  if(!isFinite(importe) || importe <= 0) return null;
+  if(!j.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(String(j.fecha))) return null;
+  if(!j.cuit) return null;
+
+  return {
+    cuit:String(j.cuit),
+    fecha:String(j.fecha),
+    ptoVta:num(j.ptoVta),
+    tipoCmp:num(j.tipoCmp),
+    nroCmp:num(j.nroCmp),
+    importe:importe,
+    /* AFIP dice PES y DOL; la app trabaja con ARS y USD. */
+    moneda:(j.moneda === "DOL" ? "USD" : "ARS"),
+    ctz:num(j.ctz) || 1
+  };
+}
+
 /* Los primeros de cada mes entre dos fechas, los dos extremos incluidos. La
    valuación es una serie mensual y este es su eje. */
 function mesesEntre(desdeISO, hastaISO){
