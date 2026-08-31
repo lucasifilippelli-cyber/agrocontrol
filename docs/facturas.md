@@ -70,8 +70,27 @@ sin que un humano lo haya mirado.
 **El total del QR es la verdad fiscal y el control de todo lo demás.** Lo firmó
 AFIP; no se puede falsear. Lo que devuelve el extractor sí se puede equivocar.
 
-Entonces: si los ítems extraídos no suman el importe del QR, **la factura queda
-marcada como no cuadrada y no se puede confirmar** hasta que alguien la mire.
+**Pero los ítems no suman el total, y eso es lo normal.** En una factura A el
+total es neto gravado + IVA discriminado + percepciones de IIBB. Una regla que
+exija que los ítems sumen el importe del QR bloquearía casi todas las facturas
+reales. El error estaba en la primera versión de esta especificación y se corrige
+acá.
+
+El control correcto es sobre la **suma completa**:
+
+```
+neto gravado + IVA + percepciones + otros tributos = importe del QR
+```
+
+El extractor devuelve esos totales además de los ítems, y **los ítems tienen que
+sumar el neto gravado**, no el total. Si la ecuación no cierra dentro de un peso
+—redondeos—, la factura queda marcada como no cuadrada y no se puede confirmar
+hasta que alguien la mire.
+
+Esto además mejora la carga: el IVA y las percepciones son plata que hoy se
+tipea a mano y que a partir de acá entra sola, separada del costo del insumo.
+**Al margen bruto va el neto**, no el total: el IVA es crédito fiscal y no es
+costo del cultivo.
 
 Es un autocontrol fuerte y gratis, y es la razón por la que conviene tener las
 dos fuentes aunque una sola parezca suficiente.
@@ -111,7 +130,8 @@ Una tabla nueva, `facturas`, con su migración y su política de RLS:
 |---|---|
 | `cuit`, `razon_social` | El proveedor. El CUIT viene del QR; el nombre se aprende la primera vez |
 | `fecha`, `tipo_cmp`, `nro_cmp` | Identidad del comprobante |
-| `importe`, `moneda`, `cotizacion` | Del QR: la verdad fiscal |
+| `importe`, `moneda`, `cotizacion` | Del QR: la verdad fiscal, con IVA y percepciones adentro |
+| `neto`, `iva`, `percepciones` | Del extractor. Al costo del cultivo va el neto |
 | `qr_crudo` | El payload tal cual, para poder reprocesar sin volver a fotografiar |
 | `extraido` (`jsonb`) | Lo que devolvió el extractor, sin tocar |
 | `estado` | `pendiente`, `extraida`, `no_cuadra`, `confirmada`, `rechazada` |
@@ -145,8 +165,14 @@ Lucas y no debe pasar por el chat.** Ni la app ni el repositorio la conocen.
 
 - El payload del QR se decodifica a sus campos, y uno corrupto se rechaza en vez
   de producir un gasto a medias.
-- **Los ítems que no suman el importe del QR dejan la factura en `no_cuadra` y
-  no se puede confirmar.** Es el test que protege el autocontrol.
+- **Neto + IVA + percepciones tiene que dar el importe del QR**, con un peso de
+  tolerancia por redondeo. Si no cierra, la factura queda en `no_cuadra` y no se
+  puede confirmar. Es el test que protege el autocontrol.
+- **Una factura A con IVA y percepciones cuadra.** Es el caso normal y hay un
+  test dedicado: la primera versión de esta especificación exigía que los ítems
+  sumaran el total y habría bloqueado casi todas las facturas reales.
+- **Al margen bruto va el neto gravado, no el total.** El IVA es crédito fiscal
+  y no es costo del cultivo; sumarlo inflaría el costo de cada insumo un 21 %.
 - Una factura sin QR entra marcada como sin verificar, no como verificada.
 - La misma factura cargada dos veces se detecta por CUIT más número de
   comprobante, y no crea dos gastos.
@@ -170,9 +196,13 @@ Lucas y no debe pasar por el chat.** Ni la app ni el repositorio la conocen.
   decisión de fondo de esta pieza.
 - **Que no se guarde la imagen original.** Ahorra espacio y expone menos, pero
   significa que no hay respaldo visual de lo que se cargó.
-- **Que una factura que no cuadra contra el QR no se pueda confirmar.** Es
-  estricto a propósito; si en la operación real hay casos legítimos donde los
-  ítems no suman el total —percepciones, descuentos globales—, hay que saberlo
-  antes, porque hoy los bloquearía.
+- **Que al costo del cultivo vaya el neto gravado y no el total.** Es lo
+  correcto si el IVA se computa como crédito fiscal; si por la situación fiscal
+  el IVA fuera costo, el número cambia un 21 % y hay que saberlo.
+- **La tolerancia de un peso** para dar por cerrada la ecuación fiscal. Si los
+  proveedores redondean distinto, hay que ajustarla.
+- **Si hay casos legítimos donde la ecuación no cierra** —descuentos globales,
+  notas de crédito aplicadas en la misma factura—, porque hoy quedarían
+  bloqueados esperando confirmación manual.
 - **Si la imputación al cultivo debería poder confirmarse en lote** cuando llegan
   veinte facturas juntas, o siempre una por una.
