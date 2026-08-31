@@ -3189,12 +3189,12 @@ var TABLAS = {
   monitoreo:"monitoreo", ventas:"ventas", gastos:"gastos",
   telegramCuentas:"telegram_cuentas", climaSeries:"clima_series", preciosForward:"precios_forward",
   cuentas:"cuentas", presupuestos:"presupuestos",
-  escenariosLluvia:"escenarios_lluvia"
+  escenariosLluvia:"escenarios_lluvia", facturas:"facturas"
 };
 var vacio={establecimientos:[],lotes:[],campanias:[],cultivoLotes:[],tickets:[],insumos:[],
            ordenes:[],ordenInsumos:[],movimientos:[],monitoreo:[],ventas:[],gastos:[],
            telegramCuentas:[],climaSeries:[],preciosForward:[],cuentas:[],presupuestos:[],
-           escenariosLluvia:[]};
+           escenariosLluvia:[],facturas:[]};
 
 function normalizar(){
   Object.keys(TABLAS).forEach(function(k){ if(!E[k]) E[k]=[]; });
